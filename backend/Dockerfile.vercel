@@ -1,0 +1,49 @@
+# ==========================================
+# Build stage
+# ==========================================
+
+FROM ubuntu:24.04 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && \
+    apt-get install -y \
+        build-essential \
+        cmake \
+        git \
+        ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY . .
+
+# Configure Release build
+RUN cmake -S . -B build \
+    -DCMAKE_BUILD_TYPE=Release
+
+# Compile
+RUN cmake --build build -j$(nproc)
+
+
+# ==========================================
+# Runtime stage
+# ==========================================
+
+FROM ubuntu:24.04
+
+WORKDIR /app
+
+# Install runtime dependencies.
+# Start simple; we'll optimize later.
+RUN apt-get update && \
+    apt-get install -y \
+        ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/build/api /app/api
+
+# Vercel provides PORT automatically.
+ENV PORT=8080
+
+CMD ["/app/api"]

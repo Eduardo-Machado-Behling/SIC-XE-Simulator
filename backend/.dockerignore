@@ -1,0 +1,11 @@
+build/
+.git/
+.gitignore
+.vscode
+
+*.exe
+*.dll
+*.pdb
+
+CMakeCache.txt
+CMakeFiles/
