@@ -1,9 +1,5 @@
 services:
 
-  # =========================
-  # Next.js frontend
-  # =========================
-
   - type: web
     name: sic-xe-web
     runtime: node
@@ -17,17 +13,10 @@ services:
 
     envVars:
       - key: SIMULATOR_API_URL
-        fromService:
-          type: pserv
-          name: sic-xe-engine
-          property: hostport
+        value: https://sic-xe-engine.onrender.com
 
 
-  # =========================
-  # C++ simulator
-  # =========================
-
-  - type: pserv
+  - type: web
     name: sic-xe-engine
     runtime: docker
     plan: free
