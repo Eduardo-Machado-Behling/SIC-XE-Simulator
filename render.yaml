@@ -22,5 +22,5 @@ services:
     plan: free
     region: oregon
 
-    dockerfilePath: engine/Dockerfile
-    dockerContext: engine
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
