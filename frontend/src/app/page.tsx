@@ -7,7 +7,7 @@ export default function Home() {
 
   async function testApi() {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+      const apiUrl = process.env.BACKEND_INTERNAL_URL;
 
       const res = await fetch(`${apiUrl}/api/hello`);
 
