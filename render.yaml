@@ -22,5 +22,5 @@ services:
     plan: free
     region: oregon
 
-    dockerfilePath: backend/Dockerfile
+    dockerfilePath: backend/Dockerfile.vercel
     dockerContext: backend
