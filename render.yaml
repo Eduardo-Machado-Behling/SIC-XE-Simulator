@@ -1,0 +1,37 @@
+services:
+
+  # =========================
+  # Next.js frontend
+  # =========================
+
+  - type: web
+    name: sic-xe-web
+    runtime: node
+    plan: free
+    region: oregon
+
+    rootDir: frontend
+
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+
+    envVars:
+      - key: SIMULATOR_API_URL
+        fromService:
+          type: pserv
+          name: sic-xe-engine
+          property: hostport
+
+
+  # =========================
+  # C++ simulator
+  # =========================
+
+  - type: pserv
+    name: sic-xe-engine
+    runtime: docker
+    plan: free
+    region: oregon
+
+    dockerfilePath: engine/Dockerfile
+    dockerContext: engine
