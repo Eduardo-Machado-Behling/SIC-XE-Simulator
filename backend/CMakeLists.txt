@@ -56,7 +56,7 @@ set(
 FetchContent_Declare(
     httplib
     GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
-    GIT_TAG v0.27.0
+    GIT_TAG v0.50.0
 )
 
 FetchContent_MakeAvailable(httplib)
@@ -80,6 +80,12 @@ FetchContent_MakeAvailable(json)
 add_executable(
     api
     src/main.cpp
+)
+
+target_include_directories(
+    api
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
 )
 
 target_link_libraries(

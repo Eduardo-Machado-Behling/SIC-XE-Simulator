@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <iostream>
+#include <string>
 
 #include <httplib.h>
 #include <nlohmann/json.hpp>
@@ -36,6 +37,7 @@ int main()
             if (req.method == "OPTIONS")
             {
                 res.status = 204;
+
                 return httplib::Server::HandlerResponse::Handled;
             }
 
@@ -44,7 +46,7 @@ int main()
     );
 
     // -------------------------
-    // Routes
+    // HTTP Routes
     // -------------------------
 
     server.Get(
@@ -66,6 +68,37 @@ int main()
     );
 
     // -------------------------
+    // WebSocket
+    // -------------------------
+
+    server.WebSocket(
+        "/ws",
+        [](const httplib::Request&,
+           httplib::ws::WebSocket& ws)
+        {
+            std::cout
+                << "WebSocket client connected"
+                << std::endl;
+
+            std::string message;
+
+            while (ws.read(message))
+            {
+                std::cout
+                    << "WebSocket received: "
+                    << message
+                    << std::endl;
+
+                ws.send(message);
+            }
+
+            std::cout
+                << "WebSocket client disconnected"
+                << std::endl;
+        }
+    );
+
+    // -------------------------
     // PORT
     // -------------------------
 
@@ -79,6 +112,13 @@ int main()
     std::cout
         << "API running on port "
         << port
+        << std::endl;
+
+    std::cout
+        << "WebSocket endpoint: "
+        << "ws://localhost:"
+        << port
+        << "/ws"
         << std::endl;
 
     server.listen(
