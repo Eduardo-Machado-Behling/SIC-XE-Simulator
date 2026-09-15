@@ -1,0 +1,166 @@
+---
+Language: Cpp
+
+# ============================================================
+# Base style
+# ============================================================
+
+BasedOnStyle: LLVM
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+
+ColumnLimit: 100
+
+ContinuationIndentWidth: 4
+ConstructorInitializerIndentWidth: 4
+IndentCaseLabels: true
+
+# ============================================================
+# Braces
+# ============================================================
+
+BreakBeforeBraces: Attach
+
+BraceWrapping:
+    AfterClass: false
+    AfterControlStatement: Never
+    AfterEnum: false
+    AfterFunction: false
+    AfterNamespace: false
+    AfterStruct: false
+    AfterUnion: false
+    BeforeCatch: false
+    BeforeElse: false
+    BeforeLambdaBody: false
+    BeforeWhile: false
+    IndentBraces: false
+
+# ============================================================
+# Classes / structs
+# ============================================================
+
+AccessModifierOffset: -4
+
+BreakConstructorInitializers: BeforeComma
+
+PackConstructorInitializers: BinPack
+
+# ============================================================
+# Functions
+# ============================================================
+
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowAllArgumentsOnNextLine: false
+
+BinPackArguments: false
+BinPackParameters: false
+
+# ============================================================
+# Control flow
+# ============================================================
+
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+
+# ============================================================
+# Pointers / references
+# ============================================================
+
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+DerivePointerAlignment: false
+
+# ============================================================
+# Includes
+# ============================================================
+
+SortIncludes: CaseSensitive
+
+IncludeBlocks: Regroup
+
+IncludeCategories:
+    # C++ standard library
+    - Regex: '^<.*>$'
+      Priority: 1
+      SortPriority: 1
+
+    # Project headers
+    - Regex: '^".*"'
+      Priority: 2
+      SortPriority: 2
+
+# ============================================================
+# Namespaces
+# ============================================================
+
+NamespaceIndentation: None
+
+# ============================================================
+# Templates
+# ============================================================
+
+AlwaysBreakTemplateDeclarations: Yes
+
+BreakBeforeTemplateCloser: false
+
+# ============================================================
+# Expressions
+# ============================================================
+
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeParens: ControlStatements
+
+SpacesInAngles: false
+SpacesInContainerLiterals: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+
+# ============================================================
+# Operators
+# ============================================================
+
+AlignOperands: Align
+
+# ============================================================
+# Enums
+# ============================================================
+
+EnumTrailingComma: Remove
+
+# ============================================================
+# Comments
+# ============================================================
+
+ReflowComments: true
+
+# ============================================================
+# Modern C++
+# ============================================================
+
+Standard: c++20
+
+# ============================================================
+# Empty lines
+# ============================================================
+
+MaxEmptyLinesToKeep: 1
+
+KeepEmptyLinesAtTheStartOfBlocks: false
+KeepEmptyLinesAtEOF: false
+
+# ============================================================
+# Misc
+# ============================================================
+
+FixNamespaceComments: true
+
+SortUsingDeclarations: Lexicographic
+
+DeriveLineEnding: false
+UseCRLF: false

@@ -1,9 +1,10 @@
 #pragma once
 
-struct Instruction {
-    uint8_t opcode;
-    uint8_t format;
-    uint8_t addressing_mode;
+#include "AbstractMemory.hpp"
 
+struct Instruction {
     virtual void execute() = 0;
+
+private:
+    AbstractMemory& memory;
 };

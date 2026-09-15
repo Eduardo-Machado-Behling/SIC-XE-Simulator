@@ -74,12 +74,59 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(json)
 
 # ==================================================
+# Architecture DLLs
+# ==================================================
+
+set(CMAKE_INCLUDE_DIRECTORIES
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+#FIXME: This is fucked up, I need MemoryAccessor code in dlls
+set(SHARED_SOURCES
+    ${CMAKE_SOURCE_DIR}/src/memory/Memory.cpp
+    ${CMAKE_SOURCE_DIR}/src/memory/MemoryAccessor.cpp
+    ${CMAKE_SOURCE_DIR}/src/memory/Registers.cpp
+    ${CMAKE_SOURCE_DIR}/src/memory/RegisterAccessor.cpp
+)
+
+file(GLOB LIB_DIRS LIST_DIRECTORIES true
+    "${CMAKE_CURRENT_SOURCE_DIR}/lib/*"
+)
+
+function(configure_architecture TARGET)
+    set_target_properties(${TARGET} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY
+            "${CMAKE_SOURCE_DIR}/bin/archs"
+
+        LIBRARY_OUTPUT_DIRECTORY
+            "${CMAKE_SOURCE_DIR}/bin/archs"
+
+        ARCHIVE_OUTPUT_DIRECTORY
+            "${CMAKE_SOURCE_DIR}/bin/archs"
+
+        PREFIX ""
+    )
+endfunction()
+
+foreach(LIB_DIR ${LIB_DIRS})
+    if(IS_DIRECTORY "${LIB_DIR}" AND EXISTS "${LIB_DIR}/CMakeLists.txt")
+        add_subdirectory("${LIB_DIR}")
+    endif()
+endforeach()
+
+
+# ==================================================
 # API executable
 # ==================================================
 
+file(GLOB_RECURSE API_SOURCES
+    CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+)
+
 add_executable(
     api
-    src/main.cpp
+    ${API_SOURCES}
 )
 
 target_include_directories(
@@ -93,4 +140,17 @@ target_link_libraries(
     PRIVATE
         httplib::httplib
         nlohmann_json::nlohmann_json
+)
+
+set_target_properties(api PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY
+        "${CMAKE_SOURCE_DIR}/bin"
+
+    LIBRARY_OUTPUT_DIRECTORY
+        "${CMAKE_SOURCE_DIR}/bin"
+
+    ARCHIVE_OUTPUT_DIRECTORY
+        "${CMAKE_SOURCE_DIR}/bin"
+
+    PREFIX ""
 )
