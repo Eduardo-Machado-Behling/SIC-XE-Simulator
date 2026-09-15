@@ -1,13 +1,42 @@
 #pragma once
 
-#include "common/byte.hpp"
+#include "architecture/ArchitectureManager.hpp"
+#include "memory/Memory.hpp"
+#include "memory/Registers.hpp"
+#include "project/ProjectManager.hpp"
 
-class ISimulator {
+class Simulator {
 public:
-    virtual ~ISimulator() = default;
+    Simulator()
+        : m_architectureManager("archs") {}
 
-    virtual void loadProgram(const byte_t* program) = 0;
-    virtual void run() = 0;
-    virtual void step() = 0;
-    virtual void reset() = 0;
+    void create_project(const std::string& projectId,
+                        const std::string& projectName,
+                        const std::string& architectureId);
+
+    void load_project(const std::string& project);
+
+    void set_file(const std::string& filepath, const std::string& content);
+    void load_file(const std::string& filepath);
+
+    const std::unordered_set<std::string>& ListAvailableArchitectures();
+
+    void run();
+    void stop();
+
+    std::vector<ExecutionEvent> step();
+
+    // TODO:
+    //  Delta unstep();
+
+    // void add_breakpoint(Address address);
+    // void remove_breakpoint(Address address);
+
+private:
+    Project* m_currentProject = nullptr;
+
+    ArchitectureManager m_architectureManager;
+    ProjectManager m_projectManager;
+    Memory m_memory;
+    Registers m_registers;
 };

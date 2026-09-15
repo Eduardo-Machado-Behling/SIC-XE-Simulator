@@ -2,6 +2,7 @@ build/
 .git/
 .gitignore
 .vscode
+bin/
 
 *.exe
 *.dll
