@@ -11,6 +11,7 @@ RUN apt-get update && \
         build-essential \
         cmake \
         git \
+        valgrind \
         ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
@@ -20,10 +21,10 @@ COPY . .
 
 # Configure Release build
 RUN cmake -S . -B build \
-    -DCMAKE_BUILD_TYPE=Release
+    -DCMAKE_BUILD_TYPE=Debug
 
 # Compile
-RUN cmake --build build -j$(nproc)
+RUN cmake --build build -j$(nproc) 
 
 
 # ==========================================
@@ -41,9 +42,9 @@ RUN apt-get update && \
         ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/build/api /app/api
+COPY --from=builder /app/bin /app/bin
 
 # Vercel provides PORT automatically.
 ENV PORT=8080
 
-CMD ["/app/api"]
+CMD ["/app/bin/api"]

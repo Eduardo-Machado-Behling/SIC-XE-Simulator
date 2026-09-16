@@ -23,6 +23,7 @@ public:
 
     void run();
     void stop();
+    void reset();
 
     std::vector<ExecutionEvent> step();
 

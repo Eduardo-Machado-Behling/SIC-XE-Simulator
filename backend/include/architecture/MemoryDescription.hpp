@@ -3,8 +3,8 @@
 
 enum class Endianness
 {
-    LITTLE_ENDIAN = 0,
-    BIG_ENDIAN
+    BIG,
+    LITTLE
 };
 
 struct MemoryDescription

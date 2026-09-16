@@ -19,4 +19,15 @@ target_include_directories(${LIB_NAME}
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+if(ENABLE_ASAN)
+    target_compile_options(${LIB_NAME} PRIVATE
+        -fsanitize=address
+        -fno-omit-frame-pointer
+    )
+
+    target_link_options(${LIB_NAME} PRIVATE
+        -fsanitize=address
+    )
+endif()
+
 configure_architecture(${LIB_NAME})
