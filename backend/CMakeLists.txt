@@ -89,6 +89,8 @@ set(SHARED_SOURCES
     ${CMAKE_SOURCE_DIR}/src/memory/RegisterAccessor.cpp
 )
 
+
+
 file(GLOB LIB_DIRS LIST_DIRECTORIES true
     "${CMAKE_CURRENT_SOURCE_DIR}/lib/*"
 )
@@ -114,6 +116,7 @@ foreach(LIB_DIR ${LIB_DIRS})
     endif()
 endforeach()
 
+option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
 
 # ==================================================
 # API executable
@@ -129,6 +132,19 @@ add_executable(
     ${API_SOURCES}
 )
 
+if(ENABLE_ASAN)
+    target_compile_options(api PRIVATE
+        -fsanitize=address
+        -fno-omit-frame-pointer
+    )
+
+    target_link_options(api PRIVATE
+        -fsanitize=address
+    )
+endif()
+
+
+
 target_include_directories(
     api
     PRIVATE
@@ -141,6 +157,7 @@ target_link_libraries(
         httplib::httplib
         nlohmann_json::nlohmann_json
 )
+
 
 set_target_properties(api PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY

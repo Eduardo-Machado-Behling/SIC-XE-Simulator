@@ -14,13 +14,3 @@ $body = @{
 $body | curl.exe -X PUT "http://localhost:8080/simulator/project/file" `
     -H "Content-Type: application/json" `
     --data-binary "@-"
-
-$body = @{
-    filePath = "main.asm"
-} | ConvertTo-Json -Compress
-
-$body | curl.exe -X POST "http://localhost:8080/simulator/project/file" `
-    -H "Content-Type: application/json" `
-    --data-binary "@-"
-
-curl.exe -X GET "http://localhost:8080/simulator/arch/step"
