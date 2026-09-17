@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "architecture/EventSerializer.hpp"
+#include "architecture/InfoSerializer.hpp"
 
 using json = nlohmann::json;
 
@@ -79,39 +80,81 @@ void Server::setup_ws() {
         while (ws.read(message)) {
             std::cout << "WebSocket received: " << message << std::endl;
 
-            for (const auto& [pattern, command] : patterns) {
-                std::smatch match;
+            json j = json::parse(message);
 
-                if (std::regex_match(message, match, pattern)) {
-                    switch (command) {
-                        case Command::LOAD_PROJECT:
-                            std::cout << "Project: " << match[1] << '\n';
-                            m_simulator.load_project(match[1]);
-                            break;
+            std::string m = j.at("payload").get<std::string>();
 
-                        case Command::LOAD_FILE:
-                            std::cout << "File: " << match[1] << '\n';
-                            m_simulator.load_file(match[1]);
-                            break;
+            std::string response;
 
-                        case Command::RESET:
-                            std::cout << "Reset\n";
-                            m_simulator.reset();
-                            break;
+            {
+                std::lock_guard<std::mutex> lock(this->mutex);
 
-                        case Command::STEP:
-                            std::cout << "Step\n";
-                            m_simulator.step();
-                            break;
+                for (const auto& [pattern, command] : patterns) {
+                    std::smatch match;
+
+                    if (!std::regex_match(m, match, pattern)) {
+                        continue;
                     }
 
-                    break;
+                    switch (command) {
+                        case Command::LOAD_PROJECT: {
+                            Project project = m_simulator.load_project(match[1]);
+
+                            json proj;
+                            to_json(proj, project);
+
+                            const ArchitectureInfo* info = m_simulator.currentInfo();
+                            json arch;
+                            arch = InfoSerializer::serialize(*info);
+
+                            response = json{{"id", j.at("id")}, {"result", json{{"project", proj}, {"arch", arch}}}}.dump();
+
+                            break;
+                        }
+
+                        case Command::LOAD_FILE: {
+                            m_simulator.load_file(match[1]);
+
+                            const ArchitectureInfo* info = m_simulator.currentInfo();
+
+                            json result;
+                            if (info)
+                                result  = InfoSerializer::serialize(*info);
+
+                            response = json{{"id", j.at("id")}, {"result", result}}.dump();
+
+                            break;
+                        }
+
+                        case Command::RESET: {
+                            m_simulator.reset();
+
+                            response = json{{"id", j.at("id")}, {"result", nullptr}}.dump();
+
+                            break;
+                        }
+
+                        case Command::STEP: {
+                            auto steps = m_simulator.step();
+
+                            json result = EventSerializer::serialize(steps);
+
+                            response = json{{"id", j.at("id")}, {"result", result}}.dump();
+
+                            break;
+                        }
+                    }
                 }
+            } // mutex released HERE
+
+            std::cout << "before ws.send\n";
+
+            if (!response.empty()) {
+                ws.send(response);
             }
 
-            ws.send(message);
+            std::cout << "after ws.send\n";
         }
-
         std::cout << "WebSocket client disconnected :)" << std::endl;
     });
 }

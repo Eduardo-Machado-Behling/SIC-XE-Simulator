@@ -3,23 +3,28 @@
 #include "architecture/ArchitectureManager.hpp"
 #include "memory/Memory.hpp"
 #include "memory/Registers.hpp"
+
 #include "project/ProjectManager.hpp"
+
 
 class Simulator {
 public:
     Simulator()
         : m_architectureManager("archs") {}
 
+    ProjectManager::ProjectView list_projects();
+
     void create_project(const std::string& projectId,
                         const std::string& projectName,
                         const std::string& architectureId);
 
-    void load_project(const std::string& project);
+    const Project& load_project(const std::string& project);
 
     void set_file(const std::string& filepath, const std::string& content);
     void load_file(const std::string& filepath);
 
     const std::unordered_set<std::string>& ListAvailableArchitectures();
+    const ArchitectureInfo* currentInfo();
 
     void run();
     void stop();
