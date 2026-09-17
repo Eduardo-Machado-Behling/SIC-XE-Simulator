@@ -2,9 +2,7 @@
   "name": "cpu-simulator",
   "private": true,
   "scripts": {
-    "dev": "vercel dev",
-    "build": "echo 'Build handled by Vercel Services'",
-    "frontend": "npm --prefix frontend run dev",
-    "backend": "docker build -f backend/Dockerfile.vercel -t cpu-simulator-backend backend && docker run --rm -p 8080:8080 cpu-simulator-backend"
+    "frontend": "npm --prefix frontend install && npm --prefix frontend run dev",
+    "backend": "docker build -f backend/Dockerfilel -t cpu-simulator-backend backend && docker run --rm -p 8080:8080 cpu-simulator-backend"
   }
 }
