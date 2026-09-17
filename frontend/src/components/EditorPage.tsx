@@ -15,6 +15,7 @@ import { ExecutionView } from "@/components/ExecutionView";
 import { Simulator } from "@/lib/simulator/Simulator";
 import { Project } from "@/lib/simulator/Project";
 import { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
+import { RegisterState } from "./RegisterTable";
 
 // ============================================================
 // Helpers
@@ -72,12 +73,15 @@ interface PageProps {
 export default function EditorPage({ projectId }: PageProps) {
     const simulator = Simulator.get();
 
+    const [memory, setMemory] = useState<Map<number, number>>(new Map());
+    const [registers, setRegisters] = useState<RegisterState[]>([]);
     const [project, setProject] = useState<Project | null>(null);
     const [arch, setArch] = useState<ArchitectureInfo | null>(null);
     const [files, setFiles] = useState<Record<string, string>>({});
     const [activeFile, setActiveFile] = useState("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [pc, setPc] = useState<number>(0)
 
     const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
     const [isRunning, setIsRunning] = useState(false);
@@ -106,6 +110,14 @@ export default function EditorPage({ projectId }: PageProps) {
                 const firstPath =
                     Object.keys(data.project.files).sort()[0] ?? "";
                 setArch(data.arch)
+
+                setRegisters(data.arch.registers.map((reg) => {
+                    return {
+                        id: reg.id,
+                        name: reg.name,
+                        value: 0
+                    }
+                }))
 
                 setActiveFile(firstPath);
             } catch (err) {
@@ -165,16 +177,19 @@ export default function EditorPage({ projectId }: PageProps) {
     // --------------------------------------------------------
 
     const run = useCallback(() => {
-        setIsRunning(true);
         consoleHandleRef.current?.write(
             "Running program...\r\nProgram finished.\r\n",
         );
 
-        simulator.loadFile(activeFile).then((arch) => {
-            consoleHandleRef.current?.write(JSON.stringify(arch));
-        })
+        simulator.setFile(activeFile, activeContent).then(
+            () => {
+                simulator.loadFile(activeFile).then(
+                    () =>  setIsRunning(true)
+                )
+            }
+        )
 
-    }, [activeFile]);
+    }, [activeFile, activeContent]);
 
     const stop = useCallback(() => {
         setIsRunning(false);
@@ -183,13 +198,18 @@ export default function EditorPage({ projectId }: PageProps) {
     const step = useCallback(() => {
         consoleHandleRef.current?.write("Executing one instruction...\r\n");
         simulator.step().then((steps) => {
+            simulator.resolve(steps, setMemory, setRegisters)
             consoleHandleRef.current?.write(JSON.stringify(steps));
         })
+
     }, []);
 
     const reset = useCallback(() => {
         setIsRunning(false);
-        consoleHandleRef.current?.write("Simulator reset.\r\n");
+        consoleHandleRef.current?.clear();
+        simulator.reset().then((steps) => {
+            simulator.resolve(steps, setMemory, setRegisters)
+        })
     }, []);
 
     // --------------------------------------------------------
@@ -370,7 +390,7 @@ export default function EditorPage({ projectId }: PageProps) {
                         </Group>
                     </Panel>
 
-                    <Panel defaultSize="20%" minSize="10%" maxSize="60%">
+                    <Panel defaultSize="30%" minSize="10%" maxSize="60%">
                         <Separator
                             className="
                                     h-1
@@ -379,7 +399,7 @@ export default function EditorPage({ projectId }: PageProps) {
                                     transition-colors
                                 "
                         />
-                        <ExecutionView arch={arch }/>
+                        <ExecutionView arch={arch} memory={memory} registers={registers} memorySize={arch?.memory.address_space_size} pc={pc} />
                     </Panel>
                 </Group>
             </div>

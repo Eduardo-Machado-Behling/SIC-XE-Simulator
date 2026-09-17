@@ -5,14 +5,16 @@
 #include "memory/MemoryAccessor.hpp"
 
 #define DEFINE_INSTRUCTION(name) \
-void name::execute(ExecutionContext& context) const \
+bool name::execute(ExecutionContext& context) const \
 { \
     throw UnimplementedInstruction(#name);\
 }
 
-void AddInstruction::execute(ExecutionContext& context) const 
+bool AddInstruction::execute(ExecutionContext& context) const 
 { 
     context.state.write("A", context.state.read("A") + context.instruction.immediate);
+
+    return true;
 }
 
 DEFINE_INSTRUCTION(AddFInstruction)

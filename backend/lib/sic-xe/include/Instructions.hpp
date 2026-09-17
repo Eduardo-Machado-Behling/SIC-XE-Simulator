@@ -22,7 +22,7 @@ public:
 #define DECLARE_INSTRUCTION(name)                                                                  \
     class name final : public IInstruction {                                                       \
     public:                                                                                        \
-        void execute(ExecutionContext& context) const override;                                    \
+        bool execute(ExecutionContext& context) const override;                                    \
     };
 
 DECLARE_INSTRUCTION(AddInstruction)

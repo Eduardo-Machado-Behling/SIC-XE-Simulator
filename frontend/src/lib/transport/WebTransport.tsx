@@ -232,8 +232,8 @@ export class WebTransport implements SimulatorTransport {
         return this.send<ExecutionEvent[]>("step");
     }
 
-    async reset(): Promise<void> {
-        await this.send<void>("reset");
+    async reset(): Promise<ExecutionEvent[]> {
+        return this.send<ExecutionEvent[]>("reset");
     }
 
     async loadProject(
@@ -253,7 +253,7 @@ export class WebTransport implements SimulatorTransport {
     async setFile(
         file: string,
         content: string,
-    ): Promise<unknown> {
+    ): Promise<void> {
         return this.request(
             "/simulator/project/file",
             {

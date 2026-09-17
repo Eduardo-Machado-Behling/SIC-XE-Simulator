@@ -84,7 +84,7 @@ void Server::setup_http_project() {
                       return;
                   }
 
-                  json response = {{"message", "loaded file"}};
+                  json response = {{"message", "setted file"}};
                   res.set_content(response.dump(), "application/json");
               });
 }

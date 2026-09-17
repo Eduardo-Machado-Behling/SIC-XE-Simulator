@@ -36,7 +36,7 @@ struct DecodedInstruction
     // Immediate value when applicable.
     std::int32_t immediate = 0;
 
-    void execute(
+    bool execute(
         RegisterAccessor& state,
         MemoryAccessor& memory
     ) const;

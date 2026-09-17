@@ -9,7 +9,7 @@
 class ProjectManager {
 public:
 
-    ProjectManager() = default;
+    ProjectManager();
     ~ProjectManager() = default;
 
     using ProjectMap = std::unordered_map<std::string, Project>;
