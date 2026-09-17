@@ -1,48 +1,45 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter } from "next/navigation";
 
-export default function Home() {
-  const [response, setResponse] = useState<string>("");
+import Project from "@/components/Project";
+import { Project as TypeProject } from "@/lib/simulator/Project";
+import { Simulator } from "@/lib/simulator/Simulator";
+import { useEffect, useState } from "react";
 
-  async function testApi() {
-    try {
-      const apiUrl = process.env.BACKEND_INTERNAL_URL;
+export default function SimulatorTest() {
+    const router = useRouter();
 
-      const res = await fetch(`${apiUrl}/api/hello`);
+    const [projects, setProjects] = useState<Array<TypeProject>>([])
+    const [architectures, setArchitectures] = useState<Array<String>>([])
+    let simulator: Simulator | null = null;
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
+    useEffect(
+        () => {
+            simulator = Simulator.get();
 
-      const data = await res.json();
+            simulator.projects().then((projects) => {
+                setProjects(projects);
+            })
+        }
+        , [])
 
-      setResponse(JSON.stringify(data, null, 2));
-    } catch (error) {
-      setResponse(
-        `Error: ${error instanceof Error ? error.message : "Unknown error"}`
-      );
-    }
-  }
+    return (
+        <div className="flex flex-col w-screen h-screen">
+            <div className="bg-zinc-500 w-full h-32">
+            </div>
+            <div className="flex w-full flex-grow">
+                <div className="bg-zinc-700 h-full w-64">
+                </div>
+                <div className="flex flex-col flex-grow">
+                    {projects && projects.map((project) => (
+                        <Project key={project.id} id={project.id} title={project.name} architecture={project.architecture} fileTree={Object.keys(project.files)} />
+                    ))}
+                </div>
+            </div>
+            <div className="bg-zinc-400 w-full h-8">
 
-  return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-6">
-      <h1 className="text-4xl font-bold">
-        SIC/XE Simulator
-      </h1>
-
-      <button
-        onClick={testApi}
-        className="px-6 py-3 rounded bg-blue-600 text-white"
-      >
-        Test C++ Backend
-      </button>
-
-      {response && (
-        <pre className="p-4 bg-gray-100 rounded">
-          {response}
-        </pre>
-      )}
-    </main>
-  );
+            </div>
+        </div>
+    );
 }
