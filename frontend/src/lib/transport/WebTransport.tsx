@@ -108,6 +108,7 @@ export class WebTransport implements SimulatorTransport {
         );
     }
 
+
     private handleMessage(data: string): void {
         let response: Response;
 
@@ -244,8 +245,8 @@ export class WebTransport implements SimulatorTransport {
         );
     }
 
-    async loadFile(file: string): Promise<ArchitectureInfo>{
-        return this.send<ArchitectureInfo>(
+    async loadFile(file: string): Promise<ExecutionEvent[]> {
+        return this.send<ExecutionEvent[]>(
             `load %${file}`,
         );
     }

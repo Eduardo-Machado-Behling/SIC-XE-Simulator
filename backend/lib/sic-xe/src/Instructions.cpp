@@ -12,10 +12,36 @@ bool name::execute(ExecutionContext& context) const \
 
 bool AddInstruction::execute(ExecutionContext& context) const 
 { 
-    context.state.write("A", context.state.read("A") + context.instruction.immediate);
+    context.registers.write("A", context.registers.read("A") + context.instruction.immediate);
 
     return true;
-}
+}   
+
+bool StchInstruction::execute(ExecutionContext& context) const 
+{ 
+    std::vector<byte_t> buf = {static_cast<byte_t>(context.registers.read("A") & 0xff)};
+    context.memory.write( context.instruction.displacement , buf);
+
+    return true;
+}   
+
+bool StsInstruction::execute(ExecutionContext& context) const 
+{ 
+    uint64_t s = context.registers.read("S");
+
+    std::vector<byte_t> buf = {
+        static_cast<byte_t>(s & 0xff),
+        static_cast<byte_t>(s & (0xff << 8)),
+        static_cast<byte_t>(s & (0xff << 16))
+    };
+
+    context.memory.write( context.instruction.displacement, buf);
+
+    return true;
+}   
+
+// DEFINE_INSTRUCTION(StsInstruction)
+
 
 DEFINE_INSTRUCTION(AddFInstruction)
 DEFINE_INSTRUCTION(AddRInstruction)
@@ -58,11 +84,10 @@ DEFINE_INSTRUCTION(SioInstruction)
 DEFINE_INSTRUCTION(SskInstruction)
 DEFINE_INSTRUCTION(StaInstruction)
 DEFINE_INSTRUCTION(StbInstruction)
-DEFINE_INSTRUCTION(StchInstruction)
+
 DEFINE_INSTRUCTION(StfInstruction)
 DEFINE_INSTRUCTION(StiInstruction)
 DEFINE_INSTRUCTION(StlInstruction)
-DEFINE_INSTRUCTION(StsInstruction)
 DEFINE_INSTRUCTION(StswInstruction)
 DEFINE_INSTRUCTION(SttInstruction)
 DEFINE_INSTRUCTION(StxInstruction)

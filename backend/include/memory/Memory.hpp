@@ -1,8 +1,8 @@
 #pragma once
 
 #include <exception>
-#include <vector>
 #include <sstream>
+#include <vector>
 
 #include "memory/MemoryAccessor.hpp"
 
@@ -18,7 +18,8 @@ private:
 class Memory {
 public:
     void resize(size_t size);
-    void load(std::stringstream  hexDump);
+    std::vector<ExecutionEvent> load(std::stringstream hexDump);
+
     void write(size_t address, const std::vector<byte_t>& data);
     void read(size_t address, size_t size, std::vector<byte_t>& buffer) const;
     void clear();

@@ -19,7 +19,7 @@ bool DecodedInstruction::execute(
     }
 
     ExecutionContext context{
-        .state = state,
+        .registers = state,
         .memory = memory,
         .instruction = *this
     };
