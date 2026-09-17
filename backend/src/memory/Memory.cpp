@@ -15,12 +15,17 @@ void Memory::resize(size_t size) {
     m_memory.resize(size);
 }
 
-void Memory::load(std::stringstream hexDump) {
+std::vector<ExecutionEvent> Memory::load(std::stringstream hexDump) {
     std::string buff;
-    for(size_t i = 0; std::getline(hexDump, buff, '\n'); i++){
-       byte_t byte = static_cast<byte_t>(std::stoull(buff, nullptr, 16)); 
-       m_memory[i] = byte;
+
+    std::vector<byte_t> data;
+    for (size_t i = 0; std::getline(hexDump, buff, '\n'); i++) {
+        byte_t byte = static_cast<byte_t>(std::stoull(buff, nullptr, 16));
+        m_memory[i] = byte;
+        data.push_back(byte);
     }
+
+    return {MemoryWrite{.address=0, .value=data}};
 }
 
 void Memory::write(size_t address, const std::vector<byte_t>& data) {

@@ -21,7 +21,7 @@ public:
     const Project& load_project(const std::string& project);
 
     void set_file(const std::string& filepath, const std::string& content);
-    void load_file(const std::string& filepath);
+    std::vector<ExecutionEvent> load_file(const std::string& filepath);
 
     const std::unordered_set<std::string>& ListAvailableArchitectures();
     const ArchitectureInfo* currentInfo();

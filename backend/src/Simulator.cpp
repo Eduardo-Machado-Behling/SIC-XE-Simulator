@@ -19,7 +19,7 @@ const Project& Simulator::load_project(const std::string& project) {
     m_memory.resize(m_architectureManager.get()->info().memory.address_space_size);
 
     for (auto& reg : m_architectureManager.get()->info().registers) {
-        m_registers.allocate(reg.name, 0ull);
+        m_registers.allocate(reg.id, reg.name, 0ull);
     }
 
     m_architectureManager.get()->reset();
@@ -34,13 +34,13 @@ void Simulator::set_file(const std::string& filepath, const std::string& content
     m_currentProject->files[filepath] = content;
 }
 
-void Simulator::load_file(const std::string& filepath) {
+std::vector<ExecutionEvent> Simulator::load_file(const std::string& filepath) {
     if (!m_currentProject ||
         m_currentProject->files.find(filepath) == m_currentProject->files.end())
-        return;
+        return {};
 
     m_memory.clear();
-    m_memory.load(std::stringstream(m_currentProject->files.at(filepath)));
+    return m_memory.load(std::stringstream(m_currentProject->files.at(filepath)));
 }
 
 const std::unordered_set<std::string>& Simulator::ListAvailableArchitectures() {

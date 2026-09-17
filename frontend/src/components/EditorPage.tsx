@@ -176,19 +176,28 @@ export default function EditorPage({ projectId }: PageProps) {
     // Simulator actions
     // --------------------------------------------------------
 
-    const run = useCallback(() => {
+    const run = useCallback(async () => {
         consoleHandleRef.current?.write(
             "Running program...\r\nProgram finished.\r\n",
         );
 
-        simulator.setFile(activeFile, activeContent).then(
-            () => {
-                simulator.loadFile(activeFile).then(
-                    () =>  setIsRunning(true)
-                )
-            }
-        )
+        try {
+            await simulator.setFile(activeFile, activeContent);
 
+            const steps = await simulator.loadFile(activeFile);
+
+            console.log("Solve:", steps);
+
+            simulator.resolve(
+                steps,
+                setMemory,
+                setRegisters,
+            );
+
+            setIsRunning(true);
+        } catch (error) {
+            console.error("Run failed:", error);
+        }
     }, [activeFile, activeContent]);
 
     const stop = useCallback(() => {

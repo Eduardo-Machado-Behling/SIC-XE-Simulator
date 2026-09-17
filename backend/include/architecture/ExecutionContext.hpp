@@ -6,7 +6,7 @@ struct DecodedInstruction;
 
 struct ExecutionContext
 {
-    RegisterAccessor& state;
+    RegisterAccessor& registers;
     MemoryAccessor& memory;
     const DecodedInstruction& instruction;
 };

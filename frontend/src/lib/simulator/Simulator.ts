@@ -86,7 +86,7 @@ export class Simulator {
         return this.transport!.loadProject(projectId);
     }
 
-    public loadFile(file: string): Promise<ArchitectureInfo> {
+    public loadFile(file: string): Promise<ExecutionEvent[]> {
         return this.transport!.loadFile(file)
     }
 

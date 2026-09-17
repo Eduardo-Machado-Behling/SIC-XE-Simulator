@@ -115,15 +115,9 @@ void Server::setup_ws() {
                         }
 
                         case Command::LOAD_FILE: {
-                            m_simulator.load_file(match[1]);
+                            auto prog = m_simulator.load_file(match[1]);
 
-                            const ArchitectureInfo* info = m_simulator.currentInfo();
-
-                            json result;
-                            if (info)
-                                result = InfoSerializer::serialize(*info);
-
-                            response = json{{"id", j.at("id")}, {"result", result}}.dump();
+                            response = json{{"id", j.at("id")}, {"result", EventSerializer::serialize(prog)}}.dump();
 
                             break;
                         }

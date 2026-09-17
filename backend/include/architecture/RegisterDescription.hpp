@@ -17,7 +17,7 @@ struct RegisterDescription {
         , width(width)
         , type(type) {}
 
-    uint32_t id;
+    uint8_t id;
 
     const char* name;
 
