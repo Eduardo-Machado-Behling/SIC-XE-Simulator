@@ -1,12 +1,16 @@
 #include "Simulator.hpp"
 
+ProjectManager::ProjectView Simulator::list_projects() {
+    return m_projectManager.listProjects();
+}
+
 void Simulator::create_project(const std::string& projectId,
                                const std::string& projectName,
                                const std::string& architectureId) {
     m_projectManager.addProject({projectId, projectName, architectureId});
 }
 
-void Simulator::load_project(const std::string& project) {
+const Project& Simulator::load_project(const std::string& project) {
     m_currentProject = &m_projectManager.getProject(project);
 
     m_architectureManager.LoadArchitecture(m_currentProject->architecture,
@@ -19,6 +23,8 @@ void Simulator::load_project(const std::string& project) {
     }
 
     m_architectureManager.get()->reset();
+
+    return *m_currentProject;
 }
 
 void Simulator::set_file(const std::string& filepath, const std::string& content) {
@@ -39,6 +45,13 @@ void Simulator::load_file(const std::string& filepath) {
 
 const std::unordered_set<std::string>& Simulator::ListAvailableArchitectures() {
     return m_architectureManager.ListAvailableArchitectures();
+}
+
+const ArchitectureInfo* Simulator::currentInfo() {
+    if (!m_architectureManager.get())
+        return nullptr;
+
+    return &m_architectureManager.get()->info();
 }
 
 void Simulator::run() {}

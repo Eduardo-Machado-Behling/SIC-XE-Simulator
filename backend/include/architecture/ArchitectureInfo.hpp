@@ -8,7 +8,7 @@
 #include "architecture/MemoryDescription.hpp"
 #include "architecture/RegisterDescription.hpp"
 
-struct ArchitectureInfo {
+struct ArchitectureInfo  {
     std::string name;
     std::string description;
 

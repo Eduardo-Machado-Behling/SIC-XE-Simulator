@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+
 enum class RegisterType { GENERAL_PURPOSE = 0, SPECIAL_PURPOSE };
 
 struct RegisterDescription {

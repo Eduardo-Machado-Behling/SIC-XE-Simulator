@@ -5,6 +5,16 @@
 using json = nlohmann::json;
 
 void Server::setup_http_project() {
+    this->Get("/projects", [this](const httplib::Request& req, httplib::Response& res) {
+        json response = json::array();
+
+        for (const auto& project : this->m_simulator.list_projects()) {
+            response.push_back(project);
+        }
+
+        res.set_content(response.dump(), "application/json");
+    });
+
     this->Put("/project", [this](const httplib::Request& req, httplib::Response& res) {
         try {
             if (!(req.has_param("name") && req.has_param("id") && req.has_param("arch"))) {
