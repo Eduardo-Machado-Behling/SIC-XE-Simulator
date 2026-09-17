@@ -1,6 +1,10 @@
-import { SimulatorTransport } from "@/lib/transport/SimulatorTransport";
+import { LoadProjectResponse, SimulatorTransport } from "@/lib/transport/SimulatorTransport";
 import { WebTransport } from "@/lib/transport/WebTransport";
 import { Project } from "@/lib/simulator/Project";
+import { ExecutionEvent } from "@/lib/simulator/ExecutionEvent";
+import { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
+
+
 
 export class Simulator {
     public static get(): Simulator {
@@ -11,7 +15,7 @@ export class Simulator {
         return this.instance
     }
 
-    public async step(): Promise<unknown> {
+    public async step(): Promise<ExecutionEvent[]> {
         return this.transport!.step();
     }
     public async reset(): Promise<unknown> {
@@ -26,11 +30,11 @@ export class Simulator {
         return this.transport!.createProject(newProject);
     }
 
-    public async loadProject(projectId: string): Promise<Project> {
+    public async loadProject(projectId: string): Promise<LoadProjectResponse> {
         return this.transport!.loadProject(projectId);
     }
 
-    public loadFile(file: string): Promise<unknown> {
+    public loadFile(file: string): Promise<ArchitectureInfo> {
         return this.transport!.loadFile(file)
     }
 
