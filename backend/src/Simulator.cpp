@@ -58,14 +58,14 @@ void Simulator::run() {}
 
 void Simulator::stop() {}
 
-void Simulator::reset() {
+std::vector<ExecutionEvent> Simulator::reset() {
     IArchitecture* arch = m_architectureManager.get();
 
     if (!arch)
-        return;
+        return {};
 
     arch->reset();
-    arch->consume_events();
+    return arch->consume_events();
 }
 
 std::vector<ExecutionEvent> Simulator::step() {

@@ -12,8 +12,9 @@ export interface SimulatorTransport {
     disconnect(): void;
 
     step(): Promise<ExecutionEvent[]>;
-    reset(): Promise<unknown>;
+    reset(): Promise<ExecutionEvent[]>;
 
+    setFile(filePath: string, content: string): Promise<void>;
     projects(): Promise<Project[]>;
     createProject(newProject: Project): Promise<unknown>;
     loadProject(projectId: string): Promise<LoadProjectResponse>;

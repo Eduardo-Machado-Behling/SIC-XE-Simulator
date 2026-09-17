@@ -1,11 +1,8 @@
 #include "architecture/ExecutionContext.hpp"
 
-class IInstruction
-{
+class IInstruction {
 public:
     virtual ~IInstruction() = default;
 
-    virtual void execute(
-        ExecutionContext& context
-    ) const = 0;
+    virtual bool execute(ExecutionContext& context) const = 0;
 };

@@ -50,7 +50,9 @@ const ArchitectureInfo& SICXE::info() const noexcept {
 }
 
 void SICXE::reset() {
-    m_registerAccessor.write("PC", 0ull);
+    for (auto& r : m_info.registers){
+        m_registerAccessor.write(r.name, 0ull);
+    }
 }
 
 void SICXE::step() {
@@ -59,10 +61,11 @@ void SICXE::step() {
     m_memoryAccessor.fetch(pc, m_info.memory.address_width, m_buffer);
     const DecodedInstruction instruction = decode(pc);
 
-    instruction.execute(m_registerAccessor, m_memoryAccessor);
+    bool inc = instruction.execute(m_registerAccessor, m_memoryAccessor);
 
     m_events.push(InstructionExecuted{.instruction = instruction.description});
 
+    if (inc)
     m_registerAccessor.write("PC", pc + 3);
 }
 

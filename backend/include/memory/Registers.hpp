@@ -22,6 +22,8 @@ public:
     void write(const char* name, uint64_t value);
     uint64_t read(const char* name);
 
+    void clear();
+
     void allocate(const char* name, uint64_t initial_value);
     void deallocate(const char* name);
 

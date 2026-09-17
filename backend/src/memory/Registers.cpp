@@ -16,6 +16,10 @@ uint64_t Registers::read(const char* name) {
     return m_registers.at(name);
 }
 
+
+void clear(){
+}
+
 RegisterAccessor Registers::getAccessor() {
     return RegisterAccessor(*this);
 }

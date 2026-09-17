@@ -1,6 +1,17 @@
 #include "project/ProjectManager.hpp"
 
 
+    ProjectManager::ProjectManager(){
+        Project proj;
+
+        proj.id = "0";
+        proj.name = "Hello";
+        proj.architecture = "sic-xe";
+
+        proj.files.insert({"main", ""});
+
+        addProject(proj);
+    }
 ProjectManager::ProjectView ProjectManager::listProjects() const {
     return std::views::transform(
         std::views::all(m_projects),

@@ -5,17 +5,17 @@
 #include "architecture/ExecutionContext.hpp"
 #include "architecture/IInstruction.hpp"
 
-void DecodedInstruction::execute(
+bool DecodedInstruction::execute(
     RegisterAccessor& state,
     MemoryAccessor& memory
 ) const
 {
     if (description == nullptr) {
-        return;
+        return false;
     }
 
     if (description->implementation == nullptr) {
-        return;
+        return false;
     }
 
     ExecutionContext context{
@@ -24,5 +24,5 @@ void DecodedInstruction::execute(
         .instruction = *this
     };
 
-    description->implementation->execute(context);
+    return description->implementation->execute(context);
 }

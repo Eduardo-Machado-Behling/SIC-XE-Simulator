@@ -107,7 +107,9 @@ void Server::setup_ws() {
                             json arch;
                             arch = InfoSerializer::serialize(*info);
 
-                            response = json{{"id", j.at("id")}, {"result", json{{"project", proj}, {"arch", arch}}}}.dump();
+                            response = json{{"id", j.at("id")},
+                                            {"result", json{{"project", proj}, {"arch", arch}}}}
+                                           .dump();
 
                             break;
                         }
@@ -119,7 +121,7 @@ void Server::setup_ws() {
 
                             json result;
                             if (info)
-                                result  = InfoSerializer::serialize(*info);
+                                result = InfoSerializer::serialize(*info);
 
                             response = json{{"id", j.at("id")}, {"result", result}}.dump();
 
@@ -127,9 +129,11 @@ void Server::setup_ws() {
                         }
 
                         case Command::RESET: {
-                            m_simulator.reset();
+                            auto steps = m_simulator.reset();
 
-                            response = json{{"id", j.at("id")}, {"result", nullptr}}.dump();
+                            json result = EventSerializer::serialize(steps);
+
+                            response = json{{"id", j.at("id")}, {"result", result}}.dump();
 
                             break;
                         }

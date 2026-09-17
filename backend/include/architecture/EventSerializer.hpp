@@ -11,7 +11,7 @@ inline nlohmann::json serialize(
 )
 {
     return {
-        {"type", "instruction_fetched"},
+        {"type", "InstructionFetched"},
         {"address", event.address},
         {"value", event.value}
     };
@@ -22,7 +22,7 @@ inline nlohmann::json serialize(
 )
 {
     return {
-        {"type", "instruction_executed"},
+        {"type", "InstructionExecuted"},
         {"instruction", {
             {"id", event.instruction->id},
             {"mnemonic", event.instruction->mnemonic},
@@ -51,7 +51,7 @@ inline nlohmann::json serialize(
 )
 {
     return {
-        {"type", "register_write"},
+        {"type", "RegisterWrite"},
         {"name", event.name},
         {"value", event.value}
     };
@@ -62,7 +62,7 @@ inline nlohmann::json serialize(
 )
 {
     return {
-        {"type", "register_read"},
+        {"type", "RegisterRead"},
         {"name", event.name},
         {"value", event.value}
     };
@@ -73,7 +73,7 @@ inline nlohmann::json serialize(
 )
 {
     return {
-        {"type", "memory_write"},
+        {"type", "MemoryWrite"},
         {"address", event.address},
         {"value", event.value}
     };
@@ -84,7 +84,7 @@ inline nlohmann::json serialize(
 )
 {
     return {
-        {"type", "memory_read"},
+        {"type", "MemoryRead"},
         {"address", event.address},
         {"value", event.value}
     };
