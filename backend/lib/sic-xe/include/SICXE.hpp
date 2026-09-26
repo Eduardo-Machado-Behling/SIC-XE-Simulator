@@ -17,8 +17,6 @@ public:
     std::vector<ExecutionEvent> consume_events() override;
 
 private:
-    DecodedInstruction decode(uint32_t pc);
-
     ArchitectureInfo m_info;
     InstructionSet m_set;
 

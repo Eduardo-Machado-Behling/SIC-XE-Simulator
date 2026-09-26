@@ -1,6 +1,7 @@
 #include "Instructions.hpp"
 
 #include "DecodedInstruction.hpp"
+#include "Operand.hpp"
 #include "architecture/CPUState.hpp"
 #include "memory/MemoryAccessor.hpp"
 
@@ -42,6 +43,49 @@ bool StsInstruction::execute(ExecutionContext& context) const
 
 // DEFINE_INSTRUCTION(StsInstruction)
 
+bool LdaInstruction::execute(ExecutionContext& context) const
+{
+    context.registers.write("A", sicxe::operandWord(context));
+
+    return true;
+}
+
+bool LdbInstruction::execute(ExecutionContext& context) const
+{
+    context.registers.write("B", sicxe::operandWord(context));
+
+    return true;
+}
+
+bool LdchInstruction::execute(ExecutionContext& context) const
+{
+    const uint64_t a = context.registers.read("A");
+    context.registers.write("A", (a & 0xFFFF00) | sicxe::operandByte(context));
+
+    return true;
+}
+
+bool LdlInstruction::execute(ExecutionContext& context) const
+{
+    context.registers.write("L", sicxe::operandWord(context));
+
+    return true;
+}
+
+bool LdtInstruction::execute(ExecutionContext& context) const
+{
+    context.registers.write("T", sicxe::operandWord(context));
+
+    return true;
+}
+
+bool LdxInstruction::execute(ExecutionContext& context) const
+{
+    context.registers.write("X", sicxe::operandWord(context));
+
+    return true;
+}
+
 
 DEFINE_INSTRUCTION(AddFInstruction)
 DEFINE_INSTRUCTION(AddRInstruction)
@@ -61,14 +105,8 @@ DEFINE_INSTRUCTION(JeqInstruction)
 DEFINE_INSTRUCTION(JgtInstruction)
 DEFINE_INSTRUCTION(JltInstruction)
 DEFINE_INSTRUCTION(JsubInstruction)
-DEFINE_INSTRUCTION(LdaInstruction)
-DEFINE_INSTRUCTION(LdbInstruction)
-DEFINE_INSTRUCTION(LdchInstruction)
 DEFINE_INSTRUCTION(LdfInstruction)
-DEFINE_INSTRUCTION(LdlInstruction)
 DEFINE_INSTRUCTION(LdsInstruction)
-DEFINE_INSTRUCTION(LdtInstruction)
-DEFINE_INSTRUCTION(LdxInstruction)
 DEFINE_INSTRUCTION(LpsInstruction)
 DEFINE_INSTRUCTION(MulInstruction)
 DEFINE_INSTRUCTION(MulFInstruction)

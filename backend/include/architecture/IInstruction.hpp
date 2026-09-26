@@ -1,3 +1,5 @@
+#pragma once
+
 #include "architecture/ExecutionContext.hpp"
 
 class IInstruction {
