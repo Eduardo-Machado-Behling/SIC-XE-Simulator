@@ -40,7 +40,7 @@ SICXE::SICXE(MemoryAccessor memoryAccessor, RegisterAccessor registerAccessor)
     m_info.name = "SIC/XE";
     m_info.description = "SIC/XE architecture";
 
-    m_info.memory.address_space_size = 1 << 20;
+    m_info.memory.address_space_size = sicxe::MEMORY_SIZE;
     m_info.memory.address_width = 4;
     m_info.memory.word_size = 3;
     m_info.memory.alignment = 1;

@@ -132,14 +132,23 @@ DecodedInstruction decode(const InstructionSet& set,
     }
 
     if (instruction.x) {
-        target += static_cast<std::int64_t>(registers.read("X"));
+        // X holds a 2's complement index, so X = FFFFFF steps back one byte.
+        target += toSigned(static_cast<std::uint32_t>(registers.read("X")));
     }
-
-    instruction.target_address = toWord(target);
 
     if (!instruction.n && instruction.i) {
+        // An immediate operand is a value, and values are 24-bit words.
+        instruction.target_address = toWord(target);
         instruction.immediate = static_cast<std::int32_t>(instruction.target_address);
+        return instruction;
     }
+
+    // Addresses never wrap around (Beck's program interrupt 02, "address out of range").
+    if (target < 0 || target >= MEMORY_SIZE) {
+        throw AddressOutOfRange("target address outside memory" + at(pc));
+    }
+
+    instruction.target_address = static_cast<std::uint32_t>(target);
 
     return instruction;
 }

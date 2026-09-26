@@ -10,8 +10,9 @@ struct IllegalInstruction : std::runtime_error {
     using std::runtime_error::runtime_error;
 };
 
-// Code 02: an instruction that runs past the end of memory. (Operand accesses
-// out of range are reported by Memory as MemoryOutOfBoundsException.)
+// Code 02: an instruction that runs past the end of memory, or a target address
+// outside it. (A word that starts in memory but ends past it, or an indirect
+// pointer outside memory, is reported by Memory as MemoryOutOfBoundsException.)
 struct AddressOutOfRange : std::runtime_error {
     using std::runtime_error::runtime_error;
 };
