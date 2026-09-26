@@ -91,6 +91,12 @@ set(SHARED_SOURCES
 
 
 
+option(BUILD_TESTING "Build the architecture unit tests" ON)
+
+if(BUILD_TESTING)
+    enable_testing()
+endif()
+
 file(GLOB LIB_DIRS LIST_DIRECTORIES true
     "${CMAKE_CURRENT_SOURCE_DIR}/lib/*"
 )

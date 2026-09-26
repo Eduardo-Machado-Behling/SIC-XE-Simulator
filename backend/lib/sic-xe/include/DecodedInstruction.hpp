@@ -30,7 +30,8 @@ struct DecodedInstruction
     // Format 3/4
     std::int32_t displacement = 0;
 
-    // Resolved/effective operand.
+    // Beck's TA: PC/base-relative, index and format 4 applied, n/i NOT applied
+    // (indirect and immediate are resolved by sicxe::operand*, see Operand.hpp).
     std::uint32_t target_address = 0;
 
     // Immediate value when applicable.
