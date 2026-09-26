@@ -72,10 +72,9 @@ void wordLoadsFollowFigure11() {
                 Machine machine;
                 loadFigure11Memory(machine);
 
-                const bool advancePc = machine.run(load.instruction, decoded(c.n, c.i, c.targetAddress));
+                machine.run(load.instruction, decoded(c.n, c.i, c.targetAddress));
 
                 checkHex(load.reg, machine.reg(load.reg), c.loaded);
-                check("execute must return true so step() advances PC", advancePc);
             });
         }
     }
@@ -126,11 +125,10 @@ void ldchReplacesOnlyTheRightmostByteOfA() {
             machine.registers.write("A", 0x123456);
             machine.registers.write("X", UNTOUCHED);
 
-            const bool advancePc = machine.run(LDCH, decoded(c.n, c.i, c.targetAddress));
+            machine.run(LDCH, decoded(c.n, c.i, c.targetAddress));
 
             checkHex("A", machine.reg("A"), c.a);
             checkHex("X", machine.reg("X"), UNTOUCHED);
-            check("execute must return true so step() advances PC", advancePc);
         });
     }
 }

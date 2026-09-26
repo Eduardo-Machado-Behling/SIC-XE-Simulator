@@ -14,7 +14,7 @@
 
 // Real memory and registers behind the same accessors SICXE uses, so a test
 // can run one instruction against a hand-built DecodedInstruction.
-// Registers use the PDF numbering (A=0 ... SW=9); SICXE.cpp still numbers them from 1.
+// Registers use the PDF numbering (A=0 ... SW=9), the same as SICXE.cpp.
 struct Machine {
     Memory memory;
     Registers registers;
@@ -49,17 +49,23 @@ struct Machine {
         memory.write(address, bytes);
     }
 
+    std::vector<byte_t> peek(std::uint32_t address, std::size_t size) {
+        std::vector<byte_t> bytes;
+        memory.read(address, size, bytes);
+        return bytes;
+    }
+
     std::uint64_t reg(const char* name) {
         return registers.read(name);
     }
 
-    bool run(const IInstruction& instruction, const DecodedInstruction& decoded) {
+    void run(const IInstruction& instruction, const DecodedInstruction& decoded) {
         ExecutionContext context{
             .registers = registerAccessor,
             .memory = memoryAccessor,
             .instruction = decoded,
         };
-        return instruction.execute(context);
+        instruction.execute(context);
     }
 };
 

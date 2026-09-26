@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "DecodedInstruction.hpp"
+#include "Errors.hpp"
 #include "architecture/ExecutionContext.hpp"
 #include "memory/MemoryAccessor.hpp"
 
@@ -22,6 +23,13 @@ std::uint32_t readWord(MemoryAccessor& memory, std::uint32_t address) {
     memory.read(address, 3, bytes);
 
     return (bytes[0] << 16) | (bytes[1] << 8) | bytes[2];
+}
+
+// An immediate operand is a value, not a memory location.
+void rejectImmediateStore(const DecodedInstruction& instruction) {
+    if (isImmediate(instruction)) {
+        throw IllegalInstruction("store to an immediate operand");
+    }
 }
 
 } // namespace
@@ -53,6 +61,21 @@ std::uint8_t operandByte(ExecutionContext& context) {
     context.memory.read(operandAddress(context), 1, bytes);
 
     return bytes[0];
+}
+
+void storeWord(ExecutionContext& context, std::uint32_t value) {
+    rejectImmediateStore(context.instruction);
+
+    context.memory.write(operandAddress(context),
+                         {static_cast<byte_t>(value >> 16),
+                          static_cast<byte_t>(value >> 8),
+                          static_cast<byte_t>(value)});
+}
+
+void storeByte(ExecutionContext& context, std::uint8_t value) {
+    rejectImmediateStore(context.instruction);
+
+    context.memory.write(operandAddress(context), {value});
 }
 
 } // namespace sicxe

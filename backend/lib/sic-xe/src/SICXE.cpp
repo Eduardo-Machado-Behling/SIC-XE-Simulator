@@ -1,22 +1,31 @@
 #include "SICXE.hpp"
 
+#include <algorithm>
 #include <unordered_map>
 
 #include "DecodedInstruction.hpp"
+#include "Decoder.hpp"
 #include "architecture/RegisterDescription.hpp"
 
+namespace {
+
+constexpr std::uint64_t MAX_INSTRUCTION_LENGTH = 4;
+
+} // namespace
+
+// Register numbers are the ones Format 2 instructions encode (Beck 1.3.1/1.3.2, PDF section 2).
 const std::vector<RegisterDescription> REGISTERS = {
-    {1, "A", "Accumulator; used for arithmetic operations", 3},
-    {2, "X", "Index register; used for addressing", 3},
-    {3,
+    {0, "A", "Accumulator; used for arithmetic operations", 3},
+    {1, "X", "Index register; used for addressing", 3},
+    {2,
      "L",
      "Linkage register; the Jump to Subroutine (JSUB) instruction stores the return address in "
      "this register",
      3},
-    {4, "B", "Base register; used for addressing", 3},
-    {5, "S", "General working register-no special use", 3, RegisterType::GENERAL_PURPOSE},
-    {6, "T", "General working register-no special use", 3, RegisterType::GENERAL_PURPOSE},
-    {7, "F", "Floating-point accumulator (48 bits)", 6},
+    {3, "B", "Base register; used for addressing", 3},
+    {4, "S", "General working register-no special use", 3, RegisterType::GENERAL_PURPOSE},
+    {5, "T", "General working register-no special use", 3, RegisterType::GENERAL_PURPOSE},
+    {6, "F", "Floating-point accumulator (48 bits)", 6},
     {8,
      "PC",
      "Program counter; contains the address of the next instruction to be fetched for execution",
@@ -34,6 +43,8 @@ SICXE::SICXE(MemoryAccessor memoryAccessor, RegisterAccessor registerAccessor)
     m_info.memory.address_space_size = 1 << 20;
     m_info.memory.address_width = 4;
     m_info.memory.word_size = 3;
+    m_info.memory.alignment = 1;
+    m_info.memory.endianness = Endianness::BIG;
 
     m_buffer.reserve(m_info.memory.address_width);
 
@@ -56,17 +67,29 @@ void SICXE::reset() {
 }
 
 void SICXE::step() {
-    const auto pc = m_registerAccessor.read("PC");
+    const auto pc = static_cast<std::uint32_t>(m_registerAccessor.read("PC"));
 
-    m_memoryAccessor.fetch(pc, m_info.memory.address_width, m_buffer);
-    const DecodedInstruction instruction = decode(pc);
+    // Fetch up to the longest instruction (format 4), but never past the end of memory.
+    const std::uint64_t memorySize = m_info.memory.address_space_size;
+    const std::uint64_t available = pc < memorySize ? memorySize - pc : 0;
+    m_memoryAccessor.fetch(pc, std::min<std::uint64_t>(MAX_INSTRUCTION_LENGTH, available), m_buffer);
 
-    bool inc = instruction.execute(m_registerAccessor, m_memoryAccessor);
+    const DecodedInstruction instruction = sicxe::decode(m_set, m_buffer, pc, m_registerAccessor);
+
+    // Beck 1.3.1: PC holds the address of the next instruction while this one executes,
+    // which PC-relative operands and JSUB rely on; jumps simply overwrite it.
+    m_registerAccessor.write("PC", pc + instruction.length);
+
+    try {
+        // The bool execute returns is not used: PC is already advanced.
+        instruction.execute(m_registerAccessor, m_memoryAccessor);
+    } catch (...) {
+        // Leave PC on the instruction that failed so the UI points at it.
+        m_registerAccessor.write("PC", pc);
+        throw;
+    }
 
     m_events.push(InstructionExecuted{.instruction = instruction.description});
-
-    if (inc)
-    m_registerAccessor.write("PC", pc + 3);
 }
 
 std::vector<ExecutionEvent> SICXE::consume_events() {
@@ -78,76 +101,4 @@ std::vector<ExecutionEvent> SICXE::consume_events() {
     }
 
     return events;
-}
-
-DecodedInstruction SICXE::decode(uint32_t pc) {
-    const std::uint8_t byte1 = m_buffer[0];
-
-    const std::uint8_t opcode = byte1 & 0xFC;
-
-    const InstructionDescription* description = m_set.findByOpcode(opcode);
-
-    if (description == nullptr) {
-        throw std::runtime_error("Unknown opcode");
-    }
-
-    DecodedInstruction instruction;
-
-    instruction.description = description;
-    instruction.address = pc;
-
-    // Format 1
-    if (hasFormat(description->formats, InstructionFormat::Format1)) {
-        instruction.format = InstructionFormat::Format1;
-
-        return instruction;
-    }
-
-    const std::uint8_t byte2 = m_buffer[1];
-
-    // Format 2
-    if (hasFormat(description->formats, InstructionFormat::Format2)) {
-        instruction.format = InstructionFormat::Format2;
-
-        instruction.r1 = (byte2 >> 4) & 0x0F;
-
-        instruction.r2 = byte2 & 0x0F;
-
-        return instruction;
-    }
-
-    // Format 3/4
-    instruction.n = (byte1 & 0x02) != 0;
-
-    instruction.i = (byte1 & 0x01) != 0;
-
-    instruction.x = (byte2 & 0x80) != 0;
-
-    instruction.b = (byte2 & 0x40) != 0;
-
-    instruction.p = (byte2 & 0x20) != 0;
-
-    instruction.e = (byte2 & 0x10) != 0;
-
-    if (instruction.e) {
-        instruction.format = InstructionFormat::Format4;
-
-        const std::uint8_t byte3 = m_buffer[2];
-
-        const std::uint8_t byte4 = m_buffer[3];
-
-        instruction.displacement = ((byte2 & 0x0F) << 16) | (byte3 << 8) | byte4;
-    } else {
-        instruction.format = InstructionFormat::Format3;
-
-        const std::uint8_t byte3 = m_buffer[2];
-
-        instruction.displacement = ((byte2 & 0x0F) << 8) | byte3;
-    }
-
-    if (!instruction.n && instruction.i) {
-        instruction.immediate = instruction.displacement;
-    }
-
-    return instruction;
 }
