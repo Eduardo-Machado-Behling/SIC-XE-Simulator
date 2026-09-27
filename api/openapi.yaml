@@ -1,0 +1,127 @@
+openapi: 3.2.1
+
+info:
+  title: SIC-XE Simulator API
+  description: |
+    HTTP API for the SIC-XE Simulator.
+
+    The API provides access to supported CPU architectures and
+    persistent simulator projects.
+  version: 0.1.0
+
+servers:
+  - url: https://sic-xe-engine.onrender.com
+    description: Production server
+
+tags:
+  - name: Simulator
+    description: Simulator and architecture operations
+
+  - name: Projects
+    description: Project management operations
+
+components:
+
+  schemas:
+
+    Project:
+      type: object
+      description: A saved SIC-XE simulator project.
+
+      required:
+        - id
+        - name
+        - architecture
+        - files
+
+      properties:
+        id:
+          type: string
+          description: Unique identifier of the project.
+          example: "550e8400-e29b-41d4-a716-446655440000"
+
+        name:
+          type: string
+          description: Human-readable project name.
+          example: "Hello World"
+
+        architecture:
+          type: string
+          description: CPU architecture used by the project.
+          example: "SIC-XE"
+
+        files:
+          type: object
+          description: |
+            Mapping of file names to their source contents.
+          additionalProperties:
+            type: string
+          example:
+            main.asm: |
+              START   1000
+              LDA     VALUE
+              STA     RESULT
+              END     START
+            data.asm: |
+              VALUE   WORD    10
+              RESULT  RESW    1
+
+paths:
+
+  /simulator/archs:
+
+    get:
+      tags:
+        - Simulator
+
+      operationId: listArchitectures
+
+      summary: List supported CPU architectures
+
+      description: |
+        Returns the CPU architectures supported by the simulator.
+
+      responses:
+        "200":
+          description: Successfully retrieved supported architectures.
+
+          content:
+            application/json:
+              schema:
+                type: array
+                description: List of supported CPU architecture identifiers.
+                items:
+                  type: string
+              example:
+                - SIC
+                - SIC-XE
+
+        "500":
+          description: Internal server error.
+
+  /projects:
+
+    get:
+      tags:
+        - Projects
+
+      operationId: listProjects
+
+      summary: List saved projects
+
+      description: |
+        Returns all projects currently stored by the server.
+
+      responses:
+        "200":
+          description: Successfully retrieved projects.
+
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+
+        "500":
+          description: Internal server error.
