@@ -3,8 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "api:generate": "orval",
+    "dev": "npm run api:generate && next dev",
+    "build": "npm run api:generate && next build",
     "start": "next start",
     "lint": "eslint"
   },
@@ -28,6 +29,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
+    "orval": "^8.37.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
