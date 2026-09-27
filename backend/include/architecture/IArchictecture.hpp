@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <sstream>
 
 #include "architecture/ArchitectureInfo.hpp"
 #include "architecture/ExecutionEvent.hpp"
@@ -23,6 +24,8 @@ public:
     virtual void step() = 0;
 
     virtual std::vector<ExecutionEvent> consume_events() = 0;
+
+	virtual std::vector<ExecutionEvent> load_file(std::string& string) = 0;
 
 protected:
     MemoryAccessor m_memoryAccessor;

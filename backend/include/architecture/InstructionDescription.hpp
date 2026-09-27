@@ -28,7 +28,7 @@ enum class OperandType : std::uint8_t
 {
     None,
 
-    Memory,             // m
+    Memory,        // m
     Register,           // r1
     RegisterRegister,   // r1,r2
     RegisterImmediate   // r1,n
@@ -78,6 +78,4 @@ struct InstructionDescription
     InstructionFormat formats;
     OperandType operand_type;
     InstructionFlags flags;
-
-    const IInstruction* implementation;
 };

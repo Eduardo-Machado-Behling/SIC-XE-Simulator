@@ -1,109 +1,98 @@
 #pragma once
 
-#include <exception>
-#include <string>
-#include <vector>
+#include "IInstruction.hpp"
 
-#include "architecture/IInstruction.hpp"
+#include "operands/NoneOperand.hpp"
+#include "operands/RegisterOperand.hpp"
+#include "operands/RegistersOperand.hpp"
+#include "operands/ValueOperand.hpp"
 
-class UnimplementedInstruction : public std::exception {
-private:
-    std::string message_;
-
-public:
-    explicit UnimplementedInstruction(const std::string& mnemonic)
-        : message_("Instruction not implemented: " + mnemonic) {}
-
-    const char* what() const noexcept override {
-        return message_.c_str();
-    }
-};
-
-#define DECLARE_INSTRUCTION(name)                                                                  \
-    class name final : public IInstruction {                                                       \
+#define DECLARE_INSTRUCTION(__name, __operand)                                                     \
+    class __name final : public IInstruction {                                                     \
     public:                                                                                        \
-        bool execute(ExecutionContext& context) const override;                                    \
+        bool execute(ExecutionContext& context, __operand operand) const override;                 \
     };
 
-DECLARE_INSTRUCTION(AddInstruction)
-DECLARE_INSTRUCTION(AddFInstruction)
-DECLARE_INSTRUCTION(AddRInstruction)
+DECLARE_INSTRUCTION(AddInstruction, ValueOperand)
+DECLARE_INSTRUCTION(AddFInstruction, ValueOperand)
+DECLARE_INSTRUCTION(AddRInstruction, RegistersOperand)
 
-DECLARE_INSTRUCTION(AndInstruction)
+DECLARE_INSTRUCTION(AndInstruction, ValueOperand)
 
-DECLARE_INSTRUCTION(ClearInstruction)
+DECLARE_INSTRUCTION(ClearInstruction, RegisterOperand)
 
-DECLARE_INSTRUCTION(CompInstruction)
-DECLARE_INSTRUCTION(CompFInstruction)
-DECLARE_INSTRUCTION(CompRInstruction)
+DECLARE_INSTRUCTION(CompInstruction, ValueOperand)
+DECLARE_INSTRUCTION(CompFInstruction, ValueOperand)
+DECLARE_INSTRUCTION(CompRInstruction, RegistersOperand)
 
-DECLARE_INSTRUCTION(DivInstruction)
-DECLARE_INSTRUCTION(DivFInstruction)
-DECLARE_INSTRUCTION(DivRInstruction)
+DECLARE_INSTRUCTION(DivInstruction, ValueOperand)
+DECLARE_INSTRUCTION(DivFInstruction, ValueOperand)
+DECLARE_INSTRUCTION(DivRInstruction, RegistersOperand)
 
-DECLARE_INSTRUCTION(FixInstruction)
-DECLARE_INSTRUCTION(FloatInstruction)
+DECLARE_INSTRUCTION(FixInstruction, NoneOperand)
+DECLARE_INSTRUCTION(FloatInstruction, NoneOperand)
 
-DECLARE_INSTRUCTION(HioInstruction)
+DECLARE_INSTRUCTION(HioInstruction, NoneOperand)
 
-DECLARE_INSTRUCTION(JInstruction)
-DECLARE_INSTRUCTION(JeqInstruction)
-DECLARE_INSTRUCTION(JgtInstruction)
-DECLARE_INSTRUCTION(JltInstruction)
-DECLARE_INSTRUCTION(JsubInstruction)
+DECLARE_INSTRUCTION(JInstruction, AddressOperand)
+DECLARE_INSTRUCTION(JeqInstruction, AddressOperand)
+DECLARE_INSTRUCTION(JgtInstruction, AddressOperand)
+DECLARE_INSTRUCTION(JltInstruction, AddressOperand)
+DECLARE_INSTRUCTION(JsubInstruction, AddressOperand)
 
-DECLARE_INSTRUCTION(LdaInstruction)
-DECLARE_INSTRUCTION(LdbInstruction)
-DECLARE_INSTRUCTION(LdchInstruction)
-DECLARE_INSTRUCTION(LdfInstruction)
-DECLARE_INSTRUCTION(LdlInstruction)
-DECLARE_INSTRUCTION(LdsInstruction)
-DECLARE_INSTRUCTION(LdtInstruction)
-DECLARE_INSTRUCTION(LdxInstruction)
-DECLARE_INSTRUCTION(LpsInstruction)
+DECLARE_INSTRUCTION(LdaInstruction, ValueOperand)
+DECLARE_INSTRUCTION(LdbInstruction, ValueOperand)
+DECLARE_INSTRUCTION(LdchInstruction, ValueOperand)
+DECLARE_INSTRUCTION(LdfInstruction, ValueOperand)
+DECLARE_INSTRUCTION(LdlInstruction, ValueOperand)
+DECLARE_INSTRUCTION(LdsInstruction, ValueOperand)
+DECLARE_INSTRUCTION(LdtInstruction, ValueOperand)
+DECLARE_INSTRUCTION(LdxInstruction, ValueOperand)
+DECLARE_INSTRUCTION(LpsInstruction, AddressOperand)
 
-DECLARE_INSTRUCTION(MulInstruction)
-DECLARE_INSTRUCTION(MulFInstruction)
-DECLARE_INSTRUCTION(MulRInstruction)
+DECLARE_INSTRUCTION(MulInstruction, ValueOperand)
+DECLARE_INSTRUCTION(MulFInstruction, ValueOperand)
+DECLARE_INSTRUCTION(MulRInstruction, RegistersOperand)
 
-DECLARE_INSTRUCTION(NormInstruction)
+DECLARE_INSTRUCTION(NormInstruction, NoneOperand)
 
-DECLARE_INSTRUCTION(OrInstruction)
+DECLARE_INSTRUCTION(OrInstruction, ValueOperand)
 
-DECLARE_INSTRUCTION(RdInstruction)
+DECLARE_INSTRUCTION(RdInstruction, ValueOperand)
 
-DECLARE_INSTRUCTION(RmoInstruction)
+DECLARE_INSTRUCTION(RmoInstruction, RegistersOperand)
 
-DECLARE_INSTRUCTION(RsubInstruction)
+DECLARE_INSTRUCTION(RsubInstruction, NoneOperand)
 
-DECLARE_INSTRUCTION(ShiftLInstruction)
-DECLARE_INSTRUCTION(ShiftRInstruction)
+DECLARE_INSTRUCTION(ShiftLInstruction, RegisterOperand)
+DECLARE_INSTRUCTION(ShiftRInstruction, RegisterOperand)
 
-DECLARE_INSTRUCTION(SioInstruction)
-DECLARE_INSTRUCTION(SskInstruction)
+DECLARE_INSTRUCTION(SioInstruction, NoneOperand)
+DECLARE_INSTRUCTION(SskInstruction, AddressOperand)
 
-DECLARE_INSTRUCTION(StaInstruction)
-DECLARE_INSTRUCTION(StbInstruction)
-DECLARE_INSTRUCTION(StchInstruction)
-DECLARE_INSTRUCTION(StfInstruction)
-DECLARE_INSTRUCTION(StiInstruction)
-DECLARE_INSTRUCTION(StlInstruction)
-DECLARE_INSTRUCTION(StsInstruction)
-DECLARE_INSTRUCTION(StswInstruction)
-DECLARE_INSTRUCTION(SttInstruction)
-DECLARE_INSTRUCTION(StxInstruction)
+DECLARE_INSTRUCTION(StaInstruction, AddressOperand)
+DECLARE_INSTRUCTION(StbInstruction, AddressOperand)
+DECLARE_INSTRUCTION(StchInstruction, AddressOperand)
+DECLARE_INSTRUCTION(StfInstruction, AddressOperand)
+DECLARE_INSTRUCTION(StiInstruction, AddressOperand)
+DECLARE_INSTRUCTION(StlInstruction, AddressOperand)
+DECLARE_INSTRUCTION(StsInstruction, AddressOperand)
+DECLARE_INSTRUCTION(StswInstruction, AddressOperand)
+DECLARE_INSTRUCTION(SttInstruction, AddressOperand)
+DECLARE_INSTRUCTION(StxInstruction, AddressOperand)
 
-DECLARE_INSTRUCTION(SubInstruction)
-DECLARE_INSTRUCTION(SubFInstruction)
-DECLARE_INSTRUCTION(SubRInstruction)
+DECLARE_INSTRUCTION(SubInstruction, ValueOperand)
+DECLARE_INSTRUCTION(SubFInstruction, ValueOperand)
+DECLARE_INSTRUCTION(SubRInstruction, RegistersOperand)
 
-DECLARE_INSTRUCTION(SvcInstruction)
+// TODO:
+//DECLARE_INSTRUCTION(SvcInstruction, ServiceNumberOperand)
 
-DECLARE_INSTRUCTION(TdInstruction)
-DECLARE_INSTRUCTION(TioInstruction)
-DECLARE_INSTRUCTION(TixInstruction)
-DECLARE_INSTRUCTION(TixRInstruction)
+DECLARE_INSTRUCTION(TdInstruction, ValueOperand)
+DECLARE_INSTRUCTION(TioInstruction, NoneOperand)
+DECLARE_INSTRUCTION(TixInstruction, ValueOperand)
+DECLARE_INSTRUCTION(TixRInstruction, RegisterOperand)
 
-DECLARE_INSTRUCTION(WdInstruction)
+DECLARE_INSTRUCTION(WdInstruction, ValueOperand)
 
 #undef DECLARE_INSTRUCTION

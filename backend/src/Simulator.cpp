@@ -40,7 +40,7 @@ std::vector<ExecutionEvent> Simulator::load_file(const std::string& filepath) {
         return {};
 
     m_memory.clear();
-    return m_memory.load(std::stringstream(m_currentProject->files.at(filepath)));
+    return m_architectureManager.get()->load_file(m_currentProject->files.at(filepath));
 }
 
 const std::unordered_set<std::string>& Simulator::ListAvailableArchitectures() {

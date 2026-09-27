@@ -1,633 +1,462 @@
 #include "InstructionSet.hpp"
+#include "architecture/InstructionDescription.hpp"
 
 InstructionSet::InstructionSet()
-{
-    descriptions_ = {
-        {
-            0,
+    : m_descriptions{
+          {{0,
             "ADD",
             0x18,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::None,
-            &add_
-        },
-
-        {
-            1,
+            InstructionFlags::None},
+           &m_add},
+          {{1,
             "ADDF",
             0x58,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::Extended | InstructionFlags::Floating,
-            &addf_
-        },
-
-        {
-            2,
+            InstructionFlags::Floating},
+           &m_addf},
+          {{2,
             "ADDR",
             0x90,
             InstructionFormat::Format2,
             OperandType::RegisterRegister,
-            InstructionFlags::Extended,
-            &addr_
-        },
+            InstructionFlags::None},
+           &m_addr},
 
-        {
-            3,
+          {{3,
             "AND",
             0x40,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::None,
-            &and_
-        },
+            InstructionFlags::None},
+           &m_and},
 
-        {
-            4,
+          {{4,
             "CLEAR",
             0xB4,
             InstructionFormat::Format2,
             OperandType::Register,
-            InstructionFlags::Extended,
-            &clear_
-        },
+            InstructionFlags::None},
+           &m_clear},
 
-        {
-            5,
+          {{5,
             "COMP",
             0x28,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::SetsCC,
-            &comp_
-        },
-
-        {
-            6,
+            InstructionFlags::SetsCC},
+           &m_comp},
+          {{6,
             "COMPF",
             0x88,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::Extended |
-            InstructionFlags::Floating |
-            InstructionFlags::SetsCC,
-            &compf_
-        },
-
-        {
-            7,
+            InstructionFlags::Floating | InstructionFlags::SetsCC},
+           &m_compf},
+          {{7,
             "COMPR",
             0xA0,
             InstructionFormat::Format2,
             OperandType::RegisterRegister,
-            InstructionFlags::Extended |
-            InstructionFlags::SetsCC,
-            &compr_
-        },
+            InstructionFlags::SetsCC},
+           &m_compr},
 
-        {
-            8,
+          {{8,
             "DIV",
             0x24,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::None,
-            &div_
-        },
-
-        {
-            9,
+            InstructionFlags::None},
+           &m_div},
+          {{9,
             "DIVF",
             0x64,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::Extended |
-            InstructionFlags::Floating,
-            &divf_
-        },
-
-        {
-            10,
+            InstructionFlags::Floating},
+           &m_divf},
+          {{10,
             "DIVR",
             0x9C,
             InstructionFormat::Format2,
             OperandType::RegisterRegister,
-            InstructionFlags::Extended,
-            &divr_
-        },
+            InstructionFlags::None},
+           &m_divr},
 
-        {
-            11,
-            "FIX",
-            0xC4,
-            InstructionFormat::Format1,
-            OperandType::None,
-            InstructionFlags::Extended |
-            InstructionFlags::Floating,
-            &fix_
-        },
-
-        {
-            12,
+          {{11, "FIX", 0xC4, InstructionFormat::Format1, OperandType::None, InstructionFlags::None},
+           &m_fix},
+          {{12,
             "FLOAT",
             0xC0,
             InstructionFormat::Format1,
             OperandType::None,
-            InstructionFlags::Extended |
-            InstructionFlags::Floating,
-            &float_
-        },
+            InstructionFlags::Floating},
+           &m_float},
 
-        {
-            13,
+          {{13,
             "HIO",
             0xF4,
             InstructionFormat::Format1,
             OperandType::None,
-            InstructionFlags::Privileged |
-            InstructionFlags::Extended,
-            &hio_
-        },
+            InstructionFlags::Privileged},
+           &m_hio},
 
-        {
-            14,
+          {{14,
             "J",
             0x3C,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::None,
-            &j_
-        },
-
-        {
-            15,
+            InstructionFlags::None},
+           &m_j},
+          {{15,
             "JEQ",
             0x30,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::None,
-            &jeq_
-        },
-
-        {
-            16,
+            InstructionFlags::None},
+           &m_jeq},
+          {{16,
             "JGT",
             0x34,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::None,
-            &jgt_
-        },
-
-        {
-            17,
+            InstructionFlags::None},
+           &m_jgt},
+          {{17,
             "JLT",
             0x38,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::None,
-            &jlt_
-        },
-
-        {
-            18,
+            InstructionFlags::None},
+           &m_jlt},
+          {{18,
             "JSUB",
             0x48,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::None,
-            &jsub_
-        },
+            InstructionFlags::None},
+           &m_jsub},
 
-        {
-            19,
+          {{19,
             "LDA",
             0x00,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::None,
-            &lda_
-        },
-
-        {
-            20,
+            InstructionFlags::None},
+           &m_lda},
+          {{20,
             "LDB",
             0x68,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::Extended,
-            &ldb_
-        },
-
-        {
-            21,
+            InstructionFlags::None},
+           &m_ldb},
+          {{21,
             "LDCH",
             0x50,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::None,
-            &ldch_
-        },
-
-        {
-            22,
+            InstructionFlags::None},
+           &m_ldch},
+          {{22,
             "LDF",
             0x70,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::Extended |
-            InstructionFlags::Floating,
-            &ldf_
-        },
-
-        {
-            23,
+            InstructionFlags::Floating},
+           &m_ldf},
+          {{23,
             "LDL",
             0x08,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::None,
-            &ldl_
-        },
-
-        {
-            24,
+            InstructionFlags::None},
+           &m_ldl},
+          {{24,
             "LDS",
             0x6C,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::Extended,
-            &lds_
-        },
-
-        {
-            25,
+            InstructionFlags::None},
+           &m_lds},
+          {{25,
             "LDT",
             0x74,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::Extended,
-            &ldt_
-        },
-
-        {
-            26,
+            InstructionFlags::None},
+           &m_ldt},
+          {{26,
             "LDX",
             0x04,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::None,
-            &ldx_
-        },
-
-        {
-            27,
+            InstructionFlags::None},
+           &m_ldx},
+          {{27,
             "LPS",
             0xD0,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::Privileged |
-            InstructionFlags::Extended,
-            &lps_
-        },
+            InstructionFlags::Privileged},
+           &m_lps},
 
-        {
-            28,
+          {{28,
             "MUL",
             0x20,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::None,
-            &mul_
-        },
-
-        {
-            29,
+            InstructionFlags::None},
+           &m_mul},
+          {{29,
             "MULF",
             0x60,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::Extended |
-            InstructionFlags::Floating,
-            &mulf_
-        },
-
-        {
-            30,
+            InstructionFlags::Floating},
+           &m_mulf},
+          {{30,
             "MULR",
             0x98,
             InstructionFormat::Format2,
             OperandType::RegisterRegister,
-            InstructionFlags::Extended,
-            &mulr_
-        },
+            InstructionFlags::None},
+           &m_mulr},
 
-        {
-            31,
+          {{31,
             "NORM",
             0xC8,
             InstructionFormat::Format1,
             OperandType::None,
-            InstructionFlags::Extended |
-            InstructionFlags::Floating,
-            &norm_
-        },
+            InstructionFlags::Floating},
+           &m_norm},
 
-        {
-            32,
+          {{32,
             "OR",
             0x44,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::None,
-            &or_
-        },
+            InstructionFlags::None},
+           &m_or},
 
-        {
-            33,
+          {{33,
             "RD",
             0xD8,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::Privileged,
-            &rd_
-        },
+            InstructionFlags::None},
+           &m_rd},
 
-        {
-            34,
+          {{34,
             "RMO",
             0xAC,
             InstructionFormat::Format2,
             OperandType::RegisterRegister,
-            InstructionFlags::Extended,
-            &rmo_
-        },
+            InstructionFlags::None},
+           &m_rmo},
 
-        {
-            35,
+          {{35,
             "RSUB",
             0x4C,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::None,
-            InstructionFlags::None,
-            &rsub_
-        },
+            InstructionFlags::None},
+           &m_rsub},
 
-        {
-            36,
+          {{36,
             "SHIFTL",
             0xA4,
             InstructionFormat::Format2,
             OperandType::RegisterImmediate,
-            InstructionFlags::Extended,
-            &shiftl_
-        },
-
-        {
-            37,
+            InstructionFlags::None},
+           &m_shiftl},
+          {{37,
             "SHIFTR",
             0xA8,
             InstructionFormat::Format2,
             OperandType::RegisterImmediate,
-            InstructionFlags::Extended,
-            &shiftr_
-        },
+            InstructionFlags::None},
+           &m_shiftr},
 
-        {
-            38,
+          {{38,
             "SIO",
             0xF0,
             InstructionFormat::Format1,
             OperandType::None,
-            InstructionFlags::Privileged |
-            InstructionFlags::Extended,
-            &sio_
-        },
-
-        {
-            39,
+            InstructionFlags::Privileged},
+           &m_sio},
+          {{39,
             "SSK",
             0xEC,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::Privileged |
-            InstructionFlags::Extended,
-            &ssk_
-        },
+            InstructionFlags::Privileged},
+           &m_ssk},
 
-        {
-            40,
+          {{40,
             "STA",
             0x0C,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::None,
-            &sta_
-        },
-
-        {
-            41,
+            InstructionFlags::None},
+           &m_sta},
+          {{41,
             "STB",
             0x78,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::Extended,
-            &stb_
-        },
-
-        {
-            42,
+            InstructionFlags::None},
+           &m_stb},
+          {{42,
             "STCH",
             0x54,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::None,
-            &stch_
-        },
-
-        {
-            43,
+            InstructionFlags::None},
+           &m_stch},
+          {{43,
             "STF",
             0x80,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::Extended |
-            InstructionFlags::Floating,
-            &stf_
-        },
-
-        {
-            44,
+            InstructionFlags::Floating},
+           &m_stf},
+          {{44,
             "STI",
             0xD4,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::Privileged |
-            InstructionFlags::Extended,
-            &sti_
-        },
-
-        {
-            45,
+            InstructionFlags::None},
+           &m_sti},
+          {{45,
             "STL",
             0x14,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::None,
-            &stl_
-        },
-
-        {
-            46,
+            InstructionFlags::None},
+           &m_stl},
+          {{46,
             "STS",
             0x7C,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::Extended,
-            &sts_
-        },
-
-        {
-            47,
+            InstructionFlags::None},
+           &m_sts},
+          {{47,
             "STSW",
             0xE8,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::Privileged,
-            &stsw_
-        },
-
-        {
-            48,
+            InstructionFlags::None},
+           &m_stsw},
+          {{48,
             "STT",
             0x84,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::Extended,
-            &stt_
-        },
-
-        {
-            49,
+            InstructionFlags::None},
+           &m_stt},
+          {{49,
             "STX",
             0x10,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::None,
-            &stx_
-        },
+            InstructionFlags::None},
+           &m_stx},
 
-        {
-            50,
+          {{50,
             "SUB",
             0x1C,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::None,
-            &sub_
-        },
-
-        {
-            51,
+            InstructionFlags::None},
+           &m_sub},
+          {{51,
             "SUBF",
             0x5C,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::Extended |
-            InstructionFlags::Floating,
-            &subf_
-        },
-
-        {
-            52,
+            InstructionFlags::Floating},
+           &m_subf},
+          {{52,
             "SUBR",
             0x94,
             InstructionFormat::Format2,
             OperandType::RegisterRegister,
-            InstructionFlags::Extended,
-            &subr_
-        },
+            InstructionFlags::None},
+           &m_subr},
 
-        {
-            53,
-            "SVC",
-            0xB0,
-            InstructionFormat::Format2,
-            OperandType::RegisterImmediate,
-            InstructionFlags::Extended,
-            &svc_
-        },
+          // {{53,
+          //   "SVC",
+          //   0xB0,
+          //   InstructionFormat::Format2,
+          //   OperandType::RegisterImmediate,
+          //   InstructionFlags::Privileged},
+          //  &m_svc},
 
-        {
-            54,
+          {{54,
             "TD",
             0xE0,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::Privileged |
-            InstructionFlags::SetsCC,
-            &td_
-        },
-
-        {
-            55,
+            InstructionFlags::SetsCC},
+           &m_td},
+          {{55,
             "TIO",
             0xF8,
             InstructionFormat::Format1,
             OperandType::None,
-            InstructionFlags::Privileged |
-            InstructionFlags::Extended |
-            InstructionFlags::SetsCC,
-            &tio_
-        },
-
-        {
-            56,
+            InstructionFlags::Privileged},
+           &m_tio},
+          {{56,
             "TIX",
             0x2C,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::SetsCC,
-            &tix_
-        },
-
-        {
-            57,
+            InstructionFlags::SetsCC},
+           &m_tix},
+          {{57,
             "TIXR",
             0xB8,
             InstructionFormat::Format2,
             OperandType::Register,
-            InstructionFlags::Extended |
-            InstructionFlags::SetsCC,
-            &tixr_
-        },
+            InstructionFlags::SetsCC},
+           &m_tixr},
 
-        {
-            58,
+          {{58,
             "WD",
             0xDC,
             InstructionFormat::Format3 | InstructionFormat::Format4,
             OperandType::Memory,
-            InstructionFlags::Privileged,
-            &wd_
-        }
-    };
+            InstructionFlags::None},
+           &m_wd},
+      } {}
+
+const std::vector<InstructionDescription> InstructionSet::descriptions() const noexcept {
+	std::vector<InstructionDescription> descs;
+
+	for (auto& d : m_descriptions){
+		descs.push_back(d.description);
+	}
+
+    return descs;
 }
 
-const std::vector<InstructionDescription>&
-InstructionSet::descriptions() const noexcept
-{
-    return descriptions_;
-}
-
-const InstructionDescription*
-InstructionSet::findByOpcode(std::uint8_t opcode) const noexcept
-{
-    for (const auto& instruction : descriptions_) {
-        if (instruction.opcode == opcode) {
+const InstructionData* InstructionSet::findByOpcode(std::uint8_t opcode) const noexcept {
+    for (const auto& instruction : m_descriptions) {
+        if (instruction.description.opcode == opcode)
             return &instruction;
-        }
+    }
+
+    return nullptr;
+}
+
+const InstructionData* InstructionSet::findByMnemonic(const std::string& mnemonic) const noexcept {
+    for (const auto& instruction : m_descriptions) {
+        if (instruction.description.mnemonic == mnemonic)
+            return &instruction;
     }
 
     return nullptr;
