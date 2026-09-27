@@ -1,110 +1,109 @@
 #pragma once
 
-#include "architecture/InstructionDescription.hpp"
-
-#include "Instructions.hpp"
-
 #include <vector>
 
-class InstructionSet
-{
+#include "Instructions.hpp"
+#include "architecture/InstructionDescription.hpp"
+
+struct InstructionData {
+    InstructionDescription description;
+    IInstruction* implementation;
+};
+
+class InstructionSet {
 public:
     InstructionSet();
 
     [[nodiscard]]
-    const std::vector<InstructionDescription>& descriptions() const noexcept;
+    const std::vector<InstructionDescription> descriptions() const noexcept;
 
     [[nodiscard]]
-    const InstructionDescription* findByOpcode(
-        std::uint8_t opcode
-    ) const noexcept;
+    const InstructionData* findByOpcode(std::uint8_t opcode) const noexcept;
 
     [[nodiscard]]
-    const InstructionDescription* findByMnemonic(
-        const std::string& mnemonic
-    ) const noexcept;
+    const InstructionData* findByMnemonic(const std::string& mnemonic) const noexcept;
 
 private:
-    AddInstruction add_;
-    AddFInstruction addf_;
-    AddRInstruction addr_;
+    AddInstruction m_add;
+    AddFInstruction m_addf;
+    AddRInstruction m_addr;
 
-    AndInstruction and_;
+    AndInstruction m_and;
 
-    ClearInstruction clear_;
+    ClearInstruction m_clear;
 
-    CompInstruction comp_;
-    CompFInstruction compf_;
-    CompRInstruction compr_;
+    CompInstruction m_comp;
+    CompFInstruction m_compf;
+    CompRInstruction m_compr;
 
-    DivInstruction div_;
-    DivFInstruction divf_;
-    DivRInstruction divr_;
+    DivInstruction m_div;
+    DivFInstruction m_divf;
+    DivRInstruction m_divr;
 
-    FixInstruction fix_;
-    FloatInstruction float_;
+    FixInstruction m_fix;
+    FloatInstruction m_float;
 
-    HioInstruction hio_;
+    HioInstruction m_hio;
 
-    JInstruction j_;
-    JeqInstruction jeq_;
-    JgtInstruction jgt_;
-    JltInstruction jlt_;
-    JsubInstruction jsub_;
+    JInstruction m_j;
+    JeqInstruction m_jeq;
+    JgtInstruction m_jgt;
+    JltInstruction m_jlt;
+    JsubInstruction m_jsub;
 
-    LdaInstruction lda_;
-    LdbInstruction ldb_;
-    LdchInstruction ldch_;
-    LdfInstruction ldf_;
-    LdlInstruction ldl_;
-    LdsInstruction lds_;
-    LdtInstruction ldt_;
-    LdxInstruction ldx_;
-    LpsInstruction lps_;
+    LdaInstruction m_lda;
+    LdbInstruction m_ldb;
+    LdchInstruction m_ldch;
+    LdfInstruction m_ldf;
+    LdlInstruction m_ldl;
+    LdsInstruction m_lds;
+    LdtInstruction m_ldt;
+    LdxInstruction m_ldx;
+    LpsInstruction m_lps;
 
-    MulInstruction mul_;
-    MulFInstruction mulf_;
-    MulRInstruction mulr_;
+    MulInstruction m_mul;
+    MulFInstruction m_mulf;
+    MulRInstruction m_mulr;
 
-    NormInstruction norm_;
+    NormInstruction m_norm;
 
-    OrInstruction or_;
+    OrInstruction m_or;
 
-    RdInstruction rd_;
+    RdInstruction m_rd;
 
-    RmoInstruction rmo_;
+    RmoInstruction m_rmo;
 
-    RsubInstruction rsub_;
+    RsubInstruction m_rsub;
 
-    ShiftLInstruction shiftl_;
-    ShiftRInstruction shiftr_;
+    ShiftLInstruction m_shiftl;
+    ShiftRInstruction m_shiftr;
 
-    SioInstruction sio_;
-    SskInstruction ssk_;
+    SioInstruction m_sio;
+    SskInstruction m_ssk;
 
-    StaInstruction sta_;
-    StbInstruction stb_;
-    StchInstruction stch_;
-    StfInstruction stf_;
-    StiInstruction sti_;
-    StlInstruction stl_;
-    StsInstruction sts_;
-    StswInstruction stsw_;
-    SttInstruction stt_;
-    StxInstruction stx_;
+    StaInstruction m_sta;
+    StbInstruction m_stb;
+    StchInstruction m_stch;
+    StfInstruction m_stf;
+    StiInstruction m_sti;
+    StlInstruction m_stl;
+    StsInstruction m_sts;
+    StswInstruction m_stsw;
+    SttInstruction m_stt;
+    StxInstruction m_stx;
 
-    SubInstruction sub_;
-    SubFInstruction subf_;
-    SubRInstruction subr_;
+    SubInstruction m_sub;
+    SubFInstruction m_subf;
+    SubRInstruction m_subr;
 
-    SvcInstruction svc_;
+    // SvcInstruction m_svc;
 
-    TdInstruction td_;
-    TioInstruction tio_;
-    TixInstruction tix_;
-    TixRInstruction tixr_;
+    TdInstruction m_td;
+    TioInstruction m_tio;
+    TixInstruction m_tix;
+    TixRInstruction m_tixr;
 
-    WdInstruction wd_;
+    WdInstruction m_wd;
 
-    std::vector<InstructionDescription> descriptions_;
+    std::vector<InstructionData> m_descriptions;
 };

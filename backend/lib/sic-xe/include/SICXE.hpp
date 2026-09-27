@@ -1,9 +1,8 @@
 #pragma once
 
-#include "architecture/IArchictecture.hpp"
+#include "Assembler.hpp"
 #include "InstructionSet.hpp"
-
-#include <queue>
+#include "architecture/IArchictecture.hpp"
 
 class SICXE final : public IArchitecture {
 public:
@@ -15,12 +14,13 @@ public:
     void step() override;
 
     std::vector<ExecutionEvent> consume_events() override;
+    std::vector<ExecutionEvent> load_file(std::string& content) override;
 
 private:
-    DecodedInstruction decode(uint32_t pc);
-
     ArchitectureInfo m_info;
     InstructionSet m_set;
+
+    Assembler m_assembler;
 
     EventQueue m_events;
     std::vector<byte_t> m_buffer;

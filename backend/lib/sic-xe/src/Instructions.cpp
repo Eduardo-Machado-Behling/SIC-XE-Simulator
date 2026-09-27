@@ -1,104 +1,117 @@
 #include "Instructions.hpp"
 
 #include "DecodedInstruction.hpp"
-#include "architecture/CPUState.hpp"
 #include "memory/MemoryAccessor.hpp"
+#include "memory/RegisterAccessor.hpp"
+#include "operands/AddressOperand.hpp"
+#include "operands/ValueOperand.hpp"
 
-#define DEFINE_INSTRUCTION(name) \
-bool name::execute(ExecutionContext& context) const \
-{ \
-    throw UnimplementedInstruction(#name);\
+#define DEFINE_INSTRUCTION(__name, __operand)                                                      \
+    bool __name::execute(ExecutionContext& context, __operand operand) const {                     \
+        throw UnimplementedInstruction(#__name " | " #__operand);                                  \
+    }
+
+bool AddInstruction::execute(ExecutionContext& context, ValueOperand operand) const {
+    context.registers.write("A", context.registers.read("A") + operand.value);
+
+    return true;
 }
 
-bool AddInstruction::execute(ExecutionContext& context) const 
-{ 
-    context.registers.write("A", context.registers.read("A") + context.instruction.immediate);
-
-    return true;
-}   
-
-bool StchInstruction::execute(ExecutionContext& context) const 
-{ 
+bool StchInstruction::execute(ExecutionContext& context, AddressOperand operand) const {
     std::vector<byte_t> buf = {static_cast<byte_t>(context.registers.read("A") & 0xff)};
-    context.memory.write( context.instruction.displacement , buf);
+    context.memory.write(operand.address, buf);
 
     return true;
-}   
+}
 
-bool StsInstruction::execute(ExecutionContext& context) const 
-{ 
+bool StsInstruction::execute(ExecutionContext& context, AddressOperand operand) const {
     uint64_t s = context.registers.read("S");
 
-    std::vector<byte_t> buf = {
-        static_cast<byte_t>(s & 0xff),
-        static_cast<byte_t>(s & (0xff << 8)),
-        static_cast<byte_t>(s & (0xff << 16))
-    };
+    std::vector<byte_t> buf = {static_cast<byte_t>(s & 0xff),
+                               static_cast<byte_t>(s & (0xff << 8)),
+                               static_cast<byte_t>(s & (0xff << 16))};
 
-    context.memory.write( context.instruction.displacement, buf);
+    context.memory.write(operand.address, buf);
 
     return true;
-}   
+}
 
 // DEFINE_INSTRUCTION(StsInstruction)
 
+DEFINE_INSTRUCTION(AddFInstruction, ValueOperand)
+DEFINE_INSTRUCTION(AddRInstruction, RegistersOperand)
 
-DEFINE_INSTRUCTION(AddFInstruction)
-DEFINE_INSTRUCTION(AddRInstruction)
-DEFINE_INSTRUCTION(AndInstruction)
-DEFINE_INSTRUCTION(ClearInstruction)
-DEFINE_INSTRUCTION(CompInstruction)
-DEFINE_INSTRUCTION(CompFInstruction)
-DEFINE_INSTRUCTION(CompRInstruction)
-DEFINE_INSTRUCTION(DivInstruction)
-DEFINE_INSTRUCTION(DivFInstruction)
-DEFINE_INSTRUCTION(DivRInstruction)
-DEFINE_INSTRUCTION(FixInstruction)
-DEFINE_INSTRUCTION(FloatInstruction)
-DEFINE_INSTRUCTION(HioInstruction)
-DEFINE_INSTRUCTION(JInstruction)
-DEFINE_INSTRUCTION(JeqInstruction)
-DEFINE_INSTRUCTION(JgtInstruction)
-DEFINE_INSTRUCTION(JltInstruction)
-DEFINE_INSTRUCTION(JsubInstruction)
-DEFINE_INSTRUCTION(LdaInstruction)
-DEFINE_INSTRUCTION(LdbInstruction)
-DEFINE_INSTRUCTION(LdchInstruction)
-DEFINE_INSTRUCTION(LdfInstruction)
-DEFINE_INSTRUCTION(LdlInstruction)
-DEFINE_INSTRUCTION(LdsInstruction)
-DEFINE_INSTRUCTION(LdtInstruction)
-DEFINE_INSTRUCTION(LdxInstruction)
-DEFINE_INSTRUCTION(LpsInstruction)
-DEFINE_INSTRUCTION(MulInstruction)
-DEFINE_INSTRUCTION(MulFInstruction)
-DEFINE_INSTRUCTION(MulRInstruction)
-DEFINE_INSTRUCTION(NormInstruction)
-DEFINE_INSTRUCTION(OrInstruction)
-DEFINE_INSTRUCTION(RdInstruction)
-DEFINE_INSTRUCTION(RmoInstruction)
-DEFINE_INSTRUCTION(RsubInstruction)
-DEFINE_INSTRUCTION(ShiftLInstruction)
-DEFINE_INSTRUCTION(ShiftRInstruction)
-DEFINE_INSTRUCTION(SioInstruction)
-DEFINE_INSTRUCTION(SskInstruction)
-DEFINE_INSTRUCTION(StaInstruction)
-DEFINE_INSTRUCTION(StbInstruction)
+DEFINE_INSTRUCTION(AndInstruction, ValueOperand)
 
-DEFINE_INSTRUCTION(StfInstruction)
-DEFINE_INSTRUCTION(StiInstruction)
-DEFINE_INSTRUCTION(StlInstruction)
-DEFINE_INSTRUCTION(StswInstruction)
-DEFINE_INSTRUCTION(SttInstruction)
-DEFINE_INSTRUCTION(StxInstruction)
-DEFINE_INSTRUCTION(SubInstruction)
-DEFINE_INSTRUCTION(SubFInstruction)
-DEFINE_INSTRUCTION(SubRInstruction)
-DEFINE_INSTRUCTION(SvcInstruction)
-DEFINE_INSTRUCTION(TdInstruction)
-DEFINE_INSTRUCTION(TioInstruction)
-DEFINE_INSTRUCTION(TixInstruction)
-DEFINE_INSTRUCTION(TixRInstruction)
-DEFINE_INSTRUCTION(WdInstruction)
+DEFINE_INSTRUCTION(ClearInstruction, RegisterOperand)
+
+DEFINE_INSTRUCTION(CompInstruction, ValueOperand)
+DEFINE_INSTRUCTION(CompFInstruction, ValueOperand)
+DEFINE_INSTRUCTION(CompRInstruction, RegistersOperand)
+
+DEFINE_INSTRUCTION(DivInstruction, ValueOperand)
+DEFINE_INSTRUCTION(DivFInstruction, ValueOperand)
+DEFINE_INSTRUCTION(DivRInstruction, RegistersOperand)
+
+DEFINE_INSTRUCTION(FixInstruction, NoneOperand)
+DEFINE_INSTRUCTION(FloatInstruction, NoneOperand)
+
+DEFINE_INSTRUCTION(HioInstruction, NoneOperand)
+
+DEFINE_INSTRUCTION(JInstruction, AddressOperand)
+DEFINE_INSTRUCTION(JeqInstruction, AddressOperand)
+DEFINE_INSTRUCTION(JgtInstruction, AddressOperand)
+DEFINE_INSTRUCTION(JltInstruction, AddressOperand)
+DEFINE_INSTRUCTION(JsubInstruction, AddressOperand)
+
+DEFINE_INSTRUCTION(LdaInstruction, ValueOperand)
+DEFINE_INSTRUCTION(LdbInstruction, ValueOperand)
+DEFINE_INSTRUCTION(LdchInstruction, ValueOperand)
+DEFINE_INSTRUCTION(LdfInstruction, ValueOperand)
+DEFINE_INSTRUCTION(LdlInstruction, ValueOperand)
+DEFINE_INSTRUCTION(LdsInstruction, ValueOperand)
+DEFINE_INSTRUCTION(LdtInstruction, ValueOperand)
+DEFINE_INSTRUCTION(LdxInstruction, ValueOperand)
+DEFINE_INSTRUCTION(LpsInstruction, AddressOperand)
+
+DEFINE_INSTRUCTION(MulInstruction, ValueOperand)
+DEFINE_INSTRUCTION(MulFInstruction, ValueOperand)
+DEFINE_INSTRUCTION(MulRInstruction, RegistersOperand)
+
+DEFINE_INSTRUCTION(NormInstruction, NoneOperand)
+
+DEFINE_INSTRUCTION(OrInstruction, ValueOperand)
+
+DEFINE_INSTRUCTION(RdInstruction, ValueOperand)
+
+DEFINE_INSTRUCTION(RmoInstruction, RegistersOperand)
+
+DEFINE_INSTRUCTION(RsubInstruction, NoneOperand)
+
+DEFINE_INSTRUCTION(ShiftLInstruction, RegisterOperand)
+DEFINE_INSTRUCTION(ShiftRInstruction, RegisterOperand)
+
+DEFINE_INSTRUCTION(SioInstruction, NoneOperand)
+DEFINE_INSTRUCTION(SskInstruction, AddressOperand)
+
+DEFINE_INSTRUCTION(StaInstruction, AddressOperand)
+DEFINE_INSTRUCTION(StbInstruction, AddressOperand)
+DEFINE_INSTRUCTION(StfInstruction, AddressOperand)
+DEFINE_INSTRUCTION(StiInstruction, AddressOperand)
+DEFINE_INSTRUCTION(StlInstruction, AddressOperand)
+DEFINE_INSTRUCTION(StswInstruction, AddressOperand)
+DEFINE_INSTRUCTION(SttInstruction, AddressOperand)
+DEFINE_INSTRUCTION(StxInstruction, AddressOperand)
+
+DEFINE_INSTRUCTION(SubInstruction, ValueOperand)
+DEFINE_INSTRUCTION(SubFInstruction, ValueOperand)
+DEFINE_INSTRUCTION(SubRInstruction, RegistersOperand)
+
+DEFINE_INSTRUCTION(TdInstruction, ValueOperand)
+DEFINE_INSTRUCTION(TioInstruction, NoneOperand)
+DEFINE_INSTRUCTION(TixInstruction, ValueOperand)
+DEFINE_INSTRUCTION(TixRInstruction, RegisterOperand)
+
+DEFINE_INSTRUCTION(WdInstruction, ValueOperand)
 
 #undef DEFINE_INSTRUCTION

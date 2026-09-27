@@ -1,43 +1,70 @@
 #pragma once
 
-#include "architecture/InstructionDescription.hpp"
-
 #include <cstdint>
+#include <optional>
+#include <variant>
+#include <vector>
+
+#include "IInstruction.hpp"
+#include "InstructionSet.hpp"
+#include "architecture/InstructionDescription.hpp"
+#include "common/Byte.hpp"
+#include "operands/AddressOperand.hpp"
+#include "operands/NoneOperand.hpp"
+#include "operands/Operand.hpp"
+#include "operands/RegisterOperand.hpp"
+#include "operands/RegistersOperand.hpp"
+#include "operands/ValueOperand.hpp"
 
 class RegisterAccessor;
 class MemoryAccessor;
 
-struct DecodedInstruction
-{
+using Operands =
+    std::variant<ValueOperand, AddressOperand, NoneOperand, RegistersOperand, RegisterOperand>;
+
+class DecodedInstruction {
+public:
+    explicit DecodedInstruction(RegisterAccessor& state,
+                       MemoryAccessor& memory,
+                       InstructionSet& set,
+                       std::vector<byte_t>& raw);
+
+    std::uint8_t execute() const;
+
     const InstructionDescription* description = nullptr;
 
-    std::uint32_t address = 0;
+private:
+    std::uint32_t get_displacement(InstructionFormat format, std::vector<byte_t>& raw) const;
 
-    InstructionFormat format = InstructionFormat::Format1;
+    std::uint32_t get_target_address(RegisterAccessor& regs,
+                                     InstructionFormat format,
+                                     std::uint32_t displacement,
+                                     bool b,
+                                     bool p,
+                                     bool x) const;
 
-    // Format 3/4
-    bool n = false;
-    bool i = false;
-    bool x = false;
-    bool b = false;
-    bool p = false;
-    bool e = false;
+    Operands resolve_operand(MemoryAccessor& memory,
+                             std::uint32_t ta,
+                             std::uint32_t displacement,
+                             bool n,
+                             bool i) const;
 
-    // Format 2
-    std::uint8_t r1 = 0;
-    std::uint8_t r2 = 0;
+    const IInstruction* m_implementation = nullptr;
+    MemoryAccessor& m_memory;
+    RegisterAccessor& m_regs;
 
-    // Format 3/4
-    std::int32_t displacement = 0;
+    struct {
+        bool n;
+        bool i;
+        bool x;
+        bool b;
+        bool p;
+        bool e;
+    } m_flags;
 
-    // Resolved/effective operand.
-    std::uint32_t target_address = 0;
 
-    // Immediate value when applicable.
-    std::int32_t immediate = 0;
+    InstructionFormat m_format;
+    std::uint8_t m_format_advance;
 
-    bool execute(
-        RegisterAccessor& state,
-        MemoryAccessor& memory
-    ) const;
+    std::optional<Operands> m_operand = std::nullopt;
 };
