@@ -89,6 +89,12 @@ set(SHARED_SOURCES
     ${CMAKE_SOURCE_DIR}/src/memory/RegisterAccessor.cpp
 )
 
+file(GLOB EVENTS_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/src/architecture/events/*.cpp"
+)
+
+list(APPEND SHARED_SOURCES ${EVENTS_SOURCES})
+
 
 
 file(GLOB LIB_DIRS LIST_DIRECTORIES true

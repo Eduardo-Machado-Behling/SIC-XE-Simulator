@@ -1,10 +1,11 @@
 #include "memory/Memory.hpp"
+#include "architecture/events/EventManager.hpp"
 
 #include <algorithm>
 #include <regex>
 
-MemoryAccessor Memory::getAccessor() {
-    return MemoryAccessor(*this);
+MemoryAccessor Memory::getAccessor(architecture::events::EventManager& eventManager) {
+    return MemoryAccessor(*this, eventManager);
 }
 
 void Memory::clear() {
@@ -13,19 +14,6 @@ void Memory::clear() {
 
 void Memory::resize(size_t size) {
     m_memory.resize(size);
-}
-
-std::vector<ExecutionEvent> Memory::load(std::stringstream hexDump) {
-    std::string buff;
-
-    std::vector<byte_t> data;
-    for (size_t i = 0; std::getline(hexDump, buff, '\n'); i++) {
-        byte_t byte = static_cast<byte_t>(std::stoull(buff, nullptr, 16));
-        m_memory[i] = byte;
-        data.push_back(byte);
-    }
-
-    return {MemoryWrite{.address = 0, .value = data}};
 }
 
 void Memory::write(size_t address, const std::vector<byte_t>& data) {

@@ -13,13 +13,17 @@ void Simulator::create_project(const std::string& projectId,
 const Project& Simulator::load_project(const std::string& project) {
     m_currentProject = &m_projectManager.getProject(project);
 
+    // A new project establishes a new simulator-state baseline.
+    m_eventManager.clear();
+
     m_architectureManager.LoadArchitecture(m_currentProject->architecture,
-                                           m_memory.getAccessor(),
-                                           m_registers.getAccessor());
+                                           m_memory.getAccessor(m_eventManager),
+                                           m_registers.getAccessor(m_eventManager),
+                                           m_eventManager);
     m_memory.resize(m_architectureManager.get()->info().memory.address_space_size);
 
     for (auto& reg : m_architectureManager.get()->info().registers) {
-        m_registers.allocate(reg.id, reg.name, 0ull);
+        m_registers.allocate(reg.id, reg.name, reg.width);
     }
 
     m_architectureManager.get()->reset();
@@ -34,13 +38,18 @@ void Simulator::set_file(const std::string& filepath, const std::string& content
     m_currentProject->files[filepath] = content;
 }
 
-std::vector<ExecutionEvent> Simulator::load_file(const std::string& filepath) {
+EventBatch Simulator::load_file(const std::string& filepath) {
+    const std::size_t from = m_eventManager.size();
+
     if (!m_currentProject ||
         m_currentProject->files.find(filepath) == m_currentProject->files.end())
-        return {};
+        return {from, from, nlohmann::json::array()};
 
     m_memory.clear();
-    return m_architectureManager.get()->load_file(m_currentProject->files.at(filepath));
+    m_architectureManager.get()->load_file(m_currentProject->files.at(filepath));
+
+    const std::size_t to = m_eventManager.size();
+    return {from, to, m_eventManager.events_since(from)};
 }
 
 const std::unordered_set<std::string>& Simulator::ListAvailableArchitectures() {
@@ -56,25 +65,31 @@ const ArchitectureInfo* Simulator::currentInfo() {
 
 void Simulator::run() {}
 
-void Simulator::stop() {}
-
-std::vector<ExecutionEvent> Simulator::reset() {
+EventBatch Simulator::reset() {
     IArchitecture* arch = m_architectureManager.get();
 
     if (!arch)
-        return {};
+        return {m_eventManager.size(), m_eventManager.size(), nlohmann::json::array()};
 
+    const std::size_t from = m_eventManager.size();
     arch->reset();
-    return arch->consume_events();
+    arch->consume_events(); // Drain legacy notifications during migration.
+
+    const std::size_t to = m_eventManager.size();
+    return {from, to, m_eventManager.events_since(from)};
 }
 
-std::vector<ExecutionEvent> Simulator::step() {
+EventBatch Simulator::step() {
     IArchitecture* arch = m_architectureManager.get();
 
     if (!arch) {
-        return {};
+        return {m_eventManager.size(), m_eventManager.size(), nlohmann::json::array()};
     }
 
+    const std::size_t from = m_eventManager.size();
     arch->step();
-    return arch->consume_events();
+    arch->consume_events(); // Drain legacy notifications during migration.
+
+    const std::size_t to = m_eventManager.size();
+    return {from, to, m_eventManager.events_since(from)};
 }

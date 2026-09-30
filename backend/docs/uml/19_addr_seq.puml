@@ -1,0 +1,110 @@
+@startuml
+title SIC/XE — DecodedInstruction Decode Flow
+autonumber
+skinparam ParticipantPadding 12
+skinparam BoxPadding 8
+
+participant "SICXE::step()" as cpu
+participant "MemoryAccessor" as memory
+participant "RegisterAccessor" as registers
+participant "DecodedInstruction" as decoder
+participant "InstructionSet" as instructionSet
+participant "InstructionExecutor\n(EventManager)" as events
+
+== Fetch ==
+cpu -> registers : read("PC")
+registers --> cpu : PC bytes
+cpu -> memory : fetch(PC, address_width, buffer)
+memory --> cpu : fetched bytes
+
+== Select instruction ==
+cpu -> decoder : construct(registers, memory,\ninstructionSet, buffer, executor, PC)
+decoder -> instructionSet : findByOpcode(buffer[0] & 0xFC)
+instructionSet --> decoder : InstructionData\n(description, implementation)
+
+alt Opcode not found
+  decoder --> cpu : throw Unknown opcode
+else Opcode found
+  decoder -> decoder : store description\nand implementation
+
+  alt Format 1
+    decoder -> decoder : operand = NoneOperand
+  else Format 2
+    decoder -> decoder : r1 = high nibble of byte 2\nr2 = low nibble of byte 2
+    alt OperandType::Register
+      decoder -> decoder : operand = RegisterOperand(r1)
+    else OperandType::RegisterRegister
+      decoder -> decoder : operand = RegistersOperand(r1, r2)
+    else OperandType::RegisterImmediate
+      decoder -> decoder : operand = RegisterValueOperand(r1, r2)
+    else Invalid format-2 operand type
+      decoder --> cpu : throw Invalid operand type
+    end
+  else Format 3 or Format 4
+    decoder -> decoder : decode n/i/x/b/p/e flags
+    decoder -> decoder : choose format from e flag
+    decoder -> decoder : extract displacement
+    decoder -> decoder : calculate target address
+
+    opt Base-relative addressing
+      decoder -> registers : read("B")
+      registers --> decoder : base register bytes
+    end
+
+    opt Indexed addressing
+      decoder -> registers : read("X")
+      registers --> decoder : index register bytes
+    end
+
+    decoder -> decoder : resolve_operand(target, flags,\noperand type, instruction flags)
+
+    alt OperandType::None
+      decoder -> decoder : operand = NoneOperand
+    else Immediate mode
+      alt Address operand
+        decoder -> decoder : operand = AddressOperand(target)
+      else Non-floating value operand
+        decoder -> decoder : operand = ValueOperand(target)
+      else Floating immediate
+        decoder --> cpu : throw immediate-float error
+      end
+    else Simple or indirect mode
+      opt Indirect mode
+        decoder -> memory : readWord(target)
+        memory --> decoder : pointer value
+        decoder -> decoder : use pointer as location
+      end
+
+      alt Address operand
+        decoder -> decoder : operand = AddressOperand(location)
+      else Floating value
+        decoder -> memory : read 6 bytes at location
+        memory --> decoder : bytes
+        decoder -> decoder : operand = FloatOperand
+      else LDCH byte value
+        decoder -> memory : read 1 byte at location
+        memory --> decoder : byte
+        decoder -> decoder : operand = ValueOperand(byte)
+      else Word value
+        decoder -> memory : read 3 bytes at location
+        memory --> decoder : bytes
+        decoder -> decoder : operand = ValueOperand(word)
+      end
+    end
+  end
+
+  decoder -> events : execute(InstructionDecoded(details))
+  events --> decoder : recorded
+  decoder --> cpu : constructed decoder
+end
+
+note right of decoder
+  The decode event contains instruction address,
+  bytes, format, flags, target address, and the
+  resolved typed operand.
+
+  SICXE::step() calls execute() afterward.
+  That advances PC and dispatches the instruction.
+end note
+
+@enduml

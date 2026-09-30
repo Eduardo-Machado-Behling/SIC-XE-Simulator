@@ -1,0 +1,94 @@
+@startuml
+title SIC/XE Simulator - Backend Class Diagram
+skinparam classAttributeIconSize 0
+
+class Server {
+    +setup_http()
+    +setup_ws()
+}
+
+class Simulator {
+    +step()
+    +run()
+    +stop()
+    +reset()
+    +unstep()
+    +break_on(address)
+}
+
+class ArchitectureManager {
+    +list()
+    +load(name)
+    +unload()
+}
+
+class LoadedArchitecture {
+    +info()
+    +state()
+    +reset()
+    +step()
+}
+
+class SharedLoader {
+    +load(path)
+    +unload()
+    +get(symbol)
+}
+
+class Registers {
+    +allocate(id, name, initial_value)
+    +deallocate(name)
+    +get(name)
+    +get_name(id)
+}
+
+class Memory {
+    +read(address)
+    +write(address, value)
+}
+
+class Project {
+    +id
+    +name
+    +architecture
+    +files
+}
+
+class ExecutionEvent {
+    +type
+    +payload
+}
+
+class ExecutionEventQueue {
+    +push(event)
+    +pop()
+    +clear()
+}
+
+Server --> Simulator : dispatches commands
+Simulator --> Project : current context
+Simulator --> ArchitectureManager : selects architecture
+ArchitectureManager --> LoadedArchitecture : owns/uses
+LoadedArchitecture *-- SharedLoader : owns
+LoadedArchitecture --> Registers
+LoadedArchitecture --> Memory
+
+Simulator --> Registers
+Simulator --> Memory
+Simulator --> ExecutionEventQueue
+
+ExecutionEventQueue o-- ExecutionEvent
+
+note right of Simulator
+Logical execution/session coordinator.
+Responsibilities include project context,
+execution control, breakpoints and history.
+end note
+
+note right of LoadedArchitecture
+Runtime-loaded architecture boundary.
+The exact ABI/function-pointer surface
+is defined by the plugin API.
+end note
+
+@enduml

@@ -1,0 +1,99 @@
+@startuml
+title Memory Manipulation — Current Event Flow
+autonumber
+
+participant "sim : Simulator" as sim
+participant "arch : IArchitecture" as arch
+participant "memAcc : MemoryAccessor" as acc
+participant "mem : Memory" as mem
+participant "manager : EventManager" as manager
+participant "event : IEvent" as event
+
+== Setup ==
+sim -> manager : clear()
+sim -> arch : load architecture with MemoryAccessor(manager)
+sim -> mem : resize(info.memory.address_space_size)
+note right of mem
+  Allocation is direct.
+  No event is recorded.
+end note
+
+== Memory write through accessor ==
+arch -> acc : write(address, data)
+acc -> mem : read(address, data.size(), old_value)
+mem --> acc : old_value
+acc -> manager : commit(MemoryWrite(address, data, old_value))
+manager -> event : commit(EventState)
+event -> mem : write(address, data)
+mem --> event : return
+event --> manager : return
+manager -> manager : append event to history\nappend active execution order\nadvance cursor
+manager --> acc : return
+acc --> arch : return
+
+== Memory read through accessor ==
+arch -> acc : read(address, size, buffer)
+acc -> mem : read(address, size, buffer)
+mem --> acc : bytes
+acc -> manager : commit(MemoryRead(address, bytes))
+manager -> event : commit(EventState)
+note right of event
+  MemoryRead is non-mutating.
+  Its commit() is a no-op.
+end note
+event --> manager : return
+manager -> manager : append event to history\nadvance cursor
+manager --> acc : return
+acc --> arch : buffer
+
+== Instruction fetch through accessor ==
+arch -> acc : fetch(address, size, buffer)
+acc -> mem : read(address, size, buffer)
+mem --> acc : instruction bytes
+acc -> manager : commit(InstructionFetched(address, bytes))
+manager -> event : commit(EventState)
+note right of event
+  InstructionFetched is non-mutating.
+  Its commit() is a no-op.
+end note
+event --> manager : return
+manager -> manager : append event to history\nadvance cursor
+manager --> acc : return
+acc --> arch : buffer
+
+== Undo a memory write ==
+sim -> manager : undo()
+manager -> event : restore(EventState)
+event -> mem : write(address, old_value)
+mem --> event : return
+event --> manager : return
+manager -> manager : move cursor backward
+manager --> sim : true
+
+== Redo a memory write ==
+sim -> manager : redo()
+manager -> event : commit(EventState)
+event -> mem : write(address, data)
+mem --> event : return
+event --> manager : return
+manager -> manager : move cursor forward
+manager --> sim : true
+
+== Return events to host ==
+sim -> manager : events_since(from)
+manager --> sim : serialized events[from..history end]
+note over sim, manager
+  The simulator returns an EventBatch from the log.
+  The event log is not consumed or drained.
+end note
+
+== Out-of-bounds access ==
+arch -> acc : read/write(address beyond memory)
+acc -> mem : read/write(...)
+mem --> acc : throw MemoryOutOfBoundsException
+note over acc, manager
+  The exception occurs before EventManager.commit(),
+  so the failed access records no event.
+end note
+
+@enduml

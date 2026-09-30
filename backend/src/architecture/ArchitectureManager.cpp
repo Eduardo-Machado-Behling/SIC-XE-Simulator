@@ -27,11 +27,18 @@ const std::unordered_set<std::string>& ArchitectureManager::ListAvailableArchite
     return m_availableArchitectures;
 }
 
-void ArchitectureManager::LoadArchitecture(const std::string& architectureId, MemoryAccessor memory, RegisterAccessor registerAccessor) {
+void ArchitectureManager::LoadArchitecture(
+    const std::string& architectureId,
+    MemoryAccessor memory,
+    RegisterAccessor registerAccessor,
+    architecture::events::InstructionExecutor& instructionExecutor) {
     if (m_availableArchitectures.find(architectureId) == m_availableArchitectures.end())
         throw std::runtime_error("Architecture not found: " + architectureId);
 
-    m_currentArchitecture.load(m_architecturePath / architectureId, memory, registerAccessor);
+    m_currentArchitecture.load(m_architecturePath / architectureId,
+                               memory,
+                               registerAccessor,
+                               instructionExecutor);
 }
 
 IArchitecture* ArchitectureManager::get() const {

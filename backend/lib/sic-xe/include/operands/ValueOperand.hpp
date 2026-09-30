@@ -1,8 +1,10 @@
 #pragma once
 
 #include <cstdint>
+
 #include "operands/Operand.hpp"
+#include "essentials/Word.hpp"
 
 struct ValueOperand : public Operand {
-	std::int64_t value;
+	Word value;
 };

@@ -1,0 +1,36 @@
+@startuml
+title SIC/XE Simulator - Step Execution
+actor Frontend
+participant "Simulator Client" as Client
+participant "WebSocketServer" as WS
+participant Simulator
+participant Architecture
+participant Registers
+participant Memory
+participant "Event Queue" as Events
+
+Frontend -> Client : step()
+Client -> WS : {id, type:"step"}
+WS -> Simulator : step()
+
+Simulator -> Registers : read(PC)
+Registers --> Simulator : PC
+
+Simulator -> Memory : read(PC)
+Memory --> Simulator : instruction bytes
+
+Simulator -> Events : InstructionFetched
+
+Simulator -> Architecture : execute/step instruction
+
+Architecture -> Registers : read/write registers
+Architecture -> Memory : read/write memory
+
+Architecture --> Simulator : execution result/events
+Simulator -> Events : append state events
+
+Simulator --> WS : {id, result: events}
+WS --> Client : response
+Client --> Frontend : resolve(events)
+
+@enduml

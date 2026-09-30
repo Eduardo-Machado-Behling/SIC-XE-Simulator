@@ -1,0 +1,46 @@
+@startuml
+title SIC/XE Simulator - WebSocket Protocol
+actor Frontend
+participant "WebSocket /ws" as WS
+participant Simulator
+participant "Architecture / CPU" as CPU
+
+Frontend -> WS : Request {id, type, payload}
+WS -> Simulator : dispatch(request)
+
+alt Run
+  Simulator -> CPU : run until breakpoint/halt/input
+  CPU --> Simulator : execution state/events
+else Step
+  Simulator -> CPU : step()
+  CPU --> Simulator : ExecutionEvent[]
+else Stop
+  Simulator -> CPU : stop()
+  CPU --> Simulator : stopped state
+else Unstep
+  Simulator -> CPU : restore command/history state
+  CPU --> Simulator : restored state
+else BreakOn
+  Simulator -> CPU : register breakpoint
+  CPU --> Simulator : breakpoint registered
+end
+
+Simulator --> WS : {id, result, error}
+WS --> Frontend : response matched by id
+
+note over Frontend,WS
+Every request carries an id.
+The frontend keeps pending promises keyed by id.
+end note
+
+note right of Simulator
+Commands:
+Request
+Run
+Step
+Stop
+Unstep
+BreakOn
+end note
+
+@enduml

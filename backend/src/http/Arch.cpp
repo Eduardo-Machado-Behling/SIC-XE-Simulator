@@ -1,8 +1,6 @@
 
 #include "Server.hpp"
 
-#include "architecture/EventSerializer.hpp"
-
 using json = nlohmann::json;
 
 void Server::setup_http_arch() {
@@ -32,17 +30,16 @@ void Server::setup_http_arch() {
 
     this->Get("/simulator/arch/step",
               [this](const httplib::Request& req, httplib::Response& res) {
-                  auto v = m_simulator.step();
-
-                  if (v.empty()) {
+                  if (!m_simulator.currentInfo()) {
                       res.status = 400;
                       json errorResponse = {{"error", "No architecture loaded"}};
                       res.set_content(errorResponse.dump(), "application/json");
                       return;
                   }
 
-                  json response = {{"message", "Step completed successfully"},
-                                   {"events", EventSerializer::serialize(v)}};
+                  const EventBatch batch = m_simulator.step();
+                  json response = batch.serialize();
+                  response["message"] = "Step completed successfully";
                   res.set_content(response.dump(), "application/json");
               });
 }

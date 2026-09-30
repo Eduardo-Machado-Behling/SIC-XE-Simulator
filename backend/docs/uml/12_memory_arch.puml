@@ -1,0 +1,141 @@
+@startuml
+title Memory Manipulation System — Current Implementation
+skinparam classAttributeIconSize 0
+hide empty members
+
+package "Host" {
+  class Simulator {
+    - m_memory : Memory
+    - m_eventManager : EventManager
+    + load_file(filepath) : EventBatch
+    + step() : EventBatch
+    + reset() : EventBatch
+  }
+}
+
+package "Memory storage and facade" {
+  class Memory {
+    - m_memory : vector<byte_t>
+    + resize(size)
+    + clear()
+    + write(address, data)
+    + read(address, size, buffer)
+    + getAccessor(eventManager) : MemoryAccessor
+  }
+
+  class MemoryAccessor {
+    - m_parent : Memory&
+    - m_eventManager : EventManager&
+    + write(address, data)
+    + read(address, size, buffer)
+    + read(address, begin, end)
+    + fetch(address, size, buffer)
+  }
+}
+
+package "Reversible event system" {
+  class EventManager {
+    - m_state : SimulatorEventState
+    - m_history : vector<unique_ptr<IEvent>>
+    - m_execution_order : vector<size_t>
+    - m_cursor : size_t
+    + commit(event)
+    + undo() : bool
+    + redo() : bool
+    + events_since(index) : JSON
+    + size() : size_t
+    + cursor() : size_t
+  }
+
+  interface IEvent {
+    + mutates() : bool
+    + commit(state)
+    + restore(state)
+    + serialize() : JSON
+  }
+
+  class EventState
+  class MemoryEventState {
+    + memory : Memory&
+  }
+  class RegisterEventState {
+    + registers : Registers&
+  }
+  class SimulatorEventState
+
+  class "MemoryWrite" as MemoryWrite {
+    - address : uint64_t
+    - value : vector<byte_t>
+    - old_value : vector<byte_t>
+    + mutates() : true
+    + commit(state)
+    + restore(state)
+    + serialize() : JSON
+  }
+
+  class "MemoryRead" as MemoryRead {
+    - address : uint64_t
+    - value : vector<byte_t>
+    + mutates() : false
+    + commit(state) : no-op
+    + restore(state) : no-op
+    + serialize() : JSON
+  }
+
+  class "InstructionFetched" as InstructionFetched {
+    - address : uint64_t
+    - value : vector<byte_t>
+    + mutates() : false
+    + commit(state) : no-op
+    + restore(state) : no-op
+    + serialize() : JSON
+  }
+}
+
+class Registers
+
+Simulator *-- Memory
+Simulator *-- EventManager
+EventManager --> SimulatorEventState : owns state
+EventManager o-- "0..*" IEvent : owns history
+IEvent <|.. MemoryWrite
+IEvent <|.. MemoryRead
+IEvent <|.. InstructionFetched
+
+EventState <|-- MemoryEventState
+EventState <|-- RegisterEventState
+MemoryEventState <|-- SimulatorEventState
+RegisterEventState <|-- SimulatorEventState
+
+MemoryAccessor --> Memory : delegates storage access
+MemoryAccessor --> EventManager : commits events
+MemoryWrite ..> MemoryEventState : commit/restore accesses
+MemoryEventState --> Memory : reference
+RegisterEventState --> Registers : reference
+
+note right of MemoryAccessor
+  write():
+  1. Reads old bytes directly from Memory.
+  2. Commits MemoryWrite to EventManager.
+
+  read():
+  1. Reads bytes directly from Memory.
+  2. Commits non-mutating MemoryRead.
+
+  fetch() logs InstructionFetched instead.
+end note
+
+note right of EventManager
+  The history log is append-only.
+  Undo/redo follow execution_order and cursor.
+  Non-mutating events are skipped by undo/redo.
+  events_since(index) serializes log entries;
+  it does not drain them.
+end note
+
+note bottom of Memory
+  resize() and clear() mutate storage directly.
+  They do not create reversible events.
+end note
+
+@enduml

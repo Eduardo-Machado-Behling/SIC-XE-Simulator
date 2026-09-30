@@ -1,0 +1,206 @@
+@startuml
+title SIC/XE Step - Event Submission, Commit, Undo, and Redo
+
+autonumber
+hide footbox
+
+skinparam sequence {
+    ArrowColor Black
+    LifeLineBorderColor Black
+    LifeLineBackgroundColor White
+    ParticipantBorderColor Black
+    ParticipantBackgroundColor White
+    BoxBorderColor Black
+    BoxBackgroundColor White
+}
+
+actor Host
+
+box "Host / Simulator"
+    participant Simulator
+    participant "EventManager" as Manager
+    participant Memory
+    participant Registers
+end box
+
+box "SIC/XE Architecture Plugin"
+    participant "SICXE" as Arch
+    participant "DecodedInstruction" as Decoded
+    participant "MemoryAccessor" as MemAccess
+    participant "RegisterAccessor" as RegAccess
+end box
+
+
+== Execute Instruction ==
+
+Host -> Simulator : step()
+Simulator -> Arch : step()
+
+
+group Read Program Counter
+
+    Arch -> RegAccess : read(PC)
+    RegAccess -> Manager : execute(RegisterRead)
+    Manager -> Registers : read(PC)
+    Registers --> Manager : pc
+    Manager -> Manager : record observation
+    Manager --> RegAccess : pc
+    RegAccess --> Arch : pc
+
+end
+
+
+group Fetch Instruction
+
+    Arch -> MemAccess : fetch(pc, size)
+    MemAccess -> Manager : execute(MemoryRead)
+    Manager -> Memory : read(pc, size)
+    Memory --> Manager : bytes
+    Manager -> Manager : record observation
+    Manager --> MemAccess : bytes
+    MemAccess --> Arch : bytes
+
+    Arch -> Manager : execute(InstructionFetched)
+    Manager -> Manager : record observation
+
+end
+
+
+group Decode Instruction
+
+    Arch -> Decoded : construct(bytes, executor, pc)
+
+    Decoded -> RegAccess : read(addressing registers)
+    RegAccess -> Manager : execute(RegisterRead)
+    Manager -> Registers : read(register)
+    Registers --> Manager : value
+    Manager -> Manager : record observation
+
+    Decoded -> MemAccess : read(indirect target)
+    MemAccess -> Manager : execute(MemoryRead)
+    Manager -> Memory : read(address)
+    Memory --> Manager : value
+    Manager -> Manager : record observation
+
+    Decoded -> Decoded : decode format and flags
+    Decoded -> Decoded : resolve displacement and target
+    Decoded -> Decoded : resolve operand
+
+    Decoded -> Manager : execute(InstructionDecoded)
+    Manager -> Manager : record observation
+
+end
+
+
+group Execute Instruction
+
+    Arch -> Decoded : execute()
+
+    group Register Mutation
+
+        Decoded -> RegAccess : write(register, newValue)
+        RegAccess -> Manager : execute(RegisterWrite)
+        Manager -> Registers : write(newValue)
+        Manager -> Manager : append mutation
+        Manager -> Manager : advance cursor
+
+    end
+
+    group Memory Mutation
+
+        Decoded -> MemAccess : write(address, bytes)
+        MemAccess -> Manager : execute(MemoryWrite)
+        Manager -> Memory : write(new bytes)
+        Manager -> Manager : append mutation
+        Manager -> Manager : advance cursor
+
+    end
+
+end
+
+
+group Advance Program Counter
+
+    Arch -> RegAccess : write(PC, pc + instruction_length)
+    RegAccess -> Manager : execute(RegisterWrite)
+    Manager -> Registers : write(new PC)
+    Manager -> Manager : append mutation
+    Manager -> Manager : advance cursor
+
+end
+
+
+Arch --> Simulator : step completed
+Simulator --> Host : execution result
+
+
+== Undo ==
+
+Host -> Simulator : undo()
+Simulator -> Manager : undo()
+
+Manager -> Manager : move cursor backward
+
+loop Traverse active path backward
+
+    alt MemoryWrite
+        Manager -> Memory : restore(old bytes)
+    else RegisterWrite
+        Manager -> Registers : restore(old value)
+    else Observation
+        Manager -> Manager : skip restoration
+    end
+
+end
+
+Manager --> Simulator : state restored
+Simulator --> Host : previous state
+
+
+== Redo ==
+
+Host -> Simulator : redo()
+Simulator -> Manager : redo()
+
+Manager -> Manager : move cursor forward
+
+loop Traverse active path forward
+
+    alt MemoryWrite
+        Manager -> Memory : apply(new bytes)
+    else RegisterWrite
+        Manager -> Registers : apply(new value)
+    else Observation
+        Manager -> Manager : replay observation
+    end
+
+end
+
+Manager --> Simulator : state restored
+Simulator --> Host : next state
+
+
+== New Execution After Undo ==
+
+Host -> Simulator : step()
+Simulator -> Arch : step()
+Arch -> Manager : execute(new event)
+
+Manager -> Manager : append event
+Manager -> Manager : advance cursor
+Manager -> Manager : update active execution path
+
+
+note over Manager
+    History remains append-only.
+
+    The cursor identifies the current state.
+
+    Undo moves backward.
+    Redo moves forward.
+
+    A new event after undo creates
+    a new active execution path.
+end note
+
+@enduml

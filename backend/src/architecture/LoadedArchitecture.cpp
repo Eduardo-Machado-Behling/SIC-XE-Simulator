@@ -9,7 +9,11 @@ LoadedArchitecture::~LoadedArchitecture() {
     }
 }
     
-void LoadedArchitecture::load(const std::filesystem::path& path, MemoryAccessor& memory, RegisterAccessor& registerAccessor) {
+void LoadedArchitecture::load(
+    const std::filesystem::path& path,
+    MemoryAccessor& memory,
+    RegisterAccessor& registerAccessor,
+    architecture::events::InstructionExecutor& instructionExecutor) {
     if (loader.loaded()) {
         if (destroyFunc && m_arch) {
             destroyFunc(m_arch);
@@ -37,7 +41,7 @@ void LoadedArchitecture::load(const std::filesystem::path& path, MemoryAccessor&
         );
     }
 
-    m_arch = createFunc(memory, registerAccessor);
+    m_arch = createFunc(memory, registerAccessor, instructionExecutor);
 
     if (!m_arch) {
         loader.unload();

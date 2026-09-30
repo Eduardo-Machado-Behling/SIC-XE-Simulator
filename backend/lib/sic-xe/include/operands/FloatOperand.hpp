@@ -1,8 +1,9 @@
 #pragma once
 
 #include "operands/Operand.hpp"
+#include "essentials/Float.hpp"
 
 struct FloatOperand : public Operand {
-	double value;
+	Float value;
 };
 

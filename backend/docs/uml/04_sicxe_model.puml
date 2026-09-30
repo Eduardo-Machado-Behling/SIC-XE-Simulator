@@ -1,0 +1,76 @@
+@startuml
+title SIC/XE Simulator - Architecture Data Model
+skinparam classAttributeIconSize 0
+
+class ArchitectureInfo {
+    +name
+    +description
+    +memory : MemoryDescription
+    +registers : RegisterDescription[]
+    +instructions : InstructionDescription[]
+}
+
+class MemoryDescription {
+    +size
+    +address_width
+    +word_size
+    +alignment
+    +endianness
+}
+
+class RegisterDescription {
+    +id
+    +name
+    +width
+    +description
+}
+
+class InstructionDescription {
+    +id
+    +mnemonic
+    +min_size
+    +max_size
+    +opcode
+    +flags
+    +formats
+    +operand_type
+}
+
+class Registers {
+    -m_registers
+    -m_id_ro_reg
+    +allocate(id, name, initial_value)
+    +deallocate(name)
+    +get(name)
+    +get_name(id)
+}
+
+class Memory {
+    +read(address)
+    +write(address, value)
+}
+
+class Word {
+    <<24-bit value>>
+}
+
+class Float {
+    <<48-bit SIC/XE floating value>>
+    +operator double()
+    +operator=(double)
+}
+
+ArchitectureInfo *-- MemoryDescription
+ArchitectureInfo *-- RegisterDescription
+ArchitectureInfo *-- InstructionDescription
+
+Registers o-- Word : stores CPU values
+Memory o-- Word : stores 24-bit words/bytes as model requires
+
+note bottom
+SIC/XE uses a 24-bit word and 48-bit floating-point format.
+The simulator can expose these through native C++ representations
+while preserving architectural bit width at the boundary.
+end note
+
+@enduml
