@@ -16,6 +16,8 @@ export type RegisterTableProps = {
     registers: RegisterState[];
     label?: string;
     valueWidth?: number;
+    changedRegisters?: string[];
+    changeRevision?: number;
 };
 
 // ============================================================
@@ -26,7 +28,10 @@ export function RegisterTable({
     registers,
     label = "Registers",
     valueWidth = 6,
+    changedRegisters = [],
+    changeRevision = 0,
 }: RegisterTableProps) {
+    const changed = new Set(changedRegisters);
     const values = useMemo(
         () =>
             registers.map((register) =>
@@ -70,8 +75,8 @@ export function RegisterTable({
                 <div className="flex flex-wrap gap-2">
                     {registers.map((register, index) => (
                         <div
-                            key={register.id}
-                            className="
+                            key={`${register.id}-${changed.has(register.name) ? changeRevision : "stable"}`}
+                            className={`
                                 inline-flex
                                 items-center
                                 gap-2
@@ -83,7 +88,8 @@ export function RegisterTable({
                                 py-1
                                 text-xs
                                 hover:bg-zinc-750
-                            "
+                                ${changed.has(register.name) ? "sim-value-change" : ""}
+                            `}
                         >
                             <span
                                 className="

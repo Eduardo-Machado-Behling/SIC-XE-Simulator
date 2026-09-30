@@ -39,7 +39,7 @@ export class Simulator {
                 if (step.type !== "MemoryWrite")
                     continue;
 
-                step.value.forEach((value, i) => {
+                step.bytes.forEach((value, i) => {
                     next.set(step.address + i, value);
                 });
             }

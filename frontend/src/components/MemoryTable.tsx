@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 export type MemoryTableProps = {
     memory: Map<number, number>;
@@ -14,6 +14,11 @@ export type MemoryTableProps = {
 
     label?: string;
     bytesPerRow?: number;
+    changedAddresses?: number[];
+    changeRevision?: number;
+    pcAddress?: number;
+    consumedAddresses?: number[];
+    pcScrollRevision?: number;
 };
 
 const DEFAULT_WINDOW_SIZE = 1 << 8;
@@ -25,7 +30,15 @@ export function MemoryTable({
     windowSize = DEFAULT_WINDOW_SIZE,
     label = "Memory",
     bytesPerRow = 16,
+    changedAddresses = [],
+    changeRevision = 0,
+    pcAddress,
+    consumedAddresses = [],
+    pcScrollRevision = 0,
 }: MemoryTableProps) {
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const changed = useMemo(() => new Set(changedAddresses), [changedAddresses]);
+    const consumed = useMemo(() => new Set(consumedAddresses), [consumedAddresses]);
     /*
      * Keep the window inside the actual address space.
      */
@@ -60,6 +73,22 @@ export function MemoryTable({
         addressSpaceSize,
     );
 
+    useEffect(() => {
+        if (pcAddress === undefined) return;
+
+        const container = scrollContainerRef.current;
+        const rowAddress = Math.floor(pcAddress / bytesPerRow) * bytesPerRow;
+        const row = container?.querySelector<HTMLElement>(
+            `[data-memory-address="${rowAddress}"]`,
+        );
+        if (!container || !row) return;
+
+        const top = row.getBoundingClientRect().top
+            - container.getBoundingClientRect().top
+            + container.scrollTop;
+        container.scrollTo({ top, behavior: "smooth" });
+    }, [pcAddress, pcScrollRevision, alignedOffset, bytesPerRow]);
+
     /*
      * Generate ONLY the rows in the current 1 KiB window.
      */
@@ -74,6 +103,7 @@ export function MemoryTable({
             result.push(
                 <tr
                     key={address}
+                    data-memory-address={address}
                     className="
                         h-7
                         text-sm
@@ -116,10 +146,13 @@ export function MemoryTable({
                                           byteAddress,
                                       ) ?? 0
                                     : 0;
+                            const isPc = byteAddress === pcAddress;
+                            const isConsumed = consumed.has(byteAddress);
+                            const isChanged = changed.has(byteAddress);
 
                             return (
                                 <td
-                                    key={byteOffset}
+                                    key={`${byteOffset}-${isChanged || isConsumed ? changeRevision : "stable"}`}
                                     className={`
                                         px-1
                                         text-center
@@ -130,7 +163,12 @@ export function MemoryTable({
                                                 ? "text-zinc-100"
                                                 : "text-zinc-600"
                                         }
+                                        ${isPc ? "sim-pc-cell" : ""}
+                                        ${isConsumed ? "sim-instruction-consume" : ""}
+                                        ${isChanged && !isPc && !isConsumed ? "sim-value-change" : ""}
                                     `}
+                                    aria-label={isPc ? `Program counter: ${byteAddress.toString(16).toUpperCase()}` : undefined}
+                                    title={isPc ? "Program counter" : undefined}
                                 >
                                     {value
                                         .toString(16)
@@ -151,6 +189,10 @@ export function MemoryTable({
         bytesPerRow,
         memory,
         addressSpaceSize,
+        changed,
+        consumed,
+        changeRevision,
+        pcAddress,
     ]);
 
     return (
@@ -184,6 +226,7 @@ export function MemoryTable({
 
             {/* Table */}
             <div
+                ref={scrollContainerRef}
                 className="
                     flex-1
                     min-h-0

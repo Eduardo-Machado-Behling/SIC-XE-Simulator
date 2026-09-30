@@ -28,7 +28,8 @@ export type InstructionFormat =
 
 export type OperandType =
     | "none"
-    | "memory"
+    | "address"
+    | "value"
     | "register"
     | "register_register"
     | "register_immediate";
