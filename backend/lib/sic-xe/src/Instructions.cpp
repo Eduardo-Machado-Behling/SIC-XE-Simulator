@@ -38,7 +38,7 @@ bool StsInstruction::execute(ExecutionContext& context, AddressOperand operand) 
 
 // DEFINE_INSTRUCTION(StsInstruction)
 
-DEFINE_INSTRUCTION(AddFInstruction, ValueOperand)
+DEFINE_INSTRUCTION(AddFInstruction, FloatOperand)
 DEFINE_INSTRUCTION(AddRInstruction, RegistersOperand)
 
 DEFINE_INSTRUCTION(AndInstruction, ValueOperand)
@@ -88,8 +88,8 @@ DEFINE_INSTRUCTION(RmoInstruction, RegistersOperand)
 
 DEFINE_INSTRUCTION(RsubInstruction, NoneOperand)
 
-DEFINE_INSTRUCTION(ShiftLInstruction, RegisterOperand)
-DEFINE_INSTRUCTION(ShiftRInstruction, RegisterOperand)
+DEFINE_INSTRUCTION(ShiftLInstruction, RegisterValueOperand)
+DEFINE_INSTRUCTION(ShiftRInstruction, RegisterValueOperand)
 
 DEFINE_INSTRUCTION(SioInstruction, NoneOperand)
 DEFINE_INSTRUCTION(SskInstruction, AddressOperand)

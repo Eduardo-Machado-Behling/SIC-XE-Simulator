@@ -5,9 +5,11 @@
 
 #include "architecture/ExecutionContext.hpp"
 #include "operands/AddressOperand.hpp"
+#include "operands/FloatOperand.hpp"
 #include "operands/NoneOperand.hpp"
 #include "operands/Operand.hpp"
 #include "operands/RegisterOperand.hpp"
+#include "operands/RegisterValueOperand.hpp"
 #include "operands/RegistersOperand.hpp"
 #include "operands/ValueOperand.hpp"
 
@@ -41,6 +43,8 @@ public:
     DECLARE_EXECUTION(RegistersOperand)
     DECLARE_EXECUTION(RegisterOperand)
     DECLARE_EXECUTION(AddressOperand)
+    DECLARE_EXECUTION(FloatOperand)
+    DECLARE_EXECUTION(RegisterValueOperand)
 };
 
 #undef DECLARE_EXECUTION

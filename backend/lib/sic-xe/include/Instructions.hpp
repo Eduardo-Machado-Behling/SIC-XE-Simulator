@@ -2,8 +2,10 @@
 
 #include "IInstruction.hpp"
 
+#include "operands/FloatOperand.hpp"
 #include "operands/NoneOperand.hpp"
 #include "operands/RegisterOperand.hpp"
+#include "operands/RegisterValueOperand.hpp"
 #include "operands/RegistersOperand.hpp"
 #include "operands/ValueOperand.hpp"
 
@@ -14,7 +16,7 @@
     };
 
 DECLARE_INSTRUCTION(AddInstruction, ValueOperand)
-DECLARE_INSTRUCTION(AddFInstruction, ValueOperand)
+DECLARE_INSTRUCTION(AddFInstruction, FloatOperand)
 DECLARE_INSTRUCTION(AddRInstruction, RegistersOperand)
 
 DECLARE_INSTRUCTION(AndInstruction, ValueOperand)
@@ -22,11 +24,11 @@ DECLARE_INSTRUCTION(AndInstruction, ValueOperand)
 DECLARE_INSTRUCTION(ClearInstruction, RegisterOperand)
 
 DECLARE_INSTRUCTION(CompInstruction, ValueOperand)
-DECLARE_INSTRUCTION(CompFInstruction, ValueOperand)
+DECLARE_INSTRUCTION(CompFInstruction, FloatOperand)
 DECLARE_INSTRUCTION(CompRInstruction, RegistersOperand)
 
 DECLARE_INSTRUCTION(DivInstruction, ValueOperand)
-DECLARE_INSTRUCTION(DivFInstruction, ValueOperand)
+DECLARE_INSTRUCTION(DivFInstruction, FloatOperand)
 DECLARE_INSTRUCTION(DivRInstruction, RegistersOperand)
 
 DECLARE_INSTRUCTION(FixInstruction, NoneOperand)
@@ -64,8 +66,8 @@ DECLARE_INSTRUCTION(RmoInstruction, RegistersOperand)
 
 DECLARE_INSTRUCTION(RsubInstruction, NoneOperand)
 
-DECLARE_INSTRUCTION(ShiftLInstruction, RegisterOperand)
-DECLARE_INSTRUCTION(ShiftRInstruction, RegisterOperand)
+DECLARE_INSTRUCTION(ShiftLInstruction, RegisterValueOperand)
+DECLARE_INSTRUCTION(ShiftRInstruction, RegisterValueOperand)
 
 DECLARE_INSTRUCTION(SioInstruction, NoneOperand)
 DECLARE_INSTRUCTION(SskInstruction, AddressOperand)

@@ -15,6 +15,13 @@ void MemoryAccessor::read(size_t address, size_t size, std::vector<byte_t>& buff
         m_queue->push(MemoryRead{address, buffer});
 }
 
+void MemoryAccessor::read(size_t address, Iterator begin, Iterator end) {
+    m_parent.read(address, begin, end);
+
+    if (m_queue)
+        m_queue->push(MemoryRead{address, {begin, end}});
+}
+
 void MemoryAccessor::fetch(size_t address, size_t size, std::vector<byte_t>& buffer) {
     m_parent.read(address, size, buffer);
     if (m_queue)
