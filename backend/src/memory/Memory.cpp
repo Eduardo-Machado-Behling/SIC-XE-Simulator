@@ -25,7 +25,7 @@ std::vector<ExecutionEvent> Memory::load(std::stringstream hexDump) {
         data.push_back(byte);
     }
 
-    return {MemoryWrite{.address=0, .value=data}};
+    return {MemoryWrite{.address = 0, .value = data}};
 }
 
 void Memory::write(size_t address, const std::vector<byte_t>& data) {
@@ -42,4 +42,13 @@ void Memory::read(size_t address, size_t size, std::vector<byte_t>& buffer) cons
 
     buffer.resize(size);
     std::copy(m_memory.begin() + address, m_memory.begin() + address + size, buffer.begin());
+}
+
+void Memory::read(size_t address, Iterator begin, Iterator end) const {
+    auto size = std::distance(begin, end);
+    if (address + size > m_memory.size()) {
+        throw MemoryOutOfBoundsException("Read operation exceeds memory bounds");
+    }
+
+    std::copy(m_memory.begin() + address, m_memory.begin() + address + size, begin);
 }

@@ -22,6 +22,9 @@ public:
 
     void write(size_t address, const std::vector<byte_t>& data);
     void read(size_t address, size_t size, std::vector<byte_t>& buffer) const;
+
+	using Iterator = std::vector<byte_t>::iterator;
+    void read(size_t address, Iterator begin, Iterator end) const;
     void clear();
 
     MemoryAccessor getAccessor();

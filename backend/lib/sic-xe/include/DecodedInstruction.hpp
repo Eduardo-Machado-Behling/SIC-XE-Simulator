@@ -10,24 +10,30 @@
 #include "architecture/InstructionDescription.hpp"
 #include "common/Byte.hpp"
 #include "operands/AddressOperand.hpp"
+#include "operands/FloatOperand.hpp"
 #include "operands/NoneOperand.hpp"
-#include "operands/Operand.hpp"
 #include "operands/RegisterOperand.hpp"
+#include "operands/RegisterValueOperand.hpp"
 #include "operands/RegistersOperand.hpp"
 #include "operands/ValueOperand.hpp"
 
 class RegisterAccessor;
 class MemoryAccessor;
 
-using Operands =
-    std::variant<ValueOperand, AddressOperand, NoneOperand, RegistersOperand, RegisterOperand>;
+using Operands = std::variant<ValueOperand,
+                              FloatOperand,
+                              AddressOperand,
+                              NoneOperand,
+                              RegistersOperand,
+                              RegisterValueOperand,
+                              RegisterOperand>;
 
 class DecodedInstruction {
 public:
     explicit DecodedInstruction(RegisterAccessor& state,
-                       MemoryAccessor& memory,
-                       InstructionSet& set,
-                       std::vector<byte_t>& raw);
+                                MemoryAccessor& memory,
+                                InstructionSet& set,
+                                std::vector<byte_t>& raw);
 
     std::uint8_t execute() const;
 
@@ -44,8 +50,9 @@ private:
                                      bool x) const;
 
     Operands resolve_operand(MemoryAccessor& memory,
+                             OperandType operand_type,
+                             InstructionFlags flags,
                              std::uint32_t ta,
-                             std::uint32_t displacement,
                              bool n,
                              bool i) const;
 
@@ -61,7 +68,6 @@ private:
         bool p;
         bool e;
     } m_flags;
-
 
     InstructionFormat m_format;
     std::uint8_t m_format_advance;
