@@ -6,6 +6,7 @@
 
 #include "architecture/IArchictecture.hpp"
 #include "architecture/LoadedArchitecture.hpp"
+#include "architecture/events/InstructionExecutor.hpp"
 
 class ArchitectureManager {
 public:
@@ -14,7 +15,8 @@ public:
     const std::unordered_set<std::string>& ListAvailableArchitectures();
     void LoadArchitecture(const std::string& architectureId,
                           MemoryAccessor memory,
-                          RegisterAccessor registerAccessor);
+                          RegisterAccessor registerAccessor,
+                          architecture::events::InstructionExecutor& instructionExecutor);
     IArchitecture* get() const;
 
 private:

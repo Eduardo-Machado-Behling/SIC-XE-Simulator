@@ -1,0 +1,94 @@
+@startuml
+title Register Manipulation — Current Event Flow
+autonumber
+
+participant "arch : IArchitecture" as arch
+participant "regAcc : RegisterAccessor" as acc
+participant "regs : Registers" as regs
+participant "manager : EventManager" as manager
+participant "event : IEvent" as event
+
+== Register write through accessor ==
+arch -> acc : write(name, value)
+acc -> regs : read(name)
+regs --> acc : old_value
+acc -> manager : commit(RegisterWrite(name, value, old_value))
+manager -> event : commit(EventState)
+event -> regs : write(name, value)
+regs --> event : return
+event --> manager : return
+manager -> manager : append event to history\nappend active execution order\nadvance cursor
+manager --> acc : return
+acc --> arch : return
+
+== Register read through accessor ==
+arch -> acc : read(name)
+acc -> regs : read(name)
+regs --> acc : bytes
+acc -> manager : commit(RegisterRead(name, bytes))
+manager -> event : commit(EventState)
+note right of event
+  RegisterRead is non-mutating.
+  Its commit() is a no-op.
+end note
+event --> manager : return
+manager -> manager : append event to history\nadvance cursor
+manager --> acc : return
+acc --> arch : bytes
+
+== Undo a register write ==
+arch -> manager : undo()
+manager -> event : restore(EventState)
+event -> regs : write(name, old_value)
+regs --> event : return
+event --> manager : return
+manager -> manager : move cursor backward
+manager --> arch : true
+
+== Redo a register write ==
+arch -> manager : redo()
+manager -> event : commit(EventState)
+event -> regs : write(name, value)
+regs --> event : return
+event --> manager : return
+manager -> manager : move cursor forward
+manager --> arch : true
+
+== Clear via accessor ==
+arch -> acc : clear(name, fill)
+acc -> regs : read(name)
+regs --> acc : old_value
+acc -> regs : clear(name, fill)
+note right of regs
+  Current implementation loops over every
+  register here, so it clears all registers.
+end note
+regs --> acc : return
+acc -> regs : read(name)
+regs --> acc : cleared target value
+acc -> manager : commit(RegisterWrite(name, cleared value, old_value))
+manager -> event : commit(EventState)
+event -> regs : write(name, cleared value)
+regs --> event : return
+event --> manager : return
+manager --> acc : return
+acc --> arch : return
+note over acc, manager
+  The clear happens before the event commits.
+  Other registers cleared by Registers::clear(name, fill)
+  have no corresponding events and cannot be restored
+  by undoing this RegisterWrite.
+end note
+
+== Clear by register ID ==
+arch -> acc : clear(id, fill)
+acc -> regs : clear(getName(id), fill)
+regs --> acc : return
+acc --> arch : return
+note over acc, manager
+  This path bypasses EventManager completely.
+  Registers::clear(name, fill) currently clears
+  every register, so these changes are not reversible.
+end note
+
+@enduml

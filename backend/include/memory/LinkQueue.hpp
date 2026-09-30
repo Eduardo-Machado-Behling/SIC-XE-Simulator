@@ -11,5 +11,5 @@ struct LinkQueue {
     }
 
 protected:
-    EventQueue* m_queue;
+    EventQueue* m_queue = nullptr;
 };

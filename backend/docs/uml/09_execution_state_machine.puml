@@ -1,0 +1,28 @@
+@startuml
+title SIC/XE Simulator - Execution State Machine
+
+[*] --> Ready
+
+Ready --> Running : run
+Ready --> Stepping : step
+Ready --> Ready : reset
+
+Running --> Running : execute instruction
+Running --> Halted : halt
+Running --> Paused : breakpoint
+Running --> WaitingInput : input required
+Running --> Stopped : stop
+
+Stepping --> Ready : step complete
+Stepping --> Halted : instruction halts CPU
+
+Paused --> Ready : resume
+WaitingInput --> Running : input received
+Stopped --> Ready : reset/resume policy
+
+Halted --> Ready : reset
+
+Ready --> Ready : unstep
+Paused --> Ready : unstep
+
+@enduml

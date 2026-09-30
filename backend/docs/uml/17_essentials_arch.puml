@@ -1,0 +1,77 @@
+@startuml
+title SIC/XE Essentials — Value Types and Operands
+top to bottom direction
+skinparam classAttributeIconSize 0
+skinparam nodesep 30
+skinparam ranksep 40
+hide empty members
+
+package "Value types" {
+  class Word <<24 bit · 3 B>> {
+    + as_unsigned()
+    + as_signed()
+    + to_bytes()
+    + from_bytes()
+  }
+
+  class Float <<48 bit · 6 B>> {
+    + bits()
+    + as_double()
+    + to_bytes()
+    + from_bytes()
+  }
+
+  class RegisterID <<uint8 · 1 B>> {
+    + to_bytes()
+    + from_bytes()
+  }
+
+  Word -[hidden]right- Float
+  Float -[hidden]right- RegisterID
+}
+
+package "Operands" {
+  abstract class Operand
+
+  class ValueOperand {
+    value : Word
+  }
+  class AddressOperand {
+    address : Word
+  }
+  class RegisterOperand {
+    r1 : RegisterID
+  }
+  class RegistersOperand {
+    r1 : RegisterID
+    r2 : RegisterID
+  }
+  class RegisterValueOperand {
+    r1 : RegisterID
+    v2 : Word
+  }
+  class FloatOperand {
+    value : Float
+  }
+  class NoneOperand
+
+  Operand <|-- ValueOperand
+  Operand <|-- AddressOperand
+  Operand <|-- RegisterOperand
+  Operand <|-- RegistersOperand
+  Operand <|-- RegisterValueOperand
+  Operand <|-- FloatOperand
+  Operand <|-- NoneOperand
+
+  ValueOperand -[hidden]right- AddressOperand
+  RegisterOperand -[hidden]right- RegistersOperand
+  RegisterValueOperand -[hidden]right- FloatOperand
+
+  ValueOperand -[hidden]down- RegisterOperand
+  RegisterOperand -[hidden]down- RegisterValueOperand
+  RegisterValueOperand -[hidden]down- NoneOperand
+}
+
+RegisterID -[hidden]down- Operand
+
+@enduml

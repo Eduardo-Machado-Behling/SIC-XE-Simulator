@@ -1,0 +1,71 @@
+@startuml
+title SIC-XE Simulator - Client / Server Architecture
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+' ============================================================
+' Client side
+' ============================================================
+
+package "Clients" {
+
+    [Client 1] as C1
+    [Client 2] as C2
+    [Client N] as CN
+}
+
+' ============================================================
+' Server side
+' ============================================================
+
+package "Servers" {
+
+    node "Server 1" as S1 {
+        component "HTTP API" as HTTP1
+        component "WebSocket Gateway" as WS1
+        component "Simulator" as SIM1
+
+        HTTP1 --> SIM1
+        WS1 --> SIM1
+    }
+
+    node "Server 2" as S2 {
+        component "HTTP API" as HTTP2
+        component "WebSocket Gateway" as WS2
+        component "Simulator" as SIM2
+
+        HTTP2 --> SIM2
+        WS2 --> SIM2
+    }
+
+    node "Server N" as SN {
+        component "HTTP API" as HTTPN
+        component "WebSocket Gateway" as WSN
+        component "Simulator" as SIMN
+
+        HTTPN --> SIMN
+        WSN --> SIMN
+    }
+}
+
+' ============================================================
+' Connections
+' ============================================================
+
+C1 ..> HTTP1 : HTTP
+C1 ..> WS1   : WebSocket
+
+C1 ..> HTTP2 : HTTP
+C1 ..> WS2   : WebSocket
+
+C2 ..> HTTP1 : HTTP
+C2 ..> WS1   : WebSocket
+
+C2 ..> HTTP2 : HTTP
+C2 ..> WS2   : WebSocket
+
+CN ..> HTTPN : HTTP
+CN ..> WSN   : WebSocket
+
+@enduml

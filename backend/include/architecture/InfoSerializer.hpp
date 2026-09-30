@@ -94,8 +94,11 @@ inline json serialize(OperandType value)
         case OperandType::None:
             return "none";
 
-        case OperandType::Memory:
-            return "memory";
+        case OperandType::Address:
+            return "address";
+
+        case OperandType::Value:
+            return "value";
 
         case OperandType::Register:
             return "register";

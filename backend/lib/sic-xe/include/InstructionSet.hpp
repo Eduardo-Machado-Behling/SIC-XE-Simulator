@@ -44,6 +44,7 @@ private:
     FloatInstruction m_float;
 
     HioInstruction m_hio;
+    HaltInstruction m_halt;
 
     JInstruction m_j;
     JeqInstruction m_jeq;

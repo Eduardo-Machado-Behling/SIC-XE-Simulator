@@ -2,9 +2,11 @@
 
 #include <cstdint>
 #include "operands/Operand.hpp"
+#include "essentials/RegisterID.hpp"
+#include "essentials/Word.hpp"
 
 struct RegisterValueOperand : public Operand {
-	std::uint64_t r1;
-	std::uint64_t v2;
+	RegisterID r1;
+	Word v2;
 };
 

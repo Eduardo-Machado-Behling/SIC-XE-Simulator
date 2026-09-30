@@ -1,0 +1,136 @@
+@startuml
+title Register Manipulation System — Current Implementation
+skinparam classAttributeIconSize 0
+hide empty members
+
+package "Host" {
+  class Simulator {
+    - m_registers : Registers
+    - m_eventManager : EventManager
+  }
+}
+
+package "Register storage and facade" {
+  class Registers {
+    - m_registers : unordered_map<string, vector<byte_t>>
+    - m_id_to_reg : unordered_map<uint8_t, string>
+    - m_name_to_reg : unordered_map<string, uint8_t>
+    + allocate(id, name, width)
+    + deallocate(name)
+    + read(name) : const vector<byte_t>&
+    + read(id) : const vector<byte_t>&
+    + write(name, value)
+    + write(id, value)
+    + encode(name, integer) : vector<byte_t>
+    + clear(fill)
+    + clear(name, fill)
+    + getName(id) : const string&
+    + getAccessor(eventManager) : RegisterAccessor
+  }
+
+  class RegisterAccessor {
+    - m_parent : Registers&
+    - m_eventManager : EventManager&
+    + read(name) : const vector<byte_t>&
+    + read(id) : const vector<byte_t>&
+    + write(name, value)
+    + write(id, value)
+    + clear(name, fill)
+    + clear(id, fill)
+  }
+}
+
+package "Reversible event system" {
+  class EventManager {
+    - m_state : SimulatorEventState
+    - m_history : vector<unique_ptr<IEvent>>
+    - m_execution_order : vector<size_t>
+    - m_cursor : size_t
+    + commit(event)
+    + undo() : bool
+    + redo() : bool
+    + events_since(index) : JSON
+  }
+
+  interface IEvent {
+    + mutates() : bool
+    + commit(state)
+    + restore(state)
+    + serialize() : JSON
+  }
+
+  class RegisterEventState {
+    + registers : Registers&
+  }
+
+  class SimulatorEventState
+
+  class "RegisterWrite" as RegisterWrite {
+    - name : string
+    - value : vector<byte_t>
+    - old_value : vector<byte_t>
+    + mutates() : true
+    + commit(state)
+    + restore(state)
+    + serialize() : JSON
+  }
+
+  class "RegisterRead" as RegisterRead {
+    - name : string
+    - value : vector<byte_t>
+    + mutates() : false
+    + commit(state) : no-op
+    + restore(state) : no-op
+    + serialize() : JSON
+  }
+}
+
+Simulator *-- Registers
+Simulator *-- EventManager
+Registers ..> RegisterAccessor : creates
+RegisterAccessor --> Registers : delegates storage access
+RegisterAccessor --> EventManager : commits events
+
+EventManager --> SimulatorEventState : owns state
+EventManager o-- "0..*" IEvent : owns history
+IEvent <|.. RegisterWrite
+IEvent <|.. RegisterRead
+RegisterEventState --> Registers : reference
+RegisterWrite ..> RegisterEventState : commit/restore accesses
+
+note right of RegisterAccessor
+  write():
+  1. Reads old bytes from Registers.
+  2. Commits RegisterWrite.
+
+  read():
+  1. Reads bytes from Registers.
+  2. Commits non-mutating RegisterRead.
+end note
+
+note right of Registers
+  Vector writes require the byte count
+  to match the allocated register width.
+
+  Integer writes are encoded to the
+  register's allocated width.
+end note
+
+note bottom of RegisterAccessor
+  clear(name) currently clears storage directly
+  before committing a RegisterWrite.
+
+  clear(id) currently clears storage directly
+  without committing an event.
+end note
+
+note bottom of EventManager
+  Undo restores old_value.
+  Redo commits value again.
+  Read events are skipped by undo/redo.
+
+  events_since(index) serializes the append-only
+  log; it does not drain it.
+end note
+
+@enduml

@@ -1,6 +1,5 @@
 
 #include "Server.hpp"
-#include "architecture/EventSerializer.hpp"
 
 using json = nlohmann::json;
 
@@ -56,9 +55,14 @@ void Server::setup_http_project() {
     this->Post("/simulator/project/file",
                [this](const httplib::Request& req, httplib::Response& res) {
                    try {
-                       const auto json = nlohmann::json::parse(req.body);
+                       const auto request_json = nlohmann::json::parse(req.body);
 
-                       m_simulator.load_file(json.at("filePath").get<std::string>());
+                       const EventBatch batch =
+                           m_simulator.load_file(
+                               request_json.at("filePath").get<std::string>());
+                       json response = batch.serialize();
+                       response["message"] = "loaded file";
+                       res.set_content(response.dump(), "application/json");
                    } catch (const std::exception& e) {
                        res.status = 400;
                        json errorResponse = {{"error", e.what()}};
@@ -66,8 +70,6 @@ void Server::setup_http_project() {
                        return;
                    }
 
-                   json response = {{"message", "loaded file"}};
-                   res.set_content(response.dump(), "application/json");
                });
 
     this->Put("/simulator/project/file",

@@ -1,8 +1,10 @@
 #pragma once
 
 #include <cstdint>
+
 #include "operands/Operand.hpp"
+#include "essentials/RegisterID.hpp"
 
 struct RegisterOperand : public Operand {
-	std::uint64_t r1;
+	RegisterID r1;
 };

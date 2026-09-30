@@ -35,6 +35,8 @@ DECLARE_INSTRUCTION(FixInstruction, NoneOperand)
 DECLARE_INSTRUCTION(FloatInstruction, NoneOperand)
 
 DECLARE_INSTRUCTION(HioInstruction, NoneOperand)
+// Simulator extension; SIC/XE defines HIO for halting an I/O channel, not the CPU.
+DECLARE_INSTRUCTION(HaltInstruction, NoneOperand)
 
 DECLARE_INSTRUCTION(JInstruction, AddressOperand)
 DECLARE_INSTRUCTION(JeqInstruction, AddressOperand)
@@ -45,7 +47,7 @@ DECLARE_INSTRUCTION(JsubInstruction, AddressOperand)
 DECLARE_INSTRUCTION(LdaInstruction, ValueOperand)
 DECLARE_INSTRUCTION(LdbInstruction, ValueOperand)
 DECLARE_INSTRUCTION(LdchInstruction, ValueOperand)
-DECLARE_INSTRUCTION(LdfInstruction, ValueOperand)
+DECLARE_INSTRUCTION(LdfInstruction, FloatOperand)
 DECLARE_INSTRUCTION(LdlInstruction, ValueOperand)
 DECLARE_INSTRUCTION(LdsInstruction, ValueOperand)
 DECLARE_INSTRUCTION(LdtInstruction, ValueOperand)
@@ -53,7 +55,7 @@ DECLARE_INSTRUCTION(LdxInstruction, ValueOperand)
 DECLARE_INSTRUCTION(LpsInstruction, AddressOperand)
 
 DECLARE_INSTRUCTION(MulInstruction, ValueOperand)
-DECLARE_INSTRUCTION(MulFInstruction, ValueOperand)
+DECLARE_INSTRUCTION(MulFInstruction, FloatOperand)
 DECLARE_INSTRUCTION(MulRInstruction, RegistersOperand)
 
 DECLARE_INSTRUCTION(NormInstruction, NoneOperand)
@@ -84,7 +86,7 @@ DECLARE_INSTRUCTION(SttInstruction, AddressOperand)
 DECLARE_INSTRUCTION(StxInstruction, AddressOperand)
 
 DECLARE_INSTRUCTION(SubInstruction, ValueOperand)
-DECLARE_INSTRUCTION(SubFInstruction, ValueOperand)
+DECLARE_INSTRUCTION(SubFInstruction, FloatOperand)
 DECLARE_INSTRUCTION(SubRInstruction, RegistersOperand)
 
 // TODO:

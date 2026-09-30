@@ -1,16 +1,30 @@
 #pragma once
 
+#include <cstddef>
+
 #include "architecture/ArchitectureManager.hpp"
+#include "architecture/events/EventManager.hpp"
+
 #include "memory/Memory.hpp"
 #include "memory/Registers.hpp"
 
 #include "project/ProjectManager.hpp"
 
+struct EventBatch {
+    std::size_t from = 0;
+    std::size_t to = 0;
+    nlohmann::json events = nlohmann::json::array();
+
+    nlohmann::json serialize() const {
+        return {{"from", from}, {"to", to}, {"events", events}};
+    }
+};
 
 class Simulator {
 public:
     Simulator()
-        : m_architectureManager("archs") {}
+        : m_architectureManager("archs")
+        , m_eventManager(m_memory, m_registers) {}
 
     ProjectManager::ProjectView list_projects();
 
@@ -21,16 +35,16 @@ public:
     const Project& load_project(const std::string& project);
 
     void set_file(const std::string& filepath, const std::string& content);
-    std::vector<ExecutionEvent> load_file(const std::string& filepath);
+    EventBatch load_file(const std::string& filepath);
 
     const std::unordered_set<std::string>& ListAvailableArchitectures();
     const ArchitectureInfo* currentInfo();
 
     void run();
     void stop();
-    std::vector<ExecutionEvent> reset();
+    EventBatch reset();
 
-    std::vector<ExecutionEvent> step();
+    EventBatch step();
 
     // TODO:
     //  Delta unstep();
@@ -45,4 +59,5 @@ private:
     ProjectManager m_projectManager;
     Memory m_memory;
     Registers m_registers;
+    architecture::events::EventManager m_eventManager;
 };

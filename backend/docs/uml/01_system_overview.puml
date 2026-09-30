@@ -1,0 +1,56 @@
+@startuml
+title SIC/XE Simulator - System Overview
+skinparam componentStyle rectangle
+
+package "Frontend (Next.js)" {
+  [Project List]
+  [Editor Page]
+  [FileExplorer]
+  [Monaco CodeEditor]
+  [ExecutionView]
+  [RegisterTable]
+  [MemoryTable]
+  [Console]
+  [StatusBar]
+  [Simulator Client]
+}
+
+package "Backend (C++20)" {
+  [HTTP Server]
+  [WebSocket Server]
+  [Simulator]
+  [ArchitectureManager]
+  [SharedLoader]
+  [LoadedArchitecture]
+  [Registers]
+  [Memory]
+  [Event Queue / Execution Events]
+}
+
+package "Runtime Architecture Plugins" {
+  [libsic-xe.dll]
+  [Other Architecture DLLs]
+}
+
+[Project List] --> [HTTP Server] : HTTP
+[Editor Page] --> [Simulator Client]
+[Simulator Client] --> [WebSocket Server] : ws://.../ws
+
+[WebSocket Server] --> [Simulator]
+[Simulator] --> [ArchitectureManager]
+[ArchitectureManager] --> [SharedLoader]
+[SharedLoader] --> [LoadedArchitecture]
+[LoadedArchitecture] --> [libsic-xe.dll]
+
+[Simulator] --> [Registers]
+[Simulator] --> [Memory]
+[Simulator] --> [Event Queue / Execution Events]
+
+[ExecutionView] --> [Simulator Client]
+[RegisterTable] --> [Simulator Client]
+[MemoryTable] --> [Simulator Client]
+[Console] --> [Simulator Client]
+[Monaco CodeEditor] --> [Simulator Client]
+[FileExplorer] --> [Simulator Client]
+
+@enduml

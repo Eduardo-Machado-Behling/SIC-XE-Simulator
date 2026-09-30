@@ -30,4 +30,9 @@ if(ENABLE_ASAN)
     )
 endif()
 
+target_link_libraries(
+    ${LIB_NAME}
+    PRIVATE
+        nlohmann_json::nlohmann_json
+)
 configure_architecture(${LIB_NAME})

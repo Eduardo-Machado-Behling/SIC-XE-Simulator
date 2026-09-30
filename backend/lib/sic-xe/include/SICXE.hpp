@@ -6,7 +6,9 @@
 
 class SICXE final : public IArchitecture {
 public:
-    SICXE(MemoryAccessor memoryAccessor, RegisterAccessor registerAccessor);
+    SICXE(MemoryAccessor memoryAccessor,
+          RegisterAccessor registerAccessor,
+          architecture::events::InstructionExecutor& instructionExecutor);
 
     const ArchitectureInfo& info() const noexcept override;
 
@@ -24,4 +26,5 @@ private:
 
     EventQueue m_events;
     std::vector<byte_t> m_buffer;
+    bool m_halted = false;
 };

@@ -1,0 +1,106 @@
+@startuml
+title SIC/XE Simulator - Runtime Architecture Plugin Model
+
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+
+' ============================================================
+' Backend Process
+' ============================================================
+
+node "Backend Process" as Backend {
+    component "ArchitectureManager" as ArchitectureManager
+    component "SharedLoader" as SharedLoader
+    component "LoadedArchitecture" as LoadedArchitecture
+}
+
+' ============================================================
+' Architecture Plugins
+' ============================================================
+
+folder "bin/archs/" as ArchDirectory {
+    artifact "libsic-xe.dll" as SicXeDLL
+    artifact "lib<architecture>.(dll|so|dylib)" as ArchitectureDLL
+}
+
+' ============================================================
+' Plugin API
+' ============================================================
+
+interface "Architecture API / ABI" as ArchitectureAPI
+
+note left of ArchitectureAPI
+    **Exported symbols**
+    + architecture_api_version
+    + architecture_name
+    + architecture_create()
+    + architecture_destroy()
+    + architecture_reset()
+    + architecture_step()
+    + architecture_get_register()
+end note
+
+' ============================================================
+' Host-side relationships
+' ============================================================
+
+ArchitectureManager --> SharedLoader : discover / load
+ArchitectureManager --> LoadedArchitecture : manages
+SharedLoader --> LoadedArchitecture : creates / initializes
+SharedLoader ..> ArchDirectory : scans and loads\nshared libraries
+
+' ============================================================
+' Runtime library relationship
+' ============================================================
+
+LoadedArchitecture ..> ArchitectureAPI : resolves symbols
+LoadedArchitecture --> SicXeDLL : holds handle
+LoadedArchitecture --> ArchitectureDLL : holds handle
+
+SicXeDLL ..|> ArchitectureAPI
+ArchitectureDLL ..|> ArchitectureAPI
+
+' ============================================================
+' Notes
+' ============================================================
+
+note right of ArchitectureManager
+    Responsible for:
+    - discovering architectures
+    - selecting architecture
+    - loading / unloading plugins
+    - managing loaded architectures
+end note
+
+note right of SharedLoader
+    RAII wrapper around
+    platform dynamic loading.
+
+    Windows:
+        LoadLibrary / GetProcAddress
+
+    Linux:
+        dlopen / dlsym
+end note
+
+note right of LoadedArchitecture
+    Runtime representation of
+    a loaded architecture.
+
+    Stores the dynamic library
+    handle and resolved symbols.
+end note
+
+note bottom of ArchDirectory
+    Architecture plugins are portable
+    shared libraries.
+
+    The backend searches:
+
+        bin/archs/
+
+    and loads the architecture
+    selected by the project.
+end note
+
+@enduml

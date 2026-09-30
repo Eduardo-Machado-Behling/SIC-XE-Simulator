@@ -11,6 +11,7 @@
 #include "architecture/ExecutionEvent.hpp"
 #include "architecture/RegisterDescription.hpp"
 #include "common/Byte.hpp"
+#include "essentials/Word.hpp"
 
 const std::vector<RegisterDescription> REGISTERS = {
     {1, "A", "Accumulator; used for arithmetic operations", 3},
@@ -33,9 +34,11 @@ const std::vector<RegisterDescription> REGISTERS = {
      "Status word; contains a variety of information, including a Condition Code (CC)",
      3}};
 
-SICXE::SICXE(MemoryAccessor memoryAccessor, RegisterAccessor registerAccessor)
+SICXE::SICXE(MemoryAccessor memoryAccessor,
+             RegisterAccessor registerAccessor,
+             architecture::events::InstructionExecutor& instructionExecutor)
     : m_assembler(m_set)
-    , IArchitecture(memoryAccessor, registerAccessor) {
+    , IArchitecture(memoryAccessor, registerAccessor, instructionExecutor) {
     m_info.name = "SIC/XE";
     m_info.description = "SIC/XE architecture";
 
@@ -57,28 +60,58 @@ const ArchitectureInfo& SICXE::info() const noexcept {
 }
 
 void SICXE::reset() {
+    m_halted = false;
     for (auto& r : m_info.registers) {
-        m_registerAccessor.write(r.name, 0ull);
+        m_registerAccessor.clear(r.name);
     }
 }
 
 void SICXE::step() {
-    const auto pc = m_registerAccessor.read("PC");
+    if (m_halted)
+        return;
+
+    const auto pc = Word::from_bytes(m_registerAccessor.read("PC")).as_unsigned();
 
     m_memoryAccessor.fetch(pc, m_info.memory.address_width, m_buffer);
-    const DecodedInstruction instruction(m_registerAccessor, m_memoryAccessor, m_set, m_buffer);
+    const DecodedInstruction instruction(m_registerAccessor,
+                                         m_memoryAccessor,
+                                         m_set,
+                                         m_buffer,
+                                         m_instructionExecutor,
+                                         pc);
 
-    std::uint8_t inc = instruction.execute();
-
-    m_events.push(InstructionExecuted{.instruction = instruction.description});
-
-    if (inc)
-        m_registerAccessor.write("PC", pc + 3);
+    instruction.execute();
+    m_halted = instruction.description != nullptr &&
+               instruction.description->mnemonic == "HALT";
 }
 
 std::vector<ExecutionEvent> SICXE::load_file(std::string& content) {
-    m_memoryAccessor.write(0, m_assembler.assemble(content));
-	return consume_events();
+    if (!content.empty() && content[0] == ';') {
+        static const std::regex hex_run(R"(([0-9a-fA-F]{2})+)");
+
+        std::vector<byte_t> buff;
+        std::istringstream stream(content);
+        std::string line;
+
+        std::getline(stream, line);
+
+        while (std::getline(stream, line)) {
+            std::smatch match;
+            if (!std::regex_search(line, match, hex_run))
+                continue; 
+
+            const std::string hex = match.str();
+            for (size_t i = 0; i < hex.size(); i += 2) {
+                buff.push_back(static_cast<byte_t>(std::stoi(hex.substr(i, 2), nullptr, 16)));
+            }
+        }
+
+        m_memoryAccessor.write(0, buff);
+    } else {
+        m_memoryAccessor.write(0, m_assembler.assemble(content));
+    }
+    m_halted = false;
+    return consume_events();
 }
 
 std::vector<ExecutionEvent> SICXE::consume_events() {

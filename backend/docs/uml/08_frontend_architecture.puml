@@ -1,0 +1,55 @@
+@startuml
+title SIC/XE Simulator - Frontend Architecture
+skinparam componentStyle rectangle
+
+package "Next.js Frontend" {
+  [Project Pages]
+  [Editor Route /editor?project=...]
+  [TopBar]
+  [StatusBar]
+  [FileExplorer]
+  [CodeEditor / Monaco]
+  [ExecutionView]
+  [RegisterTable]
+  [MemoryTable]
+  [Console]
+
+  component "Simulator Client" as Client
+  component "WebTransport" as Transport
+}
+
+[Project Pages] --> Client
+[Editor Route /editor?project=...] --> [TopBar]
+[Editor Route /editor?project=...] --> [FileExplorer]
+[Editor Route /editor?project=...] --> [CodeEditor / Monaco]
+[Editor Route /editor?project=...] --> [ExecutionView]
+[Editor Route /editor?project=...] --> [StatusBar]
+
+[ExecutionView] --> [RegisterTable]
+[ExecutionView] --> [MemoryTable]
+[ExecutionView] --> [Console]
+
+[TopBar] --> Client
+[FileExplorer] --> Client
+[CodeEditor / Monaco] --> Client
+[ExecutionView] --> Client
+
+Client --> Transport
+Transport --> "Backend /ws"
+
+note right of Client
+Public operations include:
+step()
+reset()
+projects()
+createProject()
+loadProject()
+loadFile()
+setFile()
+run()
+stop()
+unstep()
+breakOn()
+end note
+
+@enduml

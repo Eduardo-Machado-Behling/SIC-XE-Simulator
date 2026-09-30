@@ -4,7 +4,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "architecture/EventSerializer.hpp"
 #include "architecture/InfoSerializer.hpp"
 
 using json = nlohmann::json;
@@ -78,7 +77,7 @@ void Server::setup_ws() {
         std::string message;
 
         while (ws.read(message)) {
-            std::cout << "WebSocket received: " << message << std::endl;
+            std::cout << "[RECV]: " << message << '\n';
 
             json j = json::parse(message);
 
@@ -115,43 +114,41 @@ void Server::setup_ws() {
                         }
 
                         case Command::LOAD_FILE: {
-                            auto prog = m_simulator.load_file(match[1]);
+                            const EventBatch batch = m_simulator.load_file(match[1]);
 
-                            response = json{{"id", j.at("id")}, {"result", EventSerializer::serialize(prog)}}.dump();
+                            response = json{{"id", j.at("id")},
+                                            {"result", batch.events}}
+                                           .dump();
 
                             break;
                         }
 
                         case Command::RESET: {
-                            auto steps = m_simulator.reset();
-
-                            json result = EventSerializer::serialize(steps);
-
-                            response = json{{"id", j.at("id")}, {"result", result}}.dump();
+                            const EventBatch batch = m_simulator.reset();
+                            response = json{{"id", j.at("id")},
+                                            {"result", batch.events}}
+                                           .dump();
 
                             break;
                         }
 
                         case Command::STEP: {
-                            auto steps = m_simulator.step();
-
-                            json result = EventSerializer::serialize(steps);
-
-                            response = json{{"id", j.at("id")}, {"result", result}}.dump();
+                            const EventBatch batch = m_simulator.step();
+                            response = json{{"id", j.at("id")},
+                                            {"result", batch.events}}
+                                           .dump();
 
                             break;
                         }
                     }
                 }
-            } // mutex released HERE
-
-            std::cout << "before ws.send\n";
+            } 
 
             if (!response.empty()) {
                 ws.send(response);
             }
 
-            std::cout << "after ws.send\n";
+            std::cout << "[SENT]: " << response << "\n\n\n";
         }
         std::cout << "WebSocket client disconnected :)" << std::endl;
     });

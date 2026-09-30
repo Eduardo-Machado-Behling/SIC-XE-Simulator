@@ -1,0 +1,270 @@
+@startuml
+title SIC/XE Event Architecture - Ownership and Reversible State
+
+top to bottom direction
+
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam nodesep 25
+skinparam ranksep 35
+
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+    ArrowColor Black
+}
+
+hide empty members
+set namespaceSeparator none
+
+
+package "Host / Simulator" {
+
+    class Simulator {
+        - memory : Memory
+        - registers : Registers
+        - eventManager : EventManager
+        + step()
+        + undo()
+        + redo()
+    }
+
+    class EventManager {
+        - state : SimulatorEventState
+        - history : IEvent[]
+        - activeOrder : EventIndex[]
+        - cursor : size_t
+        + execute(event)
+        + undo()
+        + redo()
+        + events_since(index)
+        + cursor()
+    }
+
+    class SimulatorEventState {
+        + memory : Memory
+        + registers : Registers
+    }
+}
+
+
+package "Architecture Plugin API" {
+
+    interface InstructionExecutor {
+        + execute(event)
+    }
+
+    interface IEvent {
+        + mutates()
+        + commit(state)
+        + restore(state)
+        + serialize()
+    }
+
+    class MemoryAccessor {
+        + read(address, size)
+        + write(address, bytes)
+        + fetch(address, size)
+    }
+
+    class RegisterAccessor {
+        + read(register)
+        + write(register, value)
+    }
+
+    class SICXE {
+        + step()
+    }
+
+    class DecodedInstruction {
+        - address
+        - bytes
+        - format
+        - flags
+        - displacement
+        - target
+        - resolved_operand
+        - executor
+        + execute()
+    }
+}
+
+
+package "Event Model" {
+
+    abstract class StateMutation {
+        + mutates() = true
+        + commit(state)
+        + restore(state)
+    }
+
+    abstract class Observation {
+        + mutates() = false
+        + commit(state)
+        + restore(state)
+    }
+
+    package "State Mutations" {
+
+        class MemoryWrite {
+            - address
+            - old_value
+            - value
+        }
+
+        class RegisterWrite {
+            - register
+            - old_value
+            - value
+        }
+    }
+
+    package "Execution Observations" {
+
+        class MemoryRead {
+            - address
+            - value
+        }
+
+        class RegisterRead {
+            - register
+            - value
+        }
+
+        class InstructionFetched {
+            - address
+            - bytes
+        }
+
+        class InstructionDecoded {
+            - address
+            - bytes
+            - format
+            - flags
+            - displacement
+            - target
+            - resolved_operand
+        }
+    }
+}
+
+
+' Ownership
+
+Simulator *-- Memory
+Simulator *-- Registers
+Simulator *-- EventManager
+
+EventManager *-- SimulatorEventState
+EventManager *-- "0..*" IEvent : owns
+
+SimulatorEventState --> Memory
+SimulatorEventState --> Registers
+
+
+' Event hierarchy
+
+IEvent <|.. StateMutation
+IEvent <|.. Observation
+
+StateMutation <|-- MemoryWrite
+StateMutation <|-- RegisterWrite
+
+Observation <|-- MemoryRead
+Observation <|-- RegisterRead
+Observation <|-- InstructionFetched
+Observation <|-- InstructionDecoded
+
+
+' Execution facade
+
+EventManager ..|> InstructionExecutor
+
+SICXE --> InstructionExecutor : submits events
+DecodedInstruction --> InstructionExecutor : submits events
+
+SICXE --> MemoryAccessor
+SICXE --> RegisterAccessor
+SICXE --> DecodedInstruction : creates
+
+DecodedInstruction --> MemoryAccessor : operand access
+DecodedInstruction --> RegisterAccessor : register access
+
+
+' Accessors submit events
+
+MemoryAccessor --> InstructionExecutor : MemoryRead / MemoryWrite / InstructionFetched
+RegisterAccessor --> InstructionExecutor : RegisterRead / RegisterWrite
+
+
+' Event application
+
+EventManager ..> IEvent : execute / commit / restore
+
+MemoryWrite ..> Memory : modifies
+RegisterWrite ..> Registers : modifies
+
+MemoryRead ..> Memory : observes
+RegisterRead ..> Registers : observes
+
+
+note right of EventManager
+    Event execution:
+
+    execute(event)
+        |
+        v
+    event.commit(state)
+        |
+        v
+    append to history
+        |
+        v
+    advance cursor
+
+    Undo:
+    event.restore(state)
+
+    Redo:
+    event.commit(state)
+end note
+
+
+note right of StateMutation
+    Reversible state change.
+
+    Stores both:
+
+    old_value
+    new_value
+
+    Undo applies old_value.
+    Redo applies new_value.
+end note
+
+
+note right of Observation
+    Non-mutating execution trace.
+
+    Records what the CPU
+    read, fetched, or decoded.
+
+    Does not modify simulator state.
+end note
+
+
+note bottom of EventManager
+    The event history is append-only.
+
+    The cursor identifies the current
+    position in the active execution path.
+
+    Undo moves the cursor backward.
+    Redo moves the cursor forward.
+
+    A new execution after undo creates
+    a new active execution path.
+end note
+
+@enduml

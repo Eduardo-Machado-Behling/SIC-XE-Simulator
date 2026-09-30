@@ -25,7 +25,8 @@ enum class InstructionFlags : std::uint8_t {
 enum class OperandType : std::uint8_t {
     None,
 
-    Memory,           // m
+    Address,          // Effective address derived from m
+    Value,            // Immediate value or contents at m
     Register,         // r1
     RegisterRegister, // r1,r2
     RegisterImmediate // r1,n

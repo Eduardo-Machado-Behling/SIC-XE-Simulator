@@ -1,0 +1,31 @@
+@startuml
+title SIC/XE Simulator - Run Until Stop
+actor Frontend
+participant Client
+participant WebSocketServer as WS
+participant Simulator
+participant CPU as "Architecture / CPU"
+
+Frontend -> Client : run()
+Client -> WS : Run request
+WS -> Simulator : run()
+
+loop until breakpoint / halt / input
+  Simulator -> CPU : execute instruction
+  CPU --> Simulator : events/state
+  Simulator -> Simulator : check stop condition
+end
+
+CPU --> Simulator : stopped
+Simulator --> WS : final execution result
+WS --> Client : response
+Client --> Frontend : resolve(result)
+
+note over Simulator,CPU
+Run is optimized for continuous execution.
+The frontend does not need every intermediate
+visual state unless the implementation chooses
+to stream execution events.
+end note
+
+@enduml

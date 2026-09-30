@@ -5,14 +5,19 @@
 
 #include "architecture/ArchitectureInfo.hpp"
 #include "architecture/ExecutionEvent.hpp"
+#include "architecture/events/InstructionExecutor.hpp"
 
 #include "memory/MemoryAccessor.hpp"
 #include "memory/RegisterAccessor.hpp"
 
 class IArchitecture {
 public:
-    IArchitecture(MemoryAccessor& memoryAccessor, RegisterAccessor& registerAccessor)
-        : m_memoryAccessor(memoryAccessor), m_registerAccessor(registerAccessor) {}
+    IArchitecture(MemoryAccessor& memoryAccessor,
+                  RegisterAccessor& registerAccessor,
+                  architecture::events::InstructionExecutor& instructionExecutor)
+        : m_memoryAccessor(memoryAccessor)
+        , m_registerAccessor(registerAccessor)
+        , m_instructionExecutor(instructionExecutor) {}
     virtual ~IArchitecture() = default;
 
 
@@ -30,4 +35,5 @@ public:
 protected:
     MemoryAccessor m_memoryAccessor;
     RegisterAccessor m_registerAccessor;
+    architecture::events::InstructionExecutor& m_instructionExecutor;
 };

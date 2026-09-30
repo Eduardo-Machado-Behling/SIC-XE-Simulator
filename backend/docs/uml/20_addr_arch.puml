@@ -1,0 +1,165 @@
+@startuml
+title SIC/XE — DecodedInstruction Class Diagram
+top to bottom direction
+skinparam classAttributeIconSize 0
+skinparam nodesep 18
+skinparam ranksep 24
+hide empty members
+
+package "Instruction metadata" {
+  class InstructionSet {
+    + findByOpcode(opcode) : InstructionData*
+  }
+
+  class InstructionData {
+    + description : InstructionDescription
+    + implementation : IInstruction*
+  }
+
+  class InstructionDescription {
+    + id : InstructionId
+    + mnemonic : string
+    + opcode : uint8_t
+    + formats : InstructionFormat
+    + operand_type : OperandType
+    + flags : InstructionFlags
+  }
+
+  enum InstructionFormat {
+    Format1
+    Format2
+    Format3
+    Format4
+  }
+
+  enum OperandType {
+    None
+    Address
+    Value
+    Register
+    RegisterRegister
+    RegisterImmediate
+  }
+
+  InstructionSet o-- "0..*" InstructionData
+  InstructionData *-- InstructionDescription
+  InstructionDescription --> InstructionFormat
+  InstructionDescription --> OperandType
+}
+
+package "Decoded instruction" {
+  class DecodedInstruction {
+    + description : const InstructionDescription*
+    - m_implementation : const IInstruction*
+    - m_memory : MemoryAccessor&
+    - m_regs : RegisterAccessor&
+    - m_flags : InstructionFlags
+    - m_format : InstructionFormat
+    - m_format_advance : uint8_t
+    - m_instruction_address : uint64_t
+    - m_eventExecutor : InstructionExecutor&
+    - m_operand : optional<Operands>
+    + DecodedInstruction(regs, memory, set, raw, executor, address)
+    + execute() : uint8_t
+    - get_displacement(format, raw) : uint32_t
+    - get_target_address(regs, format, displacement, b, p, x) : uint32_t
+    - resolve_operand(memory, flags, operandType, target, n, i) : Operands
+  }
+
+  class "Operands\nstd::variant<...>" as Operands
+  abstract class Operand
+  class ValueOperand
+  class FloatOperand
+  class AddressOperand
+  class NoneOperand
+  class RegistersOperand
+  class RegisterValueOperand
+  class RegisterOperand
+
+  Operand <|-- ValueOperand
+  Operand <|-- FloatOperand
+  Operand <|-- AddressOperand
+  Operand <|-- NoneOperand
+  Operand <|-- RegistersOperand
+  Operand <|-- RegisterValueOperand
+  Operand <|-- RegisterOperand
+
+  DecodedInstruction *-- Operands : resolved operand
+  Operands ..> ValueOperand
+  Operands ..> FloatOperand
+  Operands ..> AddressOperand
+  Operands ..> NoneOperand
+  Operands ..> RegistersOperand
+  Operands ..> RegisterValueOperand
+  Operands ..> RegisterOperand
+}
+
+package "Execution" {
+  class ExecutionContext {
+    + registers : RegisterAccessor&
+    + memory : MemoryAccessor&
+  }
+
+  abstract class IInstruction {
+    + execute(context, ValueOperand) : bool
+    + execute(context, FloatOperand) : bool
+    + execute(context, AddressOperand) : bool
+    + execute(context, NoneOperand) : bool
+    + execute(context, RegistersOperand) : bool
+    + execute(context, RegisterValueOperand) : bool
+    + execute(context, RegisterOperand) : bool
+  }
+
+  class "Concrete instruction implementations" as ConcreteInstructions
+
+  IInstruction <|-- ConcreteInstructions
+  DecodedInstruction --> IInstruction : dispatches to
+  DecodedInstruction ..> ExecutionContext : creates during execute()
+  ExecutionContext --> RegisterAccessor
+  ExecutionContext --> MemoryAccessor
+}
+
+package "Decode notification" {
+  interface InstructionExecutor {
+    + execute(event)
+  }
+
+  class EventManager
+  interface IEvent {
+    + mutates() : bool
+    + commit(state)
+    + restore(state)
+    + serialize() : JSON
+  }
+  class InstructionDecoded {
+    + details : JSON
+    + mutates() : false
+  }
+
+  InstructionExecutor <|.. EventManager
+  IEvent <|.. InstructionDecoded
+  DecodedInstruction --> InstructionExecutor : emits InstructionDecoded
+  EventManager o-- "0..*" IEvent : records
+}
+
+DecodedInstruction --> InstructionSet : finds instruction by opcode
+InstructionData --> IInstruction : implementation pointer
+InstructionData --> InstructionDescription : metadata
+
+note right of DecodedInstruction
+  Construction performs decoding:
+  opcode lookup, format selection,
+  flag/displacement decoding, address
+  calculation, and typed operand resolution.
+
+  Construction then emits InstructionDecoded.
+  execute() runs separately afterward.
+end note
+
+note bottom of ConcreteInstructions
+  The base implementation throws
+  UnimplementedInstruction for overloads
+  a concrete instruction does not implement.
+end note
+
+@enduml

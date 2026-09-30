@@ -1,0 +1,36 @@
+@startuml
+title SIC/XE Essentials — Word and Register Conversion
+autonumber
+skinparam ParticipantPadding 12
+skinparam BoxPadding 8
+
+participant "Instruction" as instruction
+participant "RegisterAccessor" as accessor
+participant "Registers" as registers
+
+== Read a word ==
+instruction -> accessor : read(register_name)
+accessor -> registers : read(register_name)
+registers --> accessor : bytes
+accessor --> instruction : bytes
+instruction -> instruction : Word::from_bytes(bytes)
+note right of instruction
+  Requires exactly 3 bytes.
+end note
+
+== Convert a word for writing ==
+instruction -> instruction : word.to_bytes()
+note right of instruction
+  Produces exactly 3 bytes.
+end note
+
+== Write through the accessor ==
+instruction -> accessor : write(register_name, bytes)
+accessor -> registers : read(register_name)
+registers --> accessor : old bytes
+accessor -> accessor : commit RegisterWrite
+accessor -> registers : write(register_name, bytes)
+registers --> accessor : return
+accessor --> instruction : return
+
+@enduml

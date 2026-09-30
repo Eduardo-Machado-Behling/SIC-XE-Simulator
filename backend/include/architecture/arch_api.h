@@ -18,12 +18,17 @@
 
 class IArchitecture;
 #include "memory/MemoryAccessor.hpp"
+#include "memory/RegisterAccessor.hpp"
+#include "architecture/events/InstructionExecutor.hpp"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-ARCH_API IArchitecture* create_arch(MemoryAccessor memoryAccessor, RegisterAccessor registerAccessor);
+ARCH_API IArchitecture* create_arch(
+    MemoryAccessor memoryAccessor,
+    RegisterAccessor registerAccessor,
+    architecture::events::InstructionExecutor& instructionExecutor);
 ARCH_API void destroy_arch(IArchitecture*);
 
 #ifdef __cplusplus
