@@ -18,5 +18,5 @@ export interface SimulatorTransport {
     projects(): Promise<Project[]>;
     createProject(newProject: Project): Promise<unknown>;
     loadProject(projectId: string): Promise<LoadProjectResponse>;
-    loadFile(file: string): Promise<ArchitectureInfo>;
+    loadFile(file: string): Promise<ExecutionEvent[]>;
 }

@@ -16,6 +16,7 @@ import { Simulator } from "@/lib/simulator/Simulator";
 import { Project } from "@/lib/simulator/Project";
 import { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
 import { RegisterState } from "./RegisterTable";
+import type { ExecutionEvent } from "@/lib/simulator/ExecutionEvent";
 
 // ============================================================
 // Helpers
@@ -82,11 +83,71 @@ export default function EditorPage({ projectId }: PageProps) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [pc, setPc] = useState<number>(0)
+    const [changedRegisters, setChangedRegisters] = useState<string[]>([]);
+    const [changedMemory, setChangedMemory] = useState<number[]>([]);
+    const [consumedMemory, setConsumedMemory] = useState<number[]>([]);
+    const [changeRevision, setChangeRevision] = useState(0);
+    const changeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const instructionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
     const [isRunning, setIsRunning] = useState(false);
 
     const consoleHandleRef = useRef<ConsoleHandle | null>(null);
+
+    const applyExecutionEvents = useCallback((events: ExecutionEvent[], animateInstruction = true) => {
+        simulator.resolve(events, setMemory, setRegisters);
+        setChangedRegisters([...new Set(events
+            .filter((event) => event.type === "RegisterWrite")
+            .map((event) => event.name))]);
+        setChangedMemory([...new Set(events.flatMap((event) =>
+            event.type === "MemoryWrite"
+                ? event.bytes.map((_, index) => event.address + index)
+                : [],
+        ))]);
+
+        if (instructionTimerRef.current) clearTimeout(instructionTimerRef.current);
+        setConsumedMemory([]);
+
+        if (animateInstruction) {
+            const fetched = events.findLast((event) => event.type === "InstructionFetched");
+            if (fetched?.type === "InstructionFetched") {
+                const decoded = events.findLast((event) =>
+                    event.type === "InstructionDecoded" && event.details.address === fetched.address,
+                );
+                const consumedLength = decoded?.type === "InstructionDecoded"
+                    ? decoded.details.length
+                    : fetched.bytes.length;
+                const consumed = Array.from({ length: consumedLength }, (_, index) => fetched.address + index);
+                const writtenPc = events.findLast((event) => event.type === "RegisterWrite" && event.name === "PC");
+                const nextPc = writtenPc?.type === "RegisterWrite"
+                    ? writtenPc.value
+                    : fetched.address + consumedLength;
+
+                setPc(fetched.address);
+                setConsumedMemory(consumed);
+                instructionTimerRef.current = setTimeout(() => {
+                    setPc(nextPc);
+                    setConsumedMemory([]);
+                    instructionTimerRef.current = null;
+                }, 720);
+            }
+        } else {
+            setPc(0);
+        }
+
+        setChangeRevision((revision) => revision + 1);
+        if (changeTimerRef.current) clearTimeout(changeTimerRef.current);
+        changeTimerRef.current = setTimeout(() => {
+            setChangedRegisters([]);
+            setChangedMemory([]);
+        }, 720);
+    }, [simulator]);
+
+    useEffect(() => () => {
+        if (changeTimerRef.current) clearTimeout(changeTimerRef.current);
+        if (instructionTimerRef.current) clearTimeout(instructionTimerRef.current);
+    }, []);
 
     // --------------------------------------------------------
     // Fetch the project on mount (and whenever projectId changes)
@@ -140,7 +201,7 @@ export default function EditorPage({ projectId }: PageProps) {
         return () => {
             cancelled = true;
         };
-    }, [projectId]);
+    }, [projectId, simulator]);
 
     // --------------------------------------------------------
     // File tree (derived from files)
@@ -188,17 +249,13 @@ export default function EditorPage({ projectId }: PageProps) {
 
             console.log("Solve:", steps);
 
-            simulator.resolve(
-                steps,
-                setMemory,
-                setRegisters,
-            );
+            applyExecutionEvents(steps);
 
             setIsRunning(true);
         } catch (error) {
             console.error("Run failed:", error);
         }
-    }, [activeFile, activeContent]);
+    }, [activeFile, activeContent, applyExecutionEvents, simulator]);
 
     const stop = useCallback(() => {
         setIsRunning(false);
@@ -207,19 +264,22 @@ export default function EditorPage({ projectId }: PageProps) {
     const step = useCallback(() => {
         consoleHandleRef.current?.write("Executing one instruction...\r\n");
         simulator.step().then((steps) => {
-            simulator.resolve(steps, setMemory, setRegisters)
+            applyExecutionEvents(steps)
             consoleHandleRef.current?.write(JSON.stringify(steps));
         })
 
-    }, []);
+    }, [applyExecutionEvents, simulator]);
 
     const reset = useCallback(() => {
         setIsRunning(false);
+        if (instructionTimerRef.current) clearTimeout(instructionTimerRef.current);
+        setConsumedMemory([]);
+        setPc(0);
         consoleHandleRef.current?.clear();
         simulator.reset().then((steps) => {
-            simulator.resolve(steps, setMemory, setRegisters)
+            applyExecutionEvents(steps, false)
         })
-    }, []);
+    }, [applyExecutionEvents, simulator]);
 
     // --------------------------------------------------------
     // Console command handling
@@ -408,7 +468,7 @@ export default function EditorPage({ projectId }: PageProps) {
                                     transition-colors
                                 "
                         />
-                        <ExecutionView arch={arch} memory={memory} registers={registers} memorySize={arch?.memory.address_space_size} pc={pc} />
+                        <ExecutionView arch={arch} memory={memory} registers={registers} memorySize={arch?.memory.address_space_size} pc={pc} changedMemory={changedMemory} changedRegisters={changedRegisters} changeRevision={changeRevision} consumedMemory={consumedMemory} />
                     </Panel>
                 </Group>
             </div>

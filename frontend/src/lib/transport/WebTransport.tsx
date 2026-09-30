@@ -1,6 +1,6 @@
 import { LoadProjectResponse, SimulatorTransport } from "@/lib/transport/SimulatorTransport";
 import { Project } from "@/lib/simulator/Project";
-import { ExecutionEvent } from "@/lib/simulator/ExecutionEvent";
+import { ExecutionEvent, normalizeExecutionEvents } from "@/lib/simulator/ExecutionEvent";
 import { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
 
 type Request = {
@@ -230,11 +230,11 @@ export class WebTransport implements SimulatorTransport {
     }
 
     async step(): Promise<ExecutionEvent[]> {
-        return this.send<ExecutionEvent[]>("step");
+        return normalizeExecutionEvents(await this.send<unknown>("step"));
     }
 
     async reset(): Promise<ExecutionEvent[]> {
-        return this.send<ExecutionEvent[]>("reset");
+        return normalizeExecutionEvents(await this.send<unknown>("reset"));
     }
 
     async loadProject(
@@ -246,9 +246,10 @@ export class WebTransport implements SimulatorTransport {
     }
 
     async loadFile(file: string): Promise<ExecutionEvent[]> {
-        return this.send<ExecutionEvent[]>(
+        const events = await this.send<unknown>(
             `load %${file}`,
         );
+        return normalizeExecutionEvents(events);
     }
 
     async setFile(
