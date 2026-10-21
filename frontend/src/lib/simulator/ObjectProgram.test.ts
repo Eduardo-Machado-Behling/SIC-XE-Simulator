@@ -65,6 +65,24 @@ describe("objectProgram", () => {
         expect(recordFields(end)).toEqual(["E", "000000"]);
     });
 
+    it("gives M records relative to the start of the program (Beck, p. 64)", () => {
+        // PROG  START 0x1000 / FIRST +JSUB SBR / LDA #1 / SBR RSUB / END FIRST:
+        // +JSUB at 1000 is 4B101007, its address field starts at 1001, which is
+        // 000001 from the start of the program; H, T and E stay absolute.
+        const records = objectProgram({
+            program: { name: "PROG", start: 0x1000, length: 0x0A, entry: 0x1000 },
+            listing: listing([[0x1000, ""], [0x1000, "4B101007"], [0x1004, "010001"], [0x1007, "4F0000"], [null, ""]]),
+            relocations: [{ address: 0x1001, halfBytes: 5 }],
+        });
+
+        expect(records.map(recordText)).toEqual([
+            "HPROG  00100000000A",
+            "T0010000A4B1010070100014F0000",
+            "M00000105",
+            "E001000",
+        ]);
+    });
+
     it("splits data longer than a text record across records", () => {
         // 40 bytes of BYTE data at 0x100: 30 in the first record, 10 in the next.
         const data = Array.from({ length: 40 }, (_, index) => index);

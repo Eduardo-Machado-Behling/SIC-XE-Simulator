@@ -52,7 +52,7 @@ describe("AssemblyView", () => {
         expect(within(screen.getByRole("tabpanel")).getByRole("table", { name: "Symbol table" })).toBeTruthy();
 
         await user.click(screen.getByRole("tab", { name: "Relocation" }));
-        expect(within(screen.getByRole("tabpanel")).getByText("M00100705")).toBeTruthy();
+        expect(within(screen.getByRole("tabpanel")).getByText("M00000705")).toBeTruthy();
 
         await user.click(screen.getByRole("tab", { name: "Object" }));
         expect(within(screen.getByRole("tabpanel")).getByRole("list", { name: "Object program" })).toBeTruthy();
