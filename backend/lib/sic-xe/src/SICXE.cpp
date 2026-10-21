@@ -144,18 +144,46 @@ std::vector<ExecutionEvent> SICXE::load_file(std::string& content) {
             m_assembler.clear();
             throw;
         }
-        const auto entry_point = m_assembler.lastInfo().entryPoint;
-        m_programStart = static_cast<std::uint32_t>(entry_point);
+        const sicxe::AssemblyInfo& info = m_assembler.lastInfo();
+        m_programStart = static_cast<std::uint32_t>(info.entryPoint);
         m_memoryAccessor.write(0, image);
         m_registerAccessor.write("PC", Word(m_programStart).to_bytes());
 
-        // Report the symbol table to the editor's Assembler tab.
+        // Report the assembly to the editor's Assembler tab: the symbol table,
+        // the listing (pass-1 location and pass-2 object code of each
+        // statement), the modification records and the warnings.
         nlohmann::json symbols = nlohmann::json::array();
-        for (const auto& [name, value] : m_assembler.lastInfo().symbols) {
+        for (const auto& [name, value] : info.symbols) {
             symbols.push_back({{"name", name}, {"value", value}});
         }
+        nlohmann::json listing = nlohmann::json::array();
+        for (const auto& line : info.lines) {
+            listing.push_back({{"line", line.line},
+                               {"address", line.address ? nlohmann::json(*line.address) : nlohmann::json()},
+                               {"bytes", line.bytes},
+                               {"source", line.source}});
+        }
+        nlohmann::json relocations = nlohmann::json::array();
+        for (const auto& relocation : info.relocations) {
+            relocations.push_back({{"address", relocation.address}, {"halfBytes", relocation.halfBytes}});
+        }
+        // A successful assembly has no errors, so these are its warnings.
+        nlohmann::json diagnostics = nlohmann::json::array();
+        for (const auto& diagnostic : info.diagnostics) {
+            diagnostics.push_back({{"severity", diagnostic.severity == sicxe::Severity::Error ? "error" : "warning"},
+                                   {"line", diagnostic.line},
+                                   {"column", diagnostic.column},
+                                   {"message", diagnostic.message}});
+        }
         m_instructionExecutor.execute(std::make_unique<architecture::events::ProgramAssembled>(
-            nlohmann::json{{"symbols", symbols}}));
+            nlohmann::json{{"symbols", symbols},
+                           {"program", {{"name", info.programName},
+                                        {"start", info.startAddress},
+                                        {"length", info.length},
+                                        {"entry", info.entryPoint}}},
+                           {"listing", listing},
+                           {"relocations", relocations},
+                           {"diagnostics", diagnostics}}));
     }
     m_halted = false;
     return consume_events();
