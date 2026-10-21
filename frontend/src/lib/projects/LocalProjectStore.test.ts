@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiValidationError } from "@/lib/api/errors";
 import { LocalProjectStore, PROJECTS_STORAGE_KEY } from "@/lib/projects/LocalProjectStore";
@@ -11,6 +11,16 @@ const hello = { id: A, name: "Hello", architecture: "SIC-XE" as const, files: { 
 beforeEach(() => {
     localStorage.clear();
 });
+
+/** Values of every backup of unreadable project data. */
+function backups(): string[] {
+    const values: string[] = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+        const key = localStorage.key(i)!;
+        if (key.startsWith(`${PROJECTS_STORAGE_KEY}.corrupt`)) values.push(localStorage.getItem(key)!);
+    }
+    return values;
+}
 
 describe("LocalProjectStore", () => {
     it("starts empty", () => {
@@ -99,8 +109,77 @@ describe("LocalProjectStore", () => {
         expect(store.list()).toEqual([]);
         store.put(hello);
 
-        expect(localStorage.getItem(`${PROJECTS_STORAGE_KEY}.corrupt`)).toBe("{not json");
+        expect(backups()).toEqual(["{not json"]);
         expect(store.list()).toEqual([hello]);
+    });
+
+    it("reports unreadable data, but not missing data, until it is replaced", () => {
+        const store = new LocalProjectStore();
+        expect(store.isUnreadable()).toBe(false);
+
+        localStorage.setItem(PROJECTS_STORAGE_KEY, "{truncated");
+        expect(store.isUnreadable()).toBe(true);
+
+        store.put(hello);
+        expect(store.isUnreadable()).toBe(false);
+    });
+
+    it("backs up each unreadable incident once, without losing an earlier backup", () => {
+        const store = new LocalProjectStore();
+
+        localStorage.setItem(PROJECTS_STORAGE_KEY, "{first");
+        store.list();
+        store.list();
+        new LocalProjectStore().list();
+        store.put(hello);
+        localStorage.setItem(PROJECTS_STORAGE_KEY, "[second");
+        store.list();
+
+        expect(backups().sort()).toEqual(["[second", "{first"]);
+    });
+
+    it("lets a full storage reach the caller and keeps the previous data", () => {
+        const store = new LocalProjectStore();
+        store.put(hello);
+        const full = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+            throw new DOMException("quota", "QuotaExceededError");
+        });
+
+        expect(() => store.writeFile(A, "main.asm", "lost")).toThrow(/quota/);
+        full.mockRestore();
+        expect(new LocalProjectStore().get(A)).toEqual(hello);
+    });
+
+    it("uses memory for reads and writes alike when storage reads throw", () => {
+        const broken = {
+            getItem: () => {
+                throw new DOMException("denied", "SecurityError");
+            },
+            setItem: () => {
+                throw new DOMException("denied", "SecurityError");
+            },
+        } as unknown as Storage;
+        const store = new LocalProjectStore(() => broken);
+
+        store.put(hello);
+        store.writeFile(A, "main.asm", "LDA #1");
+
+        expect(store.get(A)!.files).toEqual({ "main.asm": "LDA #1" });
+    });
+
+    it("notifies subscribers when another tab changes the projects", () => {
+        const store = new LocalProjectStore();
+        let calls = 0;
+        const unsubscribe = store.subscribe(() => {
+            calls += 1;
+        });
+
+        window.dispatchEvent(new StorageEvent("storage", { key: PROJECTS_STORAGE_KEY }));
+        window.dispatchEvent(new StorageEvent("storage", { key: "unrelated" }));
+        unsubscribe();
+        window.dispatchEvent(new StorageEvent("storage", { key: PROJECTS_STORAGE_KEY }));
+
+        expect(calls).toBe(1);
     });
 
     it("works in memory when there is no storage (server rendering)", () => {

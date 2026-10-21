@@ -34,19 +34,36 @@ function copy(project: Project): Project {
     return { id: project.id, name: project.name, architecture: project.architecture, files: { ...project.files } };
 }
 
+/** Where the projects were read from, so the write goes to the same place. */
+type Loaded = { state: Stored; storage: Storage | undefined; unreadable: boolean };
+
+const BACKUP_PREFIX = `${PROJECTS_STORAGE_KEY}.corrupt`;
+
 export class LocalProjectStore {
     private memory: Stored = { version: 1, projects: {} };
     private listeners = new Set<() => void>();
+    private stopWatchingOtherTabs: (() => void) | null = null;
 
     constructor(private readonly getStorage: () => Storage | undefined = browserStorage) {}
 
     list(): Project[] {
-        return Object.values(this.read().projects).filter(isValidProject).map(copy);
+        return Object.values(this.load().state.projects).filter(isValidProject).map(copy);
     }
 
     get(id: string): Project | null {
-        const project = this.read().projects[id];
+        const projects = this.load().state.projects;
+        if (!Object.hasOwn(projects, id)) return null;
+        const project = projects[id];
         return isValidProject(project) ? copy(project) : null;
+    }
+
+    /**
+     * True when this browser holds project data that cannot be parsed (a copy
+     * is kept under a `sicxe.projects.v1.corrupt.*` key). Missing data is not
+     * unreadable: it just means no project was saved yet.
+     */
+    isUnreadable(): boolean {
+        return this.load().unreadable;
     }
 
     /** Creates or replaces a project. Throws ApiValidationError on invalid data. */
@@ -61,7 +78,7 @@ export class LocalProjectStore {
     remove(id: string): boolean {
         let removed = false;
         this.update((projects) => {
-            removed = id in projects;
+            removed = Object.hasOwn(projects, id);
             delete projects[id];
         });
         return removed;
@@ -80,15 +97,37 @@ export class LocalProjectStore {
         });
     }
 
-    /** Called after every change; returns an unsubscribe function. */
+    /**
+     * Called after every change, made here or in another tab of this browser;
+     * returns an unsubscribe function.
+     */
     subscribe(listener: () => void): () => void {
         this.listeners.add(listener);
+        this.watchOtherTabs();
         return () => {
             this.listeners.delete(listener);
+            if (this.listeners.size === 0) {
+                this.stopWatchingOtherTabs?.();
+                this.stopWatchingOtherTabs = null;
+            }
         };
     }
 
     // ---------------------------------------------------------------- private
+
+    private notify(): void {
+        for (const listener of [...this.listeners]) listener();
+    }
+
+    private watchOtherTabs(): void {
+        if (this.stopWatchingOtherTabs || typeof window === "undefined") return;
+        const onStorage = (event: StorageEvent) => {
+            // key null: the other tab cleared the whole storage.
+            if (event.key === PROJECTS_STORAGE_KEY || event.key === null) this.notify();
+        };
+        window.addEventListener("storage", onStorage);
+        this.stopWatchingOtherTabs = () => window.removeEventListener("storage", onStorage);
+    }
 
     private change(id: string, mutate: (project: Project) => void): Project {
         const current = this.get(id);
@@ -100,43 +139,36 @@ export class LocalProjectStore {
         return copy(current);
     }
 
-    private read(): Stored {
+    private load(): Loaded {
+        const memory: Loaded = { state: this.memory, storage: undefined, unreadable: false };
         const storage = this.getStorage();
-        if (!storage) return this.memory;
+        if (!storage) return memory;
 
         let raw: string | null;
         try {
             raw = storage.getItem(PROJECTS_STORAGE_KEY);
         } catch {
-            return this.memory;
+            return memory; // storage exists but is unusable: use memory for writes too
         }
-        if (raw === null) return { version: 1, projects: {} };
+        if (raw === null) return { state: { version: 1, projects: {} }, storage, unreadable: false };
 
         try {
             const parsed = JSON.parse(raw) as Partial<Stored>;
             if (parsed && typeof parsed.projects === "object" && parsed.projects !== null && !Array.isArray(parsed.projects)) {
-                return { version: 1, projects: parsed.projects };
+                return { state: { version: 1, projects: parsed.projects }, storage, unreadable: false };
             }
         } catch {
             // fall through
         }
 
-        // Unreadable data: keep a copy before the next write replaces it.
-        try {
-            if (storage.getItem(`${PROJECTS_STORAGE_KEY}.corrupt`) === null) {
-                storage.setItem(`${PROJECTS_STORAGE_KEY}.corrupt`, raw);
-            }
-        } catch {
-            // nothing more we can do
-        }
-        return { version: 1, projects: {} };
+        backUp(storage, raw);
+        return { state: { version: 1, projects: {} }, storage, unreadable: true };
     }
 
     private update(mutate: (projects: Record<string, unknown>) => void): void {
-        const state = this.read();
+        const { state, storage } = this.load();
         mutate(state.projects);
 
-        const storage = this.getStorage();
         if (storage) {
             // Let quota/security errors reach the caller: the edit was not kept.
             storage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(state));
@@ -144,6 +176,25 @@ export class LocalProjectStore {
             this.memory = state;
         }
 
-        for (const listener of this.listeners) listener();
+        this.notify();
+    }
+}
+
+/**
+ * Keeps a copy of unreadable data before the next write replaces it: one
+ * backup per distinct value, each under its own timestamped key, so a later
+ * incident never overwrites an earlier backup.
+ */
+function backUp(storage: Storage, raw: string): void {
+    try {
+        for (let i = 0; i < storage.length; i += 1) {
+            const key = storage.key(i);
+            if (key?.startsWith(BACKUP_PREFIX) && storage.getItem(key) === raw) return;
+        }
+        let key = `${BACKUP_PREFIX}.${new Date().toISOString()}`;
+        for (let n = 1; storage.getItem(key) !== null; n += 1) key = `${BACKUP_PREFIX}.${new Date().toISOString()}.${n}`;
+        storage.setItem(key, raw);
+    } catch {
+        // nothing more we can do
     }
 }
