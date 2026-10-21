@@ -94,6 +94,69 @@ TEST(formats_1_and_2) {
   CHECK(bytesAt(m, 12, 1) == (Bytes{0xC4}));
 }
 
+TEST(all_format1_opcodes_match_the_sicxe_instruction_table) {
+  const std::vector<std::pair<std::string, int>> instructions = {
+      {"FIX", 0xC4}, {"FLOAT", 0xC0}, {"HALT", 0xFC}, {"HIO", 0xF4},
+      {"NORM", 0xC8}, {"SIO", 0xF0}, {"TIO", 0xF8}};
+
+  for (std::size_t i = 0; i < instructions.size(); ++i) {
+    const auto& [mnemonic, opcode] = instructions[i];
+    const CodeMemory image = Assembler().assemble(" " + mnemonic + "\n");
+    CHECK(bytesAt(image, 0, 1) == Bytes{opcode});
+  }
+}
+
+TEST(all_format2_operand_schemas_encode_registers_and_counts) {
+  const CodeMemory image = Assembler().assemble(
+      " ADDR A,S\n"
+      " CLEAR F\n"
+      " COMPR T,PC\n"
+      " DIVR S,T\n"
+      " MULR L,F\n"
+      " RMO SW,A\n"
+      " SHIFTL A,1\n"
+      " SHIFTR F,16\n"
+      " SUBR X,B\n"
+      " SVC 15\n"
+      " TIXR L\n");
+
+  CHECK(bytesAt(image, 0, 22) == (Bytes{
+      0x90, 0x04, 0xB4, 0x60, 0xA0, 0x58, 0x9C, 0x45,
+      0x98, 0x26, 0xAC, 0x90, 0xA4, 0x00, 0xA8, 0x6F,
+      0x94, 0x13, 0xB0, 0xF0, 0xB8, 0x20}));
+}
+
+TEST(all_memory_instruction_opcodes_match_the_sicxe_instruction_table) {
+  const std::vector<std::pair<std::string, int>> instructions = {
+      {"ADD", 0x18}, {"ADDF", 0x58}, {"AND", 0x40}, {"COMP", 0x28},
+      {"COMPF", 0x88}, {"DIV", 0x24}, {"DIVF", 0x64}, {"J", 0x3C},
+      {"JEQ", 0x30}, {"JGT", 0x34}, {"JLT", 0x38}, {"JSUB", 0x48},
+      {"LDA", 0x00}, {"LDB", 0x68}, {"LDCH", 0x50}, {"LDF", 0x70},
+      {"LDL", 0x08}, {"LDS", 0x6C}, {"LDT", 0x74}, {"LDX", 0x04},
+      {"LPS", 0xD0}, {"MUL", 0x20}, {"MULF", 0x60}, {"OR", 0x44},
+      {"RD", 0xD8}, {"SSK", 0xEC}, {"STA", 0x0C}, {"STB", 0x78},
+      {"STCH", 0x54}, {"STF", 0x80}, {"STI", 0xD4}, {"STL", 0x14},
+      {"STS", 0x7C}, {"STSW", 0xE8}, {"STT", 0x84}, {"STX", 0x10},
+      {"SUB", 0x1C}, {"SUBF", 0x5C}, {"TD", 0xE0}, {"TIX", 0x2C},
+      {"WD", 0xDC}};
+
+  std::string source;
+  for (const auto& [mnemonic, _] : instructions)
+    source += " " + mnemonic + " 0x123\n";
+
+  const CodeMemory image = Assembler().assemble(source);
+  CHECK(image.byteCount() == instructions.size() * 3);
+  for (std::size_t i = 0; i < instructions.size(); ++i) {
+    const std::size_t address = i * 3;
+    const int opcode = instructions[i].second;
+    const int displacement = 0x123 - static_cast<int>(address + 3);
+    const int flags_and_displacement_high = 0x20 | ((displacement >> 8) & 0x0F);
+    const int displacement_low = displacement & 0xFF;
+    CHECK(bytesAt(image, address, 3) ==
+          (Bytes{opcode + 3, flags_and_displacement_high, displacement_low}));
+  }
+}
+
 TEST(simulator_halt_extension) {
   Assembler assembler;
   const CodeMemory image = assembler.assemble(
@@ -184,6 +247,25 @@ TEST(org_creates_second_segment) {
   CHECK(m.read(0x1000).has_value());
 }
 
+TEST(start_end_and_reservations_produce_loadable_sparse_image) {
+  Assembler assembler;
+  const CodeMemory image = assembler.assemble(
+      "PROGRAM START 0x100\n"
+      "ENTRY  LDA #7\n"
+      "       RESB 2\n"
+      "       ORG 0x200\n"
+      "STOP   HALT\n"
+      "       END STOP\n");
+
+  CHECK(image.segments().size() == 2);
+  CHECK(bytesAt(image, 0x100, 3) == (Bytes{0x01, 0x00, 0x07}));
+  CHECK(!image.read(0x103).has_value());
+  CHECK(bytesAt(image, 0x200, 1) == (Bytes{0xFC}));
+  CHECK(assembler.lastInfo().startAddress == 0x100);
+  CHECK(assembler.lastInfo().entryPoint == 0x200);
+  CHECK(assembler.lastInfo().length == 0x101);
+}
+
 TEST(sic_mode) {
   AssemblerOptions o; o.mode = ArchMode::Sic;
   CodeMemory m = Assembler(o).assemble(" START 0\n LDA VAL,X\n RSUB\nVAL WORD 1\n");
@@ -195,24 +277,30 @@ TEST(sic_mode) {
   CHECK(hasError(" CLEAR X\n", "not available in SIC mode", o));
 }
 
-TEST(diagnostics) {
+TEST(diagnostics_reject_invalid_mnemonics_and_operands) {
   CHECK(hasError(" FIX A\n", "takes no operands"));
   CHECK(hasError("LBL FOO 1\n", "Unknown mnemonic"));
   CHECK(hasError(" LDA\n", "Missing operand"));
   CHECK(hasError(" LDA 1,X,Y\n", "Too many operands"));
+  CHECK(hasError(" LDA 1+\n", "Expected an operand"));
+}
+
+TEST(diagnostics_validate_registers_and_format_rules) {
   CHECK(hasError(" SHIFTL A,17\n", "Shift count"));
   CHECK(hasError(" SHIFTL A,0\n", "Shift count"));
   CHECK(hasError(" SVC 16\n", "Service number"));
   CHECK(hasError(" CLEAR Q\n", "Unknown register"));
-  CHECK(hasError(" LDA NOWHERE\n", "Undefined symbol"));
-  CHECK(hasError("A1 RSUB\nA1 RSUB\n", "Duplicate symbol"));
   CHECK(hasError("X RSUB\n", "register name"));
-  CHECK(hasError("SUB RSUB\n", "Undefined symbol"));              // SUB is a mnemonic, not a label
-  CHECK(hasError(" RESB A\nA RSUB\n", "must be defined before"));
   CHECK(hasError(" +RSUB\n", "cannot use format 4"));
   CHECK(hasError(" +BYTE 1\n", "only be applied to instructions"));
+}
+
+TEST(diagnostics_report_symbol_and_directive_errors) {
+  CHECK(hasError(" LDA NOWHERE\n", "Undefined symbol"));
+  CHECK(hasError("A1 RSUB\nA1 RSUB\n", "Duplicate symbol"));
+  CHECK(hasError("SUB RSUB\n", "Undefined symbol"));              // SUB is a mnemonic, not a label
+  CHECK(hasError(" RESB A\nA RSUB\n", "must be defined before"));
   CHECK(hasError(" START 0\n RSUB\n START 0\n", "first statement"));
-  CHECK(hasError(" LDA 1+\n", "Expected an operand"));
   CHECK(hasError(" RESB 1/0\n", "Division by zero"));
   CHECK(hasError(" ORG\n", "no previous location"));
   CHECK(hasError("EQ EQU\n", "Missing operand"));
@@ -242,12 +330,27 @@ TEST(entry_listing_and_warnings) {
   CHECK(r.ok() && r.info.diagnostics.size() == 1);               // "Missing END" warning
 }
 
-int main() {
+int main(int argc, char** argv) {
+  if (argc > 2) {
+    std::fprintf(stderr, "Usage: %s [test_case]\n", argv[0]);
+    return 2;
+  }
+
+  const std::string selected = argc == 2 ? argv[1] : "";
+  bool found = selected.empty();
   for (auto& [name, fn] : registry()) {
+    if (!selected.empty() && selected != name) continue;
+    found = true;
     const int before = g_failures;
     fn();
     std::printf("[%s] %s\n", g_failures == before ? " OK " : "FAIL", name);
   }
+
+  if (!found) {
+    std::fprintf(stderr, "Unknown test case: %s\n", selected.c_str());
+    return 2;
+  }
+
   std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
   return g_failures ? 1 : 0;
 }

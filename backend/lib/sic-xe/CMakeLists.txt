@@ -45,7 +45,6 @@ if(BUILD_TESTING)
         "${CMAKE_CURRENT_SOURCE_DIR}/test/*.cpp"
     )
 
-    # demo.cpp is a standalone example with its own main(), not a test case.
     list(FILTER TEST_SOURCES EXCLUDE REGEX "/demo\\.cpp$")
 
     set(ASSEMBLER_SOURCES
@@ -73,9 +72,33 @@ if(BUILD_TESTING)
             PRIVATE ${LIB_NAME}
         )
 
-        add_test(
-            NAME ${TEST_TARGET}
-            COMMAND ${TEST_TARGET}
-        )
+        function(add_sicxe_test CASE_NAME DESCRIPTION)
+            add_test(
+                NAME "sicxe.${DESCRIPTION}"
+                COMMAND ${TEST_TARGET} "${CASE_NAME}"
+            )
+        endfunction()
+
+        add_sicxe_test(code_memory_is_sparse_and_merges "code-memory.sparse-segment-merging")
+        add_sicxe_test(spec_example_style_program "assembly.example-program-encoding")
+        add_sicxe_test(formats_1_and_2 "instructions.format-1-and-format-2-encoding")
+        add_sicxe_test(all_format1_opcodes_match_the_sicxe_instruction_table "instructions.all-format-1-opcodes")
+        add_sicxe_test(all_format2_operand_schemas_encode_registers_and_counts "instructions.all-format-2-operands")
+        add_sicxe_test(all_memory_instruction_opcodes_match_the_sicxe_instruction_table "instructions.all-memory-opcodes")
+        add_sicxe_test(simulator_halt_extension "instructions.halt-extension-encoding")
+        add_sicxe_test(base_relative_and_direct "addressing.base-relative-and-direct")
+        add_sicxe_test(pc_relative_boundaries "addressing.pc-relative-boundaries")
+        add_sicxe_test(format4_and_immediate "addressing.format-4-and-immediate-values")
+        add_sicxe_test(indirect_and_indexed_rules "addressing.indirect-and-indexed-rules")
+        add_sicxe_test(data_directives_and_expressions "directives.data-and-expression-encoding")
+        add_sicxe_test(case_insensitive_ok "parser.case-insensitive-source")
+        add_sicxe_test(org_creates_second_segment "directives.org-sparse-memory-segments")
+        add_sicxe_test(start_end_and_reservations_produce_loadable_sparse_image "image.start-entry-and-reserved-gaps")
+        add_sicxe_test(sic_mode "modes.sic-compatibility")
+        add_sicxe_test(diagnostics_reject_invalid_mnemonics_and_operands "diagnostics.mnemonics-and-operands")
+        add_sicxe_test(diagnostics_validate_registers_and_format_rules "diagnostics.registers-and-formats")
+        add_sicxe_test(diagnostics_report_symbol_and_directive_errors "diagnostics.symbols-and-directives")
+        add_sicxe_test(errors_throw_and_carry_diagnostics "diagnostics.exception-details")
+        add_sicxe_test(entry_listing_and_warnings "metadata.entry-point-listing-and-warnings")
     endif()
 endif()
