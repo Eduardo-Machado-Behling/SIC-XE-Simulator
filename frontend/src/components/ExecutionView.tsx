@@ -2,10 +2,10 @@
 "use client";
 
 import { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
-import type { AssemblySymbol } from "@/lib/simulator/ExecutionEvent";
+import type { AssemblyReport } from "@/lib/simulator/ExecutionEvent";
 import RegisterTable, { RegisterState } from "@/components/RegisterTable";
 import MemoryTable from "@/components/MemoryTable";
-import SymbolTable from "@/components/SymbolTable";
+import AssemblyView from "@/components/AssemblyView";
 import { Tabs, type TabDefinition } from "@/components/Tabs";
 import { Separator } from "react-resizable-panels";
 import { useState } from "react";
@@ -20,10 +20,10 @@ export interface ArchProps {
     changedRegisters: string[];
     changeRevision: number;
     consumedMemory: number[];
-    symbols: AssemblySymbol[] | null;
+    assembly: AssemblyReport | null;
 }
 
-export function ExecutionView({ arch, registers, memory, memorySize, pc, changedMemory, changedRegisters, changeRevision, consumedMemory, symbols }: ArchProps) {
+export function ExecutionView({ arch, registers, memory, memorySize, pc, changedMemory, changedRegisters, changeRevision, consumedMemory, assembly }: ArchProps) {
     const [selectedTab, setSelectedTab] = useState("cpu");
 
     // The memory table scrolls to the PC on every execution update, but a
@@ -69,7 +69,7 @@ export function ExecutionView({ arch, registers, memory, memorySize, pc, changed
         {
             id: "assembler",
             label: "Assembler",
-            content: <SymbolTable symbols={symbols} />,
+            content: <AssemblyView assembly={assembly} pc={pc} />,
         },
     ];
 

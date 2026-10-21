@@ -21,7 +21,7 @@ import { simulatorWebSocketUrl } from "@/lib/transport/urls";
 import { Project } from "@/lib/simulator/Project";
 import { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
 import { RegisterState } from "./RegisterTable";
-import { symbolsFromEvents, type AssemblySymbol, type ExecutionEvent } from "@/lib/simulator/ExecutionEvent";
+import { assemblyFromEvents, type AssemblyReport, type ExecutionEvent } from "@/lib/simulator/ExecutionEvent";
 
 // ============================================================
 // Helpers
@@ -105,7 +105,7 @@ export default function EditorPage({ projectId }: PageProps) {
     const [changedMemory, setChangedMemory] = useState<number[]>([]);
     const [consumedMemory, setConsumedMemory] = useState<number[]>([]);
     const [changeRevision, setChangeRevision] = useState(0);
-    const [symbols, setSymbols] = useState<AssemblySymbol[] | null>(null);
+    const [assembly, setAssembly] = useState<AssemblyReport | null>(null);
     const changeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const instructionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -129,7 +129,7 @@ export default function EditorPage({ projectId }: PageProps) {
     const applyExecutionEvents = useCallback((events: ExecutionEvent[], animateInstruction = true) => {
         simulator.resolve(events, setMemory, setRegisters);
         if (events.some((event) => event.type === "ProgramAssembled" || event.type === "ProgramCleared")) {
-            setSymbols(symbolsFromEvents(events));
+            setAssembly(assemblyFromEvents(events));
         }
         setChangedRegisters([...new Set(events
             .filter((event) => event.type === "RegisterWrite")
@@ -224,7 +224,7 @@ export default function EditorPage({ projectId }: PageProps) {
                 setFiles(data.project.files);
                 setMemory(new Map());
                 setPc(0);
-                setSymbols(null);
+                setAssembly(null);
 
                 const firstPath =
                     Object.keys(data.project.files).sort()[0] ?? "";
@@ -318,7 +318,7 @@ export default function EditorPage({ projectId }: PageProps) {
 
             console.log("Solve:", steps);
 
-            setSymbols(symbolsFromEvents(steps));
+            setAssembly(assemblyFromEvents(steps));
             applyExecutionEvents(steps);
 
             setIsRunning(true);
@@ -364,7 +364,7 @@ export default function EditorPage({ projectId }: PageProps) {
         try {
             const events = await simulator.clear();
             applyExecutionEvents(events, false);
-            setSymbols(null);
+            setAssembly(null);
         } catch (error) {
             reportCommandError(error);
         }
@@ -559,7 +559,7 @@ export default function EditorPage({ projectId }: PageProps) {
                                     transition-colors
                                 "
                         />
-                        <ExecutionView arch={arch} memory={memory} registers={registers} memorySize={arch?.memory.address_space_size} pc={pc} changedMemory={changedMemory} changedRegisters={changedRegisters} changeRevision={changeRevision} consumedMemory={consumedMemory} symbols={symbols} />
+                        <ExecutionView arch={arch} memory={memory} registers={registers} memorySize={arch?.memory.address_space_size} pc={pc} changedMemory={changedMemory} changedRegisters={changedRegisters} changeRevision={changeRevision} consumedMemory={consumedMemory} assembly={assembly} />
                     </Panel>
                 </Group>
             </div>
