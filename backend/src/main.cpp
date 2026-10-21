@@ -21,6 +21,18 @@ int main() {
         host = env_host;
     }
 
+    // Request body limit in bytes (bodies above it get 413).
+    if (const char* env_max_body = std::getenv("MAX_BODY_BYTES")) {
+        char* end = nullptr;
+        const unsigned long long bytes = std::strtoull(env_max_body, &end, 10);
+
+        if (env_max_body[0] != '-' && end != env_max_body && *end == '\0' && bytes > 0) {
+            server.set_max_body_bytes(static_cast<std::size_t>(bytes));
+        } else {
+            std::cerr << "Ignoring invalid MAX_BODY_BYTES=" << env_max_body << std::endl;
+        }
+    }
+
     server.setup(port);
     server.set_host(host);
 
