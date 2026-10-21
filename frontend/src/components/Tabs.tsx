@@ -45,7 +45,13 @@ export function Tabs({ tabs, label, defaultTabId, selectedId: controlledId, onSe
     const select = (id: string, focus: boolean) => {
         setUncontrolledId(id);
         onSelect?.(id);
-        if (focus) tabRefs.current.get(id)?.focus();
+        if (focus) {
+            const tab = tabRefs.current.get(id);
+            tab?.focus();
+            // Focus does not scroll a tab bar narrower than its tabs, so a
+            // tab chosen with the keyboard would stay cut off.
+            tab?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+        }
     };
 
     const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
