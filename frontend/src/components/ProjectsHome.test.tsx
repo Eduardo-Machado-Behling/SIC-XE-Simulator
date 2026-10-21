@@ -32,6 +32,12 @@ function setup(projects: Project[] = []) {
     return { backend, store, session, sync };
 }
 
+/** Opens the "Create a project" dialog and returns it. */
+async function openCreateDialog(user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> {
+    await user.click(screen.getByRole("button", { name: "New project" }));
+    return screen.getByRole("dialog", { name: "Create a project" });
+}
+
 afterEach(() => {
     push.mockReset();
     vi.restoreAllMocks();
@@ -52,9 +58,10 @@ describe("ProjectsHome", () => {
         const { backend, store, session, sync } = setup();
         render(<ProjectsHome sync={sync} />);
 
-        await user.type(screen.getByLabelText("Project name"), "Fibonacci");
-        await user.selectOptions(screen.getByLabelText("Architecture"), "SIC");
-        await user.click(screen.getByRole("button", { name: "Create project" }));
+        const dialog = await openCreateDialog(user);
+        await user.type(within(dialog).getByLabelText("Project name"), "Fibonacci");
+        await user.selectOptions(within(dialog).getByLabelText("Architecture"), "SIC");
+        await user.click(within(dialog).getByRole("button", { name: "Create project" }));
 
         expect(store.get(NEW_ID)).toEqual({ id: NEW_ID, name: "Fibonacci", architecture: "SIC", files: { "main.asm": "" } });
         expect(push).toHaveBeenCalledWith(`/editor/${NEW_ID}/`);
@@ -66,10 +73,28 @@ describe("ProjectsHome", () => {
         const { store, sync } = setup();
         render(<ProjectsHome sync={sync} />);
 
-        await user.click(screen.getByRole("button", { name: "Create project" }));
+        const dialog = await openCreateDialog(user);
+        await user.click(within(dialog).getByRole("button", { name: "Create project" }));
 
         expect(store.list()).toEqual([]);
         expect(push).not.toHaveBeenCalled();
+    });
+
+    it("filters the projects by name, architecture or file name", async () => {
+        const user = userEvent.setup();
+        const fib: Project = { id: NEW_ID, name: "Fibonacci", architecture: "SIC", files: { "fib.asm": "END" } };
+        const { sync } = setup([hello, fib]);
+        render(<ProjectsHome sync={sync} />);
+        const search = screen.getByRole("textbox", { name: "Search projects or files" });
+
+        await user.type(search, "fib.asm");
+        expect(screen.queryByRole("heading", { name: "Hello" })).toBeNull();
+        expect(screen.getByRole("heading", { name: "Fibonacci" })).toBeTruthy();
+
+        await user.clear(search);
+        await user.type(search, "sic-xe");
+        expect(screen.getByRole("heading", { name: "Hello" })).toBeTruthy();
+        expect(screen.queryByRole("heading", { name: "Fibonacci" })).toBeNull();
     });
 
     it("deletes a project after confirmation, locally and on the server", async () => {
@@ -110,12 +135,13 @@ describe("ProjectsHome", () => {
     });
 
     it("marks the architectures the server cannot run, while still offering every documented one", async () => {
+        const user = userEvent.setup();
         const { backend, sync } = setup();
         backend.architectures = ["SIC-XE"];
 
         render(<ProjectsHome sync={sync} />);
 
-        const select = screen.getByLabelText("Architecture");
+        const select = within(await openCreateDialog(user)).getByLabelText("Architecture");
         await waitFor(() =>
             expect(within(select).getByRole("option", { name: "SIC (not available on this server)" })).toBeTruthy(),
         );
@@ -124,13 +150,14 @@ describe("ProjectsHome", () => {
     });
 
     it("lists every documented architecture unmarked when the server cannot be asked", async () => {
+        const user = userEvent.setup();
         const { backend, sync } = setup();
         backend.online = false;
 
         render(<ProjectsHome sync={sync} />);
 
         await screen.findByRole("status");
-        const select = screen.getByLabelText("Architecture");
+        const select = within(await openCreateDialog(user)).getByLabelText("Architecture");
         expect(within(select).getAllByRole("option").map((option) => option.textContent)).toEqual(["SIC", "SIC-XE"]);
     });
 });
