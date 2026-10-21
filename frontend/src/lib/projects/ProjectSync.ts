@@ -12,7 +12,18 @@
  *    interrupted call once.
  *
  * Local writes happen first and never depend on the server; server failures
- * are reported (SyncOutcome / SyncStatus) and the local data is kept.
+ * are reported (SyncOutcome / SyncStatus) and the local data is kept. A write
+ * that failed is sent again (from the current local state) after the next
+ * successful one, on flush() and with every bulk sync; until then the status
+ * stays "error".
+ *
+ * Every request for one project (its upsert/delete and its files) runs in
+ * order on one queue and reads the local store when it is sent, so an older
+ * body never lands last and a deleted project is never re-created.
+ *
+ * When the browser's stored projects cannot be read, the start-up sync first
+ * restores them from the server's copy instead of replacing that copy with
+ * an empty set.
  */
 import type { SimulatorApiClient } from "@/lib/api/SimulatorApiClient";
 import { assertFilePath, assertProjectInput, isUuid, toProjectInput, type Architecture } from "@/lib/api/contract";
@@ -26,12 +37,12 @@ export type SyncOutcome = { ok: true } | { ok: false; kind: ApiErrorKind; messag
 export type SyncStatus =
     | { state: "idle" }
     | { state: "syncing" }
-    | { state: "synced"; recoveredSession: boolean }
+    | { state: "synced"; recoveredSession: boolean; restoredProjects?: number }
     | { state: "error"; kind: ApiErrorKind; message: string };
 
 type ProjectApi = Pick<
     SimulatorApiClient,
-    "createSession" | "getSession" | "syncProjects" | "upsertProject" | "deleteProject" | "upsertFile" | "deleteFile"
+    "createSession" | "getSession" | "listProjects" | "getProject" | "syncProjects" | "upsertProject" | "deleteProject" | "upsertFile" | "deleteFile"
 >;
 
 export type ProjectSyncOptions = {
@@ -52,6 +63,11 @@ const DEFAULT_FILES = { "main.asm": "" };
 
 type PendingFile = { projectId: string; path: string; timer: ReturnType<typeof setTimeout> | null; waiters: Array<(o: SyncOutcome) => void> };
 
+/** What a write brings in line with the local store: a whole project (path null) or one of its files. */
+type WriteTarget = { projectId: string; path: string | null };
+
+type FailedWrite = WriteTarget & { kind: ApiErrorKind; message: string; seq: number };
+
 export class ProjectSync {
     private readonly api: ProjectApi;
     private readonly store: LocalProjectStore;
@@ -66,9 +82,15 @@ export class ProjectSync {
     private ready: Promise<string> | null = null;
     private recovery: { from: string; promise: Promise<string> } | null = null;
     private recoveredSinceLastStatus = false;
+    private restoredSinceLastStatus = 0;
 
     private pendingFiles = new Map<string, PendingFile>();
+    /** Last queued request per project. */
     private inflight = new Map<string, Promise<unknown>>();
+    /** Writes whose last attempt failed, by writeKey(). */
+    private failed = new Map<string, FailedWrite>();
+    private failureSeq = 0;
+    private retrying: Promise<void> | null = null;
 
     private projectsCache: Project[] | null = null;
 
@@ -106,24 +128,71 @@ export class ProjectSync {
         for (const listener of this.listeners) listener(status);
     }
 
-    /** Runs a server operation, reporting progress and turning failures into an outcome. */
-    private async mirror(operation: () => Promise<unknown>): Promise<SyncOutcome> {
+    /**
+     * Runs a server operation, reporting progress and turning failures into an
+     * outcome. With a target, the failure is remembered (and forgotten again
+     * once that target is written) so it can be retried.
+     */
+    private async mirror(operation: () => Promise<unknown>, target?: WriteTarget): Promise<SyncOutcome> {
         this.running += 1;
         if (this.running === 1) this.setStatus({ state: "syncing" });
         try {
             await operation();
-            this.running -= 1;
-            if (this.running === 0) {
-                this.setStatus({ state: "synced", recoveredSession: this.recoveredSinceLastStatus });
-                this.recoveredSinceLastStatus = false;
-            }
-            return { ok: true };
         } catch (error) {
             this.running -= 1;
             const { kind, message } = describeApiError(error);
+            if (target) this.failed.set(writeKey(target), { ...target, kind, message, seq: ++this.failureSeq });
             this.setStatus({ state: "error", kind, message });
             return { ok: false, kind, message, error };
         }
+
+        this.running -= 1;
+        if (target) this.forgetFailures(target);
+        this.settleStatus();
+        if (this.failed.size > 0) void this.retryFailed();
+        return { ok: true };
+    }
+
+    private settleStatus(): void {
+        if (this.running !== 0) return;
+        const failure = [...this.failed.values()].at(-1);
+        if (failure) {
+            this.setStatus({ state: "error", kind: failure.kind, message: failure.message });
+            return;
+        }
+        const restored = this.restoredSinceLastStatus;
+        this.setStatus({
+            state: "synced",
+            recoveredSession: this.recoveredSinceLastStatus,
+            ...(restored > 0 ? { restoredProjects: restored } : {}),
+        });
+        this.recoveredSinceLastStatus = false;
+        this.restoredSinceLastStatus = 0;
+    }
+
+    private forgetFailures(target: WriteTarget): void {
+        if (target.path !== null) {
+            this.failed.delete(writeKey(target));
+            return;
+        }
+        // A project upsert or delete covers all of its files.
+        for (const [key, failure] of this.failed) {
+            if (failure.projectId === target.projectId) this.failed.delete(key);
+        }
+    }
+
+    /** Sends every remembered failed write again; concurrent callers share one round. */
+    private retryFailed(): Promise<void> {
+        if (!this.retrying) {
+            const targets = [...this.failed.values()].map(({ projectId, path }) => ({ projectId, path }));
+            if (targets.length === 0) return Promise.resolve();
+            const round = Promise.all(targets.map((target) => this.write(target))).then(() => undefined);
+            this.retrying = round;
+            void round.finally(() => {
+                if (this.retrying === round) this.retrying = null;
+            });
+        }
+        return this.retrying;
     }
 
     // ---------------------------------------------------------------- session
@@ -160,6 +229,7 @@ export class ProjectSync {
         if (!sessionId) return this.newSyncedSession();
 
         try {
+            if (this.store.isUnreadable()) await this.restore(sessionId);
             await this.bulkSync(sessionId);
         } catch (error) {
             if (!isSessionNotFound(error)) throw error;
@@ -178,8 +248,27 @@ export class ProjectSync {
     }
 
     private async bulkSync(sessionId: string): Promise<void> {
+        const covered = this.failureSeq;
         // Summaries come back without files; nothing local is replaced by them.
         await this.api.syncProjects(sessionId, this.store.list());
+        // The whole local set is on the server now, including earlier failed writes.
+        for (const [key, failure] of this.failed) {
+            if (failure.seq <= covered) this.failed.delete(key);
+        }
+    }
+
+    /**
+     * The local data is unreadable (a backup was kept), so the server holds the
+     * only intact copy: bring its projects back before the bulk sync, which
+     * would otherwise replace them with an empty set.
+     */
+    private async restore(sessionId: string): Promise<void> {
+        for (const summary of await this.api.listProjects(sessionId)) {
+            if (this.store.get(summary.id)) continue;
+            const { name, architecture, files } = await this.api.getProject(sessionId, summary.id);
+            this.store.put({ id: summary.id, name, architecture, files });
+            this.restoredSinceLastStatus += 1;
+        }
     }
 
     /** Replaces a session the server forgot; concurrent callers share one recovery. */
@@ -242,7 +331,7 @@ export class ProjectSync {
         };
         assertProjectInput(project);
         this.store.put(project);
-        return { project, synced: this.mirror(() => this.pushProject(project.id)) };
+        return { project, synced: this.write({ projectId: project.id, path: null }) };
     }
 
     updateProject(
@@ -253,7 +342,7 @@ export class ProjectSync {
         if (!current) throw new Error(`Project ${projectId} is not stored in this browser`);
         const project = { ...current, ...changes };
         this.store.put(project);
-        return { project, synced: this.mirror(() => this.pushProject(projectId)) };
+        return { project, synced: this.write({ projectId, path: null }) };
     }
 
     deleteProject(projectId: string): Promise<SyncOutcome> {
@@ -261,21 +350,7 @@ export class ProjectSync {
             if (pending.projectId === projectId) this.cancelPendingFile(key);
         }
         this.store.remove(projectId);
-        return this.mirror(() =>
-            this.withSession((sessionId) =>
-                this.api.deleteProject(sessionId, projectId).catch((error) => {
-                    if (!isProblemType(error, "project-not-found")) throw error;
-                }),
-            ),
-        );
-    }
-
-    private async pushProject(projectId: string): Promise<void> {
-        await this.withSession(async (sessionId) => {
-            const project = this.store.get(projectId);
-            if (!project) return; // deleted meanwhile
-            await this.api.upsertProject(sessionId, projectId, toProjectInput(project));
-        });
+        return this.write({ projectId, path: null });
     }
 
     // ------------------------------------------------------------------ files
@@ -298,25 +373,16 @@ export class ProjectSync {
 
     async deleteFile(projectId: string, path: string): Promise<SyncOutcome> {
         assertFilePath(path);
-        const key = fileKey(projectId, path);
-        this.cancelPendingFile(key);
+        this.cancelPendingFile(fileKey(projectId, path));
         this.store.removeFile(projectId, path);
-
-        return this.chain(key, () =>
-            this.mirror(() =>
-                this.withSession((sessionId) =>
-                    this.api.deleteFile(sessionId, projectId, path).catch((error) => {
-                        // Already absent on the server: the mirror matches.
-                        if (!isProblemType(error, "file-not-found") && !isProblemType(error, "project-not-found")) throw error;
-                    }),
-                ),
-            ),
-        );
+        return this.write({ projectId, path });
     }
 
-    /** Sends every pending file save now and waits for all file requests. */
+    /** Sends every pending file save and every failed write now, and waits for all requests. */
     async flush(): Promise<void> {
         for (const key of [...this.pendingFiles.keys()]) this.sendFile(key);
+        await this.retrying;
+        await this.retryFailed();
         await Promise.all([...this.inflight.values()].map((p) => p.catch(() => undefined)));
     }
 
@@ -334,12 +400,17 @@ export class ProjectSync {
         if (pending.timer) clearTimeout(pending.timer);
         this.pendingFiles.delete(key);
 
-        void this.chain(key, () => this.mirror(() => this.pushFile(pending.projectId, pending.path))).then((outcome) => {
+        void this.write({ projectId: pending.projectId, path: pending.path }).then((outcome) => {
             for (const resolve of pending.waiters) resolve(outcome);
         });
     }
 
-    /** Runs requests for one file in order, so an older body never lands last. */
+    /** Queues a write on its project's queue. */
+    private write(target: WriteTarget): Promise<SyncOutcome> {
+        return this.chain(target.projectId, () => this.mirror(() => this.reconcile(target), target));
+    }
+
+    /** Runs requests for one project in order, so an older body never lands last. */
     private chain<T>(key: string, run: () => Promise<T>): Promise<T> {
         const previous = this.inflight.get(key) ?? Promise.resolve();
         const next = previous.catch(() => undefined).then(run);
@@ -350,21 +421,47 @@ export class ProjectSync {
         return next;
     }
 
-    private async pushFile(projectId: string, path: string): Promise<void> {
+    /** Makes the server match the local store for the target, read at send time. */
+    private async reconcile({ projectId, path }: WriteTarget): Promise<void> {
         await this.withSession(async (sessionId) => {
-            // Read at send time so the newest content goes out.
             const project = this.store.get(projectId);
-            if (!project || !(path in project.files)) return;
+
+            if (path === null) {
+                if (project) {
+                    await this.api.upsertProject(sessionId, projectId, toProjectInput(project));
+                    return;
+                }
+                await this.api.deleteProject(sessionId, projectId).catch((error) => {
+                    if (!isProblemType(error, "project-not-found")) throw error;
+                });
+                return;
+            }
+
+            if (!project) return; // the project's own (queued) delete covers its files
+
+            if (!Object.hasOwn(project.files, path)) {
+                await this.api.deleteFile(sessionId, projectId, path).catch((error) => {
+                    // Already absent on the server: the mirror matches.
+                    if (!isProblemType(error, "file-not-found") && !isProblemType(error, "project-not-found")) throw error;
+                });
+                return;
+            }
 
             try {
                 await this.api.upsertFile(sessionId, projectId, { path, content: project.files[path] });
             } catch (error) {
-                // The server lost only this project (e.g. created while offline): send it whole.
+                // The server lost only this project (e.g. created while offline): send it whole,
+                // unless it was deleted here meanwhile.
                 if (!isProblemType(error, "project-not-found")) throw error;
-                await this.api.upsertProject(sessionId, projectId, toProjectInput(project));
+                const current = this.store.get(projectId);
+                if (current) await this.api.upsertProject(sessionId, projectId, toProjectInput(current));
             }
         });
     }
+}
+
+function writeKey({ projectId, path }: WriteTarget): string {
+    return path === null ? `project\u0000${projectId}` : `file\u0000${fileKey(projectId, path)}`;
 }
 
 function fileKey(projectId: string, path: string): string {

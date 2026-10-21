@@ -15,6 +15,10 @@ export function SyncStatusNotice({ status, extra }: SyncStatusNoticeProps) {
     if (status.state === "synced" && status.recoveredSession) {
         messages.push("The server had forgotten this session; a new session was created and your projects were synced again.");
     }
+    if (status.state === "synced" && status.restoredProjects) {
+        const count = status.restoredProjects === 1 ? "1 project was" : `${status.restoredProjects} projects were`;
+        messages.push(`The projects saved in this browser could not be read; ${count} restored from the server (the unreadable data was kept as a backup).`);
+    }
     if (status.state === "error") {
         const localOnly = status.kind === "network" ? "" : " Your changes are kept in this browser.";
         messages.push(`${status.message}${localOnly}`);

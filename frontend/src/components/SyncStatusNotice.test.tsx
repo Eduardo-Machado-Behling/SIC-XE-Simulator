@@ -18,6 +18,12 @@ describe("SyncStatusNotice", () => {
         expect(screen.getByRole("status").textContent).toMatch(/new session/i);
     });
 
+    it("says how many projects came back from the server after unreadable local data", () => {
+        render(<SyncStatusNotice status={{ state: "synced", recoveredSession: false, restoredProjects: 2 }} />);
+
+        expect(screen.getByRole("status").textContent).toMatch(/could not be read.*2 projects were restored from the server/i);
+    });
+
     it.each([
         ["project-not-found", /project does not exist on the server/i],
         ["invalid-request", /rejected/i],

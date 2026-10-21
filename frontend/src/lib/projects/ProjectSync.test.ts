@@ -23,15 +23,25 @@ type Setup = {
     statuses: SyncStatus[];
 };
 
-function setup(options: { projects?: Project[]; cookie?: string; validateStoredSession?: boolean; fileDebounceMs?: number } = {}): Setup {
+type SetupOptions = {
+    projects?: Project[];
+    cookie?: string;
+    validateStoredSession?: boolean;
+    fileDebounceMs?: number;
+    store?: LocalProjectStore;
+    /** Wraps the fake server's fetch, e.g. to hold a request. */
+    wrapFetch?: (fetch: typeof globalThis.fetch) => typeof globalThis.fetch;
+};
+
+function setup(options: SetupOptions = {}): Setup {
     const backend = new FakeBackend();
-    const store = new LocalProjectStore(() => undefined);
+    const store = options.store ?? new LocalProjectStore(() => undefined);
     for (const project of options.projects ?? []) store.put(project);
     const session = createMemorySessionStore();
     if (options.cookie) session.write(options.cookie);
 
     const sync = new ProjectSync({
-        api: new SimulatorApiClient({ baseUrl: backend.baseUrl, fetch: backend.fetch }),
+        api: new SimulatorApiClient({ baseUrl: backend.baseUrl, fetch: options.wrapFetch?.(backend.fetch) ?? backend.fetch }),
         store,
         session,
         validateStoredSession: options.validateStoredSession,
@@ -42,6 +52,33 @@ function setup(options: { projects?: Project[]; cookie?: string; validateStoredS
     sync.subscribe((status) => statuses.push(status));
 
     return { backend, store, session, sync, statuses };
+}
+
+/**
+ * Holds the first request whose "METHOD path" matches until release() is
+ * called; the server only sees (and applies) it after that.
+ */
+function holdFirst(match: RegExp) {
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    let held = false;
+    let reached!: () => void;
+    const arrived = new Promise<void>((resolve) => {
+        reached = resolve;
+    });
+    const wrapFetch = (inner: typeof globalThis.fetch) =>
+        (async (input: RequestInfo | URL, init: RequestInit = {}) => {
+            const line = `${(init.method ?? "GET").toUpperCase()} ${new URL(String(input)).pathname}`;
+            if (!held && match.test(line)) {
+                held = true;
+                reached();
+                await released;
+            }
+            return inner(input, init);
+        }) as typeof globalThis.fetch;
+    return { wrapFetch, release, arrived };
 }
 
 /** The server copy of each project, in the local store's shape. */
@@ -407,5 +444,179 @@ describe("debounced file saves", () => {
 
         await expect(save).resolves.toEqual({ ok: true });
         expect(backend.requests()).toEqual([expect.stringMatching(/^DELETE .*files\?path=main\.asm$/)]);
+    });
+});
+
+describe("ordering", () => {
+    const fileRoute = /^PUT \/sessions\/[^/]+\/projects\/[^/]+\/files$/;
+
+    it("sends the edits of one file in order, so the newest content lands last", async () => {
+        const gate = holdFirst(fileRoute);
+        const { backend, session, sync } = setup({ projects: [helloA], wrapFetch: gate.wrapFetch });
+        await sync.start();
+
+        const first = sync.saveFile(A, "main.asm", "LDA #1");
+        await gate.arrived;
+        const second = sync.saveFile(A, "main.asm", "LDA #2");
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        gate.release();
+        await Promise.all([first, second]);
+
+        expect(backend.log.filter((r) => r.body && !Array.isArray(r.body)).map((r) => r.body)).toEqual([
+            { path: "main.asm", content: "LDA #1" },
+            { path: "main.asm", content: "LDA #2" },
+        ]);
+        expect(mirror(backend, session.read()!)[0].files["main.asm"]).toBe("LDA #2");
+    });
+
+    it("with a stored cookie, an edit made while starting waits for the bulk sync", async () => {
+        const existing = "0d9c8b7a-6f5e-4d3c-9b2a-1f0e9d8c7b6a";
+        const { backend, sync } = setup({ projects: [helloA], cookie: existing });
+        backend.sessions.set(existing, new Map());
+
+        await Promise.all([sync.start(), sync.saveFile(A, "main.asm", "LDA #3")]);
+
+        expect(backend.requests()).toEqual([
+            `GET /sessions/${existing}`,
+            `PUT /sessions/${existing}/projects`,
+            `PUT /sessions/${existing}/projects/${A}/files`,
+        ]);
+        expect(mirror(backend, existing)[0].files["main.asm"]).toBe("LDA #3");
+    });
+
+    it("does not re-create a project deleted while one of its files was being sent", async () => {
+        const gate = holdFirst(fileRoute);
+        const { backend, session, store, sync } = setup({ projects: [helloA, otherB], wrapFetch: gate.wrapFetch });
+        await sync.start();
+        const sessionId = session.read()!;
+        backend.sessions.get(sessionId)!.delete(A); // the file upsert will answer project-not-found
+        backend.log.length = 0;
+
+        const save = sync.saveFile(A, "main.asm", "LDA #4");
+        await gate.arrived;
+        const removal = sync.deleteProject(A);
+        gate.release();
+        await Promise.all([save, removal]);
+
+        expect(store.get(A)).toBeNull();
+        expect(backend.requests(new RegExp(`^PUT /sessions/${sessionId}/projects/${A}$`))).toEqual([]);
+        expect(mirror(backend, sessionId)).toEqual([otherB]);
+    });
+});
+
+describe("local storage failures", () => {
+    it("rejects edits the browser could not store, and sends nothing", async () => {
+        localStorage.clear();
+        const store = new LocalProjectStore();
+        store.put(helloA);
+        const { backend, sync } = setup({ store });
+        await sync.start();
+        backend.log.length = 0;
+        const full = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+            throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+        });
+
+        try {
+            await expect(sync.saveFile(A, "main.asm", "lost")).rejects.toThrow(/quota/);
+            expect(() => sync.createProject({ name: "New", architecture: "SIC" })).toThrow(/quota/);
+            await sync.flush();
+        } finally {
+            full.mockRestore();
+        }
+
+        expect(backend.log).toEqual([]);
+        expect(store.get(A)).toEqual(helloA);
+    });
+
+    it("restores projects from the server instead of wiping it when the local data is unreadable", async () => {
+        localStorage.clear();
+        const existing = "0d9c8b7a-6f5e-4d3c-9b2a-1f0e9d8c7b6a";
+        const first = setup({ store: new LocalProjectStore(), projects: [helloA, otherB], cookie: existing });
+        first.backend.sessions.set(existing, new Map());
+        await first.sync.start();
+        localStorage.setItem("sicxe.projects.v1", "{truncated");
+
+        const store = new LocalProjectStore();
+        const session = createMemorySessionStore();
+        session.write(existing);
+        const statuses: SyncStatus[] = [];
+        const again = new ProjectSync({
+            api: new SimulatorApiClient({ baseUrl: first.backend.baseUrl, fetch: first.backend.fetch }),
+            store,
+            session,
+            fileDebounceMs: 0,
+        });
+        again.subscribe((status) => statuses.push(status));
+
+        await expect(again.start()).resolves.toEqual({ ok: true });
+
+        expect(mirror(first.backend, existing)).toEqual([helloA, otherB]);
+        expect(store.list()).toEqual([helloA, otherB]);
+        expect(store.isUnreadable()).toBe(false);
+        expect(statuses.at(-1)).toMatchObject({ state: "synced", restoredProjects: 2 });
+    });
+});
+
+describe("failed mirror writes", () => {
+    it("resends a save that failed once the server answers again, and reports synced only then", async () => {
+        const { backend, session, sync, statuses } = setup({ projects: [helloA] });
+        await sync.start();
+        backend.online = false;
+        await expect(sync.saveFile(A, "main.asm", "LDA #1")).resolves.toMatchObject({ ok: false, kind: "network" });
+        backend.online = true;
+
+        await sync.saveFile(A, "b.asm", "END");
+        await sync.flush();
+
+        expect(mirror(backend, session.read()!)[0].files).toEqual({ ...helloA.files, "main.asm": "LDA #1", "b.asm": "END" });
+        expect(statuses.at(-1)).toEqual({ state: "synced", recoveredSession: false });
+    });
+
+    it("keeps reporting the error while a failed save is still not on the server", async () => {
+        const { backend, session, sync, statuses } = setup({ projects: [helloA, otherB] });
+        await sync.start();
+        backend.online = false;
+        await sync.saveFile(A, "main.asm", "LDA #1");
+        backend.online = true;
+        const filesOfA = new RegExp(`^PUT /sessions/[^/]+/projects/${A}/files$`);
+        const serverError = () => json(500, { type: "internal-error", status: 500, title: "Internal server error" });
+        backend.failNext(filesOfA, serverError);
+        backend.failNext(filesOfA, serverError);
+        const sinceFailure = statuses.length;
+
+        await expect(sync.saveFile(B, "main.asm", "END")).resolves.toEqual({ ok: true });
+        await sync.flush();
+
+        expect(backend.requests(filesOfA)).toHaveLength(2); // after the save of B, and in flush()
+        expect(statuses.slice(sinceFailure).map((status) => status.state)).not.toContain("synced");
+        expect(sync.getStatus()).toMatchObject({ state: "error", kind: "server" });
+
+        await sync.flush();
+
+        expect(mirror(backend, session.read()!)[0].files["main.asm"]).toBe("LDA #1");
+        expect(sync.getStatus()).toEqual({ state: "synced", recoveredSession: false });
+    });
+
+    it("resends a project upsert that failed", async () => {
+        const { backend, session, sync } = setup();
+        await sync.start();
+        backend.online = false;
+        const { synced } = sync.createProject({ name: "New", architecture: "SIC" });
+        await expect(synced).resolves.toMatchObject({ ok: false });
+        backend.online = true;
+
+        await sync.flush();
+
+        expect(mirror(backend, session.read()!)).toEqual([{ id: NEW_ID, name: "New", architecture: "SIC", files: { "main.asm": "" } }]);
+    });
+
+    it("treats inherited names like toString as missing files", async () => {
+        const { backend, sync } = setup({ projects: [helloA] });
+        await sync.start();
+        backend.log.length = 0;
+
+        await expect(sync.deleteFile(A, "toString")).resolves.toEqual({ ok: true });
+
+        expect(backend.requests()).toEqual([expect.stringMatching(/^DELETE .*files\?path=toString$/)]);
     });
 });
