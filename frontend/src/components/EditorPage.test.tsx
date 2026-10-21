@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,6 +14,7 @@ const fake = vi.hoisted(() => ({
     loadFile: vi.fn(),
     step: vi.fn(),
     reset: vi.fn(),
+    clearMemory: vi.fn(),
     resolve: vi.fn(),
 }));
 
@@ -23,7 +24,16 @@ vi.mock("@/lib/simulator/Simulator", () => ({
 
 // Monaco and xterm need a real browser; the page wiring under test does not use them.
 vi.mock("@/components/CodeEditor", () => ({ CodeEditor: () => null }));
-vi.mock("@/components/Console", () => ({ Console: () => null }));
+// The console mock keeps the page's command handler, so tests can type commands.
+const consoleProps = vi.hoisted(() => ({
+    onCommand: null as null | ((command: string, handle: { write: (text: string) => void; clear: () => void }) => void),
+}));
+vi.mock("@/components/Console", () => ({
+    Console: (props: { onCommand?: typeof consoleProps.onCommand }) => {
+        consoleProps.onCommand = props.onCommand ?? null;
+        return null;
+    },
+}));
 
 const ARCH: ArchitectureInfo = {
     name: "SIC/XE",
@@ -160,5 +170,139 @@ describe("EditorPage symbol table", () => {
         await user.click(screen.getByRole("tab", { name: "Assembler" }));
 
         expect(simulatorCalls()).toBe(before);
+    });
+});
+
+// The memory view's tests need the real event application, not the fake's no-op.
+async function useRealResolve() {
+    const actual = await vi.importActual<typeof import("@/lib/simulator/Simulator")>("@/lib/simulator/Simulator");
+    fake.resolve.mockImplementation(actual.Simulator.prototype.resolve);
+}
+
+const memoryWrite = (address: number, bytes: number[]): ExecutionEvent => ({
+    type: "MemoryWrite", address, bytes, value: 0, old_bytes: bytes.map(() => 0), old_value: 0,
+});
+const registerWrite = (name: string, bytes: number[], value: number): ExecutionEvent => ({
+    type: "RegisterWrite", name, bytes, value, old_bytes: bytes.map(() => 0), old_value: 0,
+});
+const MEMORY_CLEARED: ExecutionEvent = { type: "MemoryCleared" };
+
+function cpuPanel(): HTMLElement {
+    return screen.getByRole("tabpanel", { name: "CPU" });
+}
+
+describe("EditorPage memory clear", () => {
+    beforeEach(async () => {
+        fake.loadProject.mockResolvedValue({
+            project: { id: "demo", name: "Demo", architecture: "SIC/XE", files: { "main.asm": "FIRST START 0" } },
+            arch: ARCH,
+        });
+        fake.setFile.mockResolvedValue(undefined);
+        fake.step.mockResolvedValue([]);
+        fake.reset.mockResolvedValue([]);
+        fake.clearMemory.mockResolvedValue([MEMORY_CLEARED]);
+        await useRealResolve();
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(console, "error").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+        for (const fn of Object.values(fake)) fn.mockReset();
+        consoleProps.onCommand = null;
+    });
+
+    it("the Clear button sends the command and empties the memory view; registers, PC and symbols stay", async () => {
+        const user = await openPage();
+        fake.loadFile.mockResolvedValueOnce([
+            MEMORY_CLEARED,
+            memoryWrite(0, [0xAB, 0xCD]),
+            registerWrite("A", [0x12, 0x34, 0x56], 0x123456),
+            ...assembled("FIRST"),
+        ]);
+        await run(user);
+        expect(within(cpuPanel()).getByText("AB")).toBeTruthy();
+
+        // One instruction at 3: the PC marker moves to 6 once its animation ends.
+        fake.step.mockResolvedValueOnce([{ type: "InstructionFetched", address: 3, bytes: [0, 0, 0], value: 0 }]);
+        await user.click(screen.getByRole("button", { name: "Step" }));
+        await within(cpuPanel()).findByLabelText("Program counter: 6", {}, { timeout: 3000 });
+
+        await user.click(screen.getByRole("button", { name: "Clear" }));
+
+        expect(fake.clearMemory).toHaveBeenCalledTimes(1);
+        await vi.waitFor(() => expect(within(cpuPanel()).queryByText("AB")).toBeNull());
+        expect(within(cpuPanel()).queryByText("CD")).toBeNull();
+        expect(within(cpuPanel()).getByText("0x123456")).toBeTruthy();
+        expect(within(cpuPanel()).getByLabelText("Program counter: 6")).toBeTruthy();
+        expect(fake.loadFile).toHaveBeenCalledTimes(1);
+        expect(fake.reset).not.toHaveBeenCalled();
+
+        await user.click(screen.getByRole("tab", { name: "Assembler" }));
+        expect(within(assemblerPanel()).getByText("FIRST")).toBeTruthy();
+    });
+
+    it("a clear drops the changed and consumed memory marks at once", async () => {
+        const user = await openPage();
+        fake.loadFile.mockResolvedValueOnce([MEMORY_CLEARED, memoryWrite(0, [0xAB])]);
+        await run(user);
+        fake.step.mockResolvedValueOnce([
+            { type: "InstructionFetched", address: 0x10, bytes: [0x0C, 0, 0x20], value: 0x0C0020 },
+            memoryWrite(0x20, [0x77]),
+        ]);
+        await user.click(screen.getByRole("button", { name: "Step" }));
+        // Both marks last 720ms after an update; the clear comes well before.
+        await vi.waitFor(() => expect(cpuPanel().querySelector(".sim-instruction-consume")).not.toBeNull());
+        expect(cpuPanel().querySelector(".sim-value-change")).not.toBeNull();
+
+        await user.click(screen.getByRole("button", { name: "Clear" }));
+
+        await vi.waitFor(() => expect(fake.clearMemory).toHaveBeenCalledTimes(1));
+        expect(cpuPanel().querySelector(".sim-instruction-consume")).toBeNull();
+        expect(cpuPanel().querySelector(".sim-value-change")).toBeNull();
+    });
+
+    it("Run after a previous program shows no stale bytes", async () => {
+        const user = await openPage();
+        fake.loadFile.mockResolvedValueOnce([MEMORY_CLEARED, memoryWrite(0, [0xAB, 0xCD])]);
+        await run(user);
+        expect(within(cpuPanel()).getByText("AB")).toBeTruthy();
+
+        fake.loadFile.mockResolvedValueOnce([MEMORY_CLEARED, memoryWrite(0x10, [0xEF])]);
+        await run(user);
+
+        await within(cpuPanel()).findByText("EF");
+        expect(within(cpuPanel()).queryByText("AB")).toBeNull();
+        expect(within(cpuPanel()).queryByText("CD")).toBeNull();
+    });
+
+    it("the command palette has a Clear Memory entry", async () => {
+        const user = await openPage();
+        fake.loadFile.mockResolvedValueOnce([MEMORY_CLEARED, memoryWrite(0, [0xAB])]);
+        await run(user);
+
+        await user.keyboard("{Control>}{Shift>}P{/Shift}{/Control}");
+        await user.click(await screen.findByRole("option", { name: "Clear Memory" }));
+
+        expect(fake.clearMemory).toHaveBeenCalledTimes(1);
+        await vi.waitFor(() => expect(within(cpuPanel()).queryByText("AB")).toBeNull());
+    });
+
+    it("the console's clearmem clears the memory, while clear still only clears the terminal", async () => {
+        await openPage();
+        const handle = { write: vi.fn(), clear: vi.fn() };
+
+        act(() => consoleProps.onCommand?.("clear", handle));
+        expect(handle.clear).toHaveBeenCalledTimes(1);
+        expect(fake.clearMemory).not.toHaveBeenCalled();
+
+        await act(async () => consoleProps.onCommand?.("clearmem", handle));
+        expect(fake.clearMemory).toHaveBeenCalledTimes(1);
+        expect(handle.clear).toHaveBeenCalledTimes(1);
+
+        act(() => consoleProps.onCommand?.("help", handle));
+        const help = handle.write.mock.calls.map(([text]) => text).join("");
+        expect(help).toMatch(/clearmem\s+Clear the memory/);
+        expect(help).toMatch(/clear\s+Clear the terminal/);
     });
 });

@@ -7,6 +7,11 @@ if (!Element.prototype.scrollTo) {
     Element.prototype.scrollTo = () => {};
 }
 
+// cmdk (the command palette) scrolls the selected item into view.
+if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = () => {};
+}
+
 if (!("ResizeObserver" in globalThis)) {
     globalThis.ResizeObserver = class {
         observe() {}

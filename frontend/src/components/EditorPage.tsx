@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
-import { Play, RotateCcw, Square, StepForward } from "lucide-react";
+import { Eraser, Play, RotateCcw, Square, StepForward } from "lucide-react";
 
 import { FileExplorer, type FileNode } from "@/components/FileExplorer";
 import { CodeEditor } from "@/components/CodeEditor";
@@ -286,6 +286,21 @@ export default function EditorPage({ projectId }: PageProps) {
         })
     }, [applyExecutionEvents, simulator]);
 
+    // Zero-fills the memory, in the backend and in the view. Registers, the
+    // PC marker and the symbol table stay; a running instruction animation
+    // still moves the PC marker when it ends.
+    const clearMemory = useCallback(async () => {
+        try {
+            const events = await simulator.clearMemory();
+            simulator.resolve(events, setMemory, setRegisters);
+            setChangedMemory([]);
+            setConsumedMemory([]);
+            consoleHandleRef.current?.write("Memory cleared.\r\n");
+        } catch (error) {
+            console.error("Clear failed:", error);
+        }
+    }, [simulator]);
+
     // --------------------------------------------------------
     // Console command handling
     // --------------------------------------------------------
@@ -300,12 +315,17 @@ export default function EditorPage({ projectId }: PageProps) {
                         "  run      Run the program\r\n" +
                         "  step     Execute one instruction\r\n" +
                         "  reset    Reset the simulator\r\n" +
+                        "  clearmem Clear the memory\r\n" +
                         "  clear    Clear the terminal\r\n",
                     );
                     break;
 
                 case "clear":
                     handle.clear();
+                    break;
+
+                case "clearmem":
+                    clearMemory();
                     break;
 
                 case "run":
@@ -325,7 +345,7 @@ export default function EditorPage({ projectId }: PageProps) {
                     break;
             }
         },
-        [run, step, reset],
+        [run, step, reset, clearMemory],
     );
 
     // --------------------------------------------------------
@@ -413,6 +433,7 @@ export default function EditorPage({ projectId }: PageProps) {
                 onStop={stop}
                 onStep={step}
                 onReset={reset}
+                onClear={clearMemory}
                 onOpenCommandPalette={() => setCommandPaletteOpen(true)}
             />
 
@@ -501,6 +522,12 @@ export default function EditorPage({ projectId }: PageProps) {
                         label: "Reset Simulator",
                         icon: RotateCcw,
                         onSelect: reset,
+                    },
+                    {
+                        id: "clear-memory",
+                        label: "Clear Memory",
+                        icon: Eraser,
+                        onSelect: clearMemory,
                     },
                     { id: "stop", label: "Stop Program", icon: Square, onSelect: stop },
                 ]}

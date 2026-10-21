@@ -1,6 +1,7 @@
 "use client";
 
 import {
+    Eraser,
     Play,
     RotateCcw,
     Search,
@@ -19,6 +20,8 @@ export type TopBarProps = {
     onStop: () => void;
     onStep: () => void;
     onReset: () => void;
+    /** Zero-fills the memory; registers, PC and symbols stay. */
+    onClear: () => void;
     onOpenCommandPalette: () => void;
 };
 
@@ -33,6 +36,7 @@ export function TopBar({
     onStop,
     onStep,
     onReset,
+    onClear,
     onOpenCommandPalette,
 }: TopBarProps) {
     return (
@@ -109,6 +113,23 @@ export function TopBar({
             >
                 <RotateCcw size={14} />
                 Reset
+            </button>
+
+            <button
+                onClick={onClear}
+                className="
+                    flex
+                    items-center
+                    gap-1.5
+                    px-2.5
+                    py-1.5
+                    rounded
+                    text-xs
+                    hover:bg-zinc-800
+                "
+            >
+                <Eraser size={14} />
+                Clear
             </button>
 
             <div className="flex-1" />
