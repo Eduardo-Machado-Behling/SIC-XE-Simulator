@@ -26,7 +26,7 @@ function props(overrides: Partial<ArchProps> = {}): ArchProps {
         changedRegisters: [],
         changeRevision: 0,
         consumedMemory: [],
-        symbols: null,
+        assembly: null,
         ...overrides,
     };
 }
@@ -105,22 +105,26 @@ describe("ExecutionView", () => {
         expect(screen.queryByRole("tabpanel", { name: "Assembler" })).toBeNull();
     });
 
-    it("shows the latest symbol table on the Assembler tab", async () => {
+    it("shows the latest assembly report on the Assembler tab, opening on its listing", async () => {
         const user = userEvent.setup();
-        const { rerender } = render(inLayout(<ExecutionView {...props({ symbols: [{ name: "FIRST", value: 0x1000 }] })} />));
+        const report = (name: string) => ({
+            symbols: [{ name, value: 0x1000 }],
+            listing: [{ line: 1, address: 0x1000, bytes: [0x4F, 0x00, 0x00], source: `${name} RSUB` }],
+        });
+        const { rerender } = render(inLayout(<ExecutionView {...props({ assembly: report("FIRST") })} />));
 
         await user.click(screen.getByRole("tab", { name: "Assembler" }));
-        expect(within(screen.getByRole("tabpanel", { name: "Assembler" })).getByText("FIRST")).toBeTruthy();
+        const listing = () => within(screen.getByRole("tabpanel", { name: "Assembler" })).getByRole("table", { name: "Listing" });
+        expect(within(listing()).getByText("FIRST RSUB")).toBeTruthy();
 
-        rerender(inLayout(<ExecutionView {...props({ symbols: [{ name: "AGAIN", value: 0x2000 }] })} />));
-        const assembler = screen.getByRole("tabpanel", { name: "Assembler" });
-        expect(within(assembler).getByText("AGAIN")).toBeTruthy();
-        expect(within(assembler).queryByText("FIRST")).toBeNull();
+        rerender(inLayout(<ExecutionView {...props({ assembly: report("AGAIN") })} />));
+        expect(within(listing()).getByText("AGAIN RSUB")).toBeTruthy();
+        expect(within(listing()).queryByText("FIRST RSUB")).toBeNull();
     });
 
     it("shows an empty state on the Assembler tab before anything is assembled", async () => {
         const user = userEvent.setup();
-        render(inLayout(<ExecutionView {...props({ symbols: null })} />));
+        render(inLayout(<ExecutionView {...props({ assembly: null })} />));
 
         await user.click(screen.getByRole("tab", { name: "Assembler" }));
 

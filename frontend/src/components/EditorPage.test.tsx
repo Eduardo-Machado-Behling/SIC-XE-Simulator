@@ -35,11 +35,28 @@ const ARCH: ArchitectureInfo = {
     instructions: [],
 };
 
+// One "<name>  RSUB" statement per name, each defining that name.
 function assembled(...names: string[]): ExecutionEvent[] {
     return [{
         type: "ProgramAssembled",
-        details: { symbols: names.map((name, index) => ({ name, value: 0x1000 + 3 * index })) },
+        details: {
+            symbols: names.map((name, index) => ({ name, value: 0x1000 + 3 * index })),
+            program: { name: "DEMO", start: 0x1000, length: 3 * names.length, entry: 0x1000 },
+            listing: names.map((name, index) => ({
+                line: index + 1,
+                address: 0x1000 + 3 * index,
+                bytes: [0x4F, 0x00, 0x00],
+                source: `${name}  RSUB`,
+            })),
+            relocations: [],
+            diagnostics: [],
+        },
     }];
+}
+
+// The listing row of a statement made by assembled().
+function listed(name: string): HTMLElement | null {
+    return within(assemblerPanel()).queryByText(`${name} RSUB`);
 }
 
 function simulatorCalls(): number {
@@ -65,7 +82,7 @@ function assemblerPanel(): HTMLElement {
     return screen.getByRole("tabpanel", { name: "Assembler" });
 }
 
-describe("EditorPage symbol table", () => {
+describe("EditorPage assembly report", () => {
     beforeEach(() => {
         fake.loadProject.mockResolvedValue({
             project: { id: "demo", name: "Demo", architecture: "SIC/XE", files: { "main.asm": "FIRST START 1000" } },
@@ -83,14 +100,15 @@ describe("EditorPage symbol table", () => {
         for (const fn of Object.values(fake)) fn.mockReset();
     });
 
-    it("shows the symbols of a run, keeps them across a step and replaces them on reassembly", async () => {
+    it("shows the report of a run, keeps it across a step and replaces it on reassembly", async () => {
         const user = await openPage();
         await user.click(screen.getByRole("tab", { name: "Assembler" }));
-        expect(within(assemblerPanel()).getByRole("status").textContent).toMatch(/no symbol table/i);
+        expect(within(assemblerPanel()).getByRole("status").textContent).toMatch(/no assembly report/i);
 
         fake.loadFile.mockResolvedValueOnce(assembled("FIRST", "LOOP"));
         await run(user);
         expect(await within(assemblerPanel()).findByText("LOOP")).toBeTruthy();
+        expect(listed("LOOP")).toBeTruthy();
         expect(fake.setFile).toHaveBeenCalledWith("main.asm", "FIRST START 1000");
         expect(fake.loadFile).toHaveBeenCalledWith("main.asm");
 
@@ -102,9 +120,10 @@ describe("EditorPage symbol table", () => {
         await run(user);
         expect(await within(assemblerPanel()).findByText("AGAIN")).toBeTruthy();
         expect(within(assemblerPanel()).queryByText("LOOP")).toBeNull();
+        expect(listed("LOOP")).toBeNull();
     });
 
-    it("clears the symbols when a later run fails, instead of showing the previous program's", async () => {
+    it("clears the report when a later run fails, instead of showing the previous program's", async () => {
         const user = await openPage();
         await user.click(screen.getByRole("tab", { name: "Assembler" }));
 
@@ -123,9 +142,10 @@ describe("EditorPage symbol table", () => {
 
         await within(assemblerPanel()).findByRole("status");
         expect(within(assemblerPanel()).queryByText("FIRST")).toBeNull();
+        expect(listed("FIRST")).toBeNull();
     });
 
-    it("shows no symbols after a run whose events carry no symbol table", async () => {
+    it("shows no report after a run whose events carry none, as for a hex dump", async () => {
         const user = await openPage();
         await user.click(screen.getByRole("tab", { name: "Assembler" }));
 
@@ -137,9 +157,10 @@ describe("EditorPage symbol table", () => {
         await run(user);
         await within(assemblerPanel()).findByRole("status");
         expect(within(assemblerPanel()).queryByText("FIRST")).toBeNull();
+        expect(listed("FIRST")).toBeNull();
     });
 
-    it("clears the symbols when another project is loaded", async () => {
+    it("clears the report when another project is loaded", async () => {
         const user = userEvent.setup();
         const { rerender } = render(<EditorPage projectId="demo" />);
         await screen.findByRole("button", { name: "Run" });
@@ -154,6 +175,24 @@ describe("EditorPage symbol table", () => {
         await within(assemblerPanel()).findByRole("status");
         expect(fake.loadProject).toHaveBeenLastCalledWith("other");
         expect(within(assemblerPanel()).queryByText("FIRST")).toBeNull();
+        expect(listed("FIRST")).toBeNull();
+    });
+
+    it("clears the report when the machine is cleared", async () => {
+        const user = await openPage();
+        await user.click(screen.getByRole("tab", { name: "Assembler" }));
+
+        fake.loadFile.mockResolvedValueOnce(assembled("FIRST"));
+        await run(user);
+        expect(await within(assemblerPanel()).findByText("FIRST")).toBeTruthy();
+
+        fake.clear.mockResolvedValueOnce([{ type: "MemoryCleared" }, { type: "ProgramCleared" }]);
+        await user.click(screen.getByRole("button", { name: "Clear" }));
+
+        await within(assemblerPanel()).findByRole("status");
+        expect(fake.clear).toHaveBeenCalledTimes(1);
+        expect(within(assemblerPanel()).queryByText("FIRST")).toBeNull();
+        expect(listed("FIRST")).toBeNull();
     });
 
     it("does not call the simulator when switching tabs", async () => {
