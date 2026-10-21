@@ -3,7 +3,8 @@ import { afterEach } from "vitest";
 
 // jsdom has no layout engine, so it implements neither element scrolling nor
 // ResizeObserver (used by react-resizable-panels); layout is not under test.
-if (!Element.prototype.scrollTo) {
+// Files under `@vitest-environment node` have no DOM at all.
+if (typeof Element !== "undefined" && !Element.prototype.scrollTo) {
     Element.prototype.scrollTo = () => {};
 }
 
