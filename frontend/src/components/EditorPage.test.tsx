@@ -12,6 +12,8 @@ import { createMemorySessionStore } from "@/lib/session/sessionCookie";
 import type { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
 import type { ExecutionEvent } from "@/lib/simulator/ExecutionEvent";
 import type { Project } from "@/lib/simulator/Project";
+import { Simulator } from "@/lib/simulator/Simulator";
+import { SimulatorCommandError } from "@/lib/transport/SimulatorTransport";
 import { FakeBackend } from "@/test/fakeBackend";
 
 // Monaco and xterm need a real browser; stand-ins keep the page's own logic under test.
@@ -82,6 +84,12 @@ function setup(simulator: Partial<EditorSimulator>) {
     const { rerender } = render(<EditorPage projectId={A} sync={sync} simulator={fake} />);
     const show = (projectId: string) => rerender(<EditorPage projectId={projectId} sync={sync} simulator={fake} />);
     return { fake, store, show };
+}
+
+/** The value the register view shows for one register, e.g. "0x000009". */
+function registerValue(name: string): string | null | undefined {
+    const label = screen.getAllByText(name).find((element) => element.nextElementSibling?.textContent?.startsWith("0x"));
+    return label?.nextElementSibling?.textContent;
 }
 
 // Typed with the input focused directly: in jsdom every panel separator sits at
@@ -170,6 +178,51 @@ describe("EditorPage execution", () => {
         await waitFor(() => expect(consoleOutput.join("")).toContain("Program finished."));
         expect(fake.runFile).toHaveBeenCalledWith({ ...hello, files: { "main.asm": "LDA #2" } }, "main.asm");
         expect(consoleOutput.join("").indexOf("Running program")).toBeLessThan(consoleOutput.join("").indexOf("Program finished."));
+    });
+
+    // Every Run stages the project again, and the backend's `load $<id>`
+    // (Simulator::load_project) re-allocates the registers as zeros and sends
+    // no event for it. A run whose events do not write A therefore leaves A at
+    // 0 on the server, and the register view has to show 0 as well.
+    it("starts each run from the zeroed registers the simulator is left with after staging", async () => {
+        const user = userEvent.setup();
+        const writeA9: ExecutionEvent = {
+            type: "RegisterWrite", name: "A", bytes: [0, 0, 9], value: 9, old_bytes: [0, 0, 0], old_value: 0,
+        };
+        const { fake } = setup({ resolve: vi.fn(Simulator.prototype.resolve) });
+        vi.mocked(fake.runFile).mockResolvedValueOnce([writeA9]).mockResolvedValueOnce([]);
+        await waitFor(() => expect((screen.getByRole("button", { name: /Run/ }) as HTMLButtonElement).disabled).toBe(false));
+
+        await user.click(screen.getByRole("button", { name: /Run/ }));
+        await waitFor(() => expect(registerValue("A")).toBe("0x000009"));
+
+        await user.click(screen.getByRole("button", { name: "Stop" }));
+        await user.click(screen.getByRole("button", { name: /Run/ }));
+
+        await waitFor(() => expect(fake.runFile).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(registerValue("A")).toBe("0x000000"));
+    });
+
+    it("also starts from the zeroed registers when the staged file fails to load", async () => {
+        const user = userEvent.setup();
+        const writeA9: ExecutionEvent = {
+            type: "RegisterWrite", name: "A", bytes: [0, 0, 9], value: 9, old_bytes: [0, 0, 0], old_value: 0,
+        };
+        const assemblyError = new SimulatorCommandError(
+            { type: "invalid-request", status: 400, title: "Assembly failed", detail: "unknown mnemonic" },
+            [],
+        );
+        const { fake } = setup({ resolve: vi.fn(Simulator.prototype.resolve) });
+        vi.mocked(fake.runFile).mockResolvedValueOnce([writeA9]).mockRejectedValueOnce(assemblyError);
+        await waitFor(() => expect((screen.getByRole("button", { name: /Run/ }) as HTMLButtonElement).disabled).toBe(false));
+
+        await user.click(screen.getByRole("button", { name: /Run/ }));
+        await waitFor(() => expect(registerValue("A")).toBe("0x000009"));
+        await user.click(screen.getByRole("button", { name: "Stop" }));
+        await user.click(screen.getByRole("button", { name: /Run/ }));
+
+        expect((await screen.findByRole("alertdialog")).textContent).toContain("unknown mnemonic");
+        expect(registerValue("A")).toBe("0x000000");
     });
 
     it("reports a failed run in the console and the error dialog", async () => {

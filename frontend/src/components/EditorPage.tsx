@@ -84,6 +84,11 @@ interface PageProps {
     simulator?: EditorSimulator
 }
 
+/** The registers of a freshly loaded architecture: all zero. */
+function zeroedRegisters(info: ArchitectureInfo): RegisterState[] {
+    return info.registers.map((reg) => ({ id: reg.id, name: reg.name, value: 0 }));
+}
+
 function errorMessage(err: unknown): string {
     return err instanceof Error ? err.message : String(err);
 }
@@ -242,11 +247,7 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
 
                 setArch(info);
                 setArchError(null);
-                setRegisters(info.registers.map((reg) => ({
-                    id: reg.id,
-                    name: reg.name,
-                    value: 0,
-                })));
+                setRegisters(zeroedRegisters(info));
             } catch (err) {
                 if (!cancelled) {
                     setArchError(`Architecture info unavailable: ${errorMessage(err)}`);
@@ -361,6 +362,18 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
         reportCommandError(err);
     }, [reportCommandError]);
 
+    // Run stages the project again, and the simulator's `load $<id>` leaves
+    // zeroed registers and empty memory behind without reporting an event for
+    // it. The views start from that state before the run's events apply.
+    const showStagedMachine = useCallback(() => {
+        if (instructionTimerRef.current) clearTimeout(instructionTimerRef.current);
+        setRegisters(arch ? zeroedRegisters(arch) : []);
+        setMemory(new Map());
+        setChangedRegisters([]);
+        setConsumedMemory([]);
+        setPc(0);
+    }, [arch]);
+
     const run = useCallback(async () => {
         if (refuseExecution()) return;
         consoleHandleRef.current?.write("Running program...\r\n");
@@ -372,6 +385,7 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
 
             const steps = await getSimulator().runFile(current, activeFile);
 
+            showStagedMachine();
             setSymbols(symbolsFromEvents(steps));
             applyExecutionEvents(steps);
 
@@ -379,11 +393,13 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
             consoleHandleRef.current?.write("Program finished.\r\n");
         } catch (err) {
             setIsRunning(false);
+            // The simulator answered the load itself, so the staging before it went through.
+            if (err instanceof SimulatorCommandError) showStagedMachine();
             // The previous program's symbols no longer describe the source.
             setSymbols(null);
             reportFailure("Run", err);
         }
-    }, [activeFile, applyExecutionEvents, getSync, projectId, refuseExecution, reportFailure, getSimulator]);
+    }, [activeFile, applyExecutionEvents, getSync, projectId, refuseExecution, reportFailure, getSimulator, showStagedMachine]);
 
     const stop = useCallback(() => {
         setIsRunning(false);
