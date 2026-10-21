@@ -61,18 +61,25 @@ export default function legacy(ctx) {
       assert.equal(typeof res.json.message, 'string');
     });
 
-    it('/ws: load $0, step and reset still answer with the same envelope', async () => {
+    it('/ws: load $0, step, reset and clear answer with the documented envelopes', async () => {
       const replies = await wsRequest(ctx.server.wsUrl, [
         { id: 1, type: 'command', payload: 'load $0' },
         { id: 2, type: 'command', payload: 'step' },
         { id: 3, type: 'command', payload: 'reset' },
+        { id: 4, type: 'command', payload: 'clear' },
       ]);
-      assert.deepEqual(replies.map((r) => r.id), [1, 2, 3]);
-      const [load, step, reset] = replies;
+      assert.deepEqual(replies.map((r) => r.id), [1, 2, 3, 4]);
+      const [load, step, reset, clear] = replies;
       assert.equal(load.result.project.id, '0');
       assert.equal(typeof load.result.arch, 'object');
+      // backend/docs/websocket-protocol.md: step answers the events themselves,
+      // reset and clear an event batch {from, to, events}.
       assert.ok(Array.isArray(step.result), JSON.stringify(step));
-      assert.ok(Array.isArray(reset.result), JSON.stringify(reset));
+      for (const batch of [reset, clear]) {
+        assert.ok(Array.isArray(batch.result?.events), JSON.stringify(batch));
+        assert.ok(Number.isInteger(batch.result.from) && Number.isInteger(batch.result.to), JSON.stringify(batch));
+      }
+      assert.ok(clear.result.events.some((e) => e.type === 'ProgramCleared'), JSON.stringify(clear));
     });
   });
 }
