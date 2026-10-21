@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import EditorPage from "@/components/EditorPage";
 import type { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
 import type { ExecutionEvent } from "@/lib/simulator/ExecutionEvent";
+import { SimulatorCommandError } from "@/lib/transport/SimulatorTransport";
 
 // The simulator talks to the backend over a WebSocket; this fake stands in for
 // it, so each test decides what a run, a step or a reset returns.
@@ -14,6 +15,7 @@ const fake = vi.hoisted(() => ({
     loadFile: vi.fn(),
     step: vi.fn(),
     reset: vi.fn(),
+    clear: vi.fn(),
     resolve: vi.fn(),
 }));
 
@@ -110,7 +112,12 @@ describe("EditorPage symbol table", () => {
         await run(user);
         expect(await within(assemblerPanel()).findByText("FIRST")).toBeTruthy();
 
-        fake.loadFile.mockRejectedValueOnce(new Error("assembly failed"));
+        // As the backend replies to a load whose source does not assemble: the
+        // load cleared the previous program before the assembly failed.
+        fake.loadFile.mockRejectedValueOnce(new SimulatorCommandError(
+            { type: "invalid-request", status: 400, title: "Invalid request", detail: "assembly failed" },
+            [{ type: "MemoryCleared" }, { type: "ProgramCleared" }],
+        ));
         await user.click(screen.getByRole("button", { name: "Stop" }));
         await user.click(screen.getByRole("button", { name: "Run" }));
 
