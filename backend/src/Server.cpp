@@ -1,12 +1,37 @@
 #include "Server.hpp"
 
 #include <regex>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
+#include "api/ApiError.hpp"
 #include "architecture/InfoSerializer.hpp"
 
 using json = nlohmann::json;
+
+namespace {
+
+// httplib percent-decodes the path before routing and lets `:param` match a
+// trailing '/'. Without this check, `/sessions/<id>%2Fprojects` would run
+// GET /sessions/{sessionId}/projects and `/sessions/<id>/` would run
+// GET /sessions/{sessionId}. No documented path has an encoded '/' in a
+// segment or ends with '/', so such requests get 404 not-found instead.
+// The query string (e.g. ?path=src%2Fmain.asm) is not affected.
+bool is_unroutable_path(const httplib::Request& req) {
+    if (req.path.size() > 1 && req.path.back() == '/')
+        return true;
+
+    const std::string_view target = req.target;
+    const std::string_view path = target.substr(0, target.find('?'));
+    for (std::size_t i = 0; i + 2 < path.size(); ++i) {
+        if (path[i] == '%' && path[i + 1] == '2' && (path[i + 2] == 'F' || path[i + 2] == 'f'))
+            return true;
+    }
+    return false;
+}
+
+} // namespace
 
 Server::Server(Simulator& simulator)
     : m_simulator(simulator) {
@@ -54,6 +79,14 @@ void Server::setup_cors() {
 
         if (req.method == "OPTIONS") {
             res.status = 204;
+
+            return httplib::Server::HandlerResponse::Handled;
+        }
+
+        if (is_unroutable_path(req)) {
+            const api::ApiError error = api::route_not_found();
+            res.status = error.status;
+            res.set_content(error.to_json().dump(), "application/json");
 
             return httplib::Server::HandlerResponse::Handled;
         }

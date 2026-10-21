@@ -121,7 +121,7 @@ void Server::setup_errors() {
         api::ApiError error{res.status, "", httplib::status_message(res.status)};
         switch (res.status) {
             case 400: error = api::invalid_request("malformed HTTP request"); break;
-            case 404: error = {404, api::error_type::NotFound, "Not found", "no such route"}; break;
+            case 404: error = api::route_not_found(); break;
             case 413: error = api::payload_too_large("request body exceeds the server's size limit"); break;
             case 500: error = api::internal_error(); break;
             default: error.type = "http-" + std::to_string(res.status); break;
