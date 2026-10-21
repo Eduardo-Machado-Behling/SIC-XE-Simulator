@@ -129,13 +129,17 @@ void Server::setup_http() {
 }
 
 // TODO: this a Jerry-rig, a Jury-rig, a Makeshift solution, a MacGyver, a Quick fix, a Kludge, ...
-enum class Command { LOAD_PROJECT, LOAD_FILE, RESET, STEP };
+enum class Command { LOAD_PROJECT, LOAD_FILE, RESET, STEP, CLEAR_MEMORY };
 
+// /ws commands. 'clear' zero-fills the memory only (registers and PC stay)
+// and answers {"id","result":[{"type":"MemoryCleared"}]}, with or without a
+// loaded project.
 const std::vector<std::pair<std::regex, Command>> patterns = {
     {std::regex{R"(^load \$([\w_]+)$)"}, Command::LOAD_PROJECT},
     {std::regex{R"(^load %([A-Za-z0-9._-]+)$)"}, Command::LOAD_FILE},
     {std::regex{R"(^reset$)"}, Command::RESET},
     {std::regex{R"(^step$)"}, Command::STEP},
+    {std::regex{R"(^clear$)"}, Command::CLEAR_MEMORY},
 };
 
 void Server::setup_ws() {
@@ -202,6 +206,15 @@ void Server::setup_ws() {
 
                         case Command::STEP: {
                             const EventBatch batch = m_simulator.step();
+                            response = json{{"id", j.at("id")},
+                                            {"result", batch.events}}
+                                           .dump();
+
+                            break;
+                        }
+
+                        case Command::CLEAR_MEMORY: {
+                            const EventBatch batch = m_simulator.clear_memory();
                             response = json{{"id", j.at("id")},
                                             {"result", batch.events}}
                                            .dump();

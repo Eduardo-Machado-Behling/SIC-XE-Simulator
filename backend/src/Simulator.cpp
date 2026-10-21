@@ -1,5 +1,9 @@
 #include "Simulator.hpp"
 
+#include <memory>
+
+#include "architecture/events/MemoryCleared.hpp"
+
 ProjectManager::ProjectView Simulator::list_projects() {
     return m_projectManager.listProjects();
 }
@@ -45,7 +49,9 @@ EventBatch Simulator::load_file(const std::string& filepath) {
         m_currentProject->files.find(filepath) == m_currentProject->files.end())
         return {from, from, nlohmann::json::array()};
 
-    m_memory.clear();
+    // Start from a zeroed memory, as an event, so a client that applies the
+    // batch in order drops the bytes of the previous program too.
+    m_eventManager.execute(std::make_unique<architecture::events::MemoryCleared>());
     m_architectureManager.get()->load_file(m_currentProject->files.at(filepath));
 
     const std::size_t to = m_eventManager.size();
@@ -74,6 +80,14 @@ EventBatch Simulator::reset() {
     const std::size_t from = m_eventManager.size();
     arch->reset();
     arch->consume_events(); // Drain legacy notifications during migration.
+
+    const std::size_t to = m_eventManager.size();
+    return {from, to, m_eventManager.events_since(from)};
+}
+
+EventBatch Simulator::clear_memory() {
+    const std::size_t from = m_eventManager.size();
+    m_eventManager.execute(std::make_unique<architecture::events::MemoryCleared>());
 
     const std::size_t to = m_eventManager.size();
     return {from, to, m_eventManager.events_since(from)};

@@ -15,6 +15,7 @@ import { createClient } from './support/http.js';
 import { startServer } from './support/server.js';
 import { documentedOperations, uncoveredResponses } from './support/spec.js';
 
+import clearMemory from './suites/clear-memory.js';
 import contract from './suites/contract.js';
 import errorsAndLimits from './suites/errors-limits.js';
 import fileOperations from './suites/files.js';
@@ -66,6 +67,7 @@ isolationAndConcurrency(ctx);
 errorsAndLimits(ctx);
 contract(ctx);
 legacy(ctx);
+clearMemory();
 startup(ctx);
 storageLimits();
 

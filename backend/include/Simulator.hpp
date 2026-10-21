@@ -44,6 +44,11 @@ public:
     void stop();
     EventBatch reset();
 
+    // Zero-fills the memory (registers and PC stay) and returns the
+    // [MemoryCleared] batch. Works without a project too: the memory is
+    // empty then, and the batch is still [MemoryCleared].
+    EventBatch clear_memory();
+
     EventBatch step();
 
     // TODO:
