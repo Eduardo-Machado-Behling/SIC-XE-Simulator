@@ -62,8 +62,9 @@ const ARCH: ArchitectureInfo = {
     instructions: [],
 };
 
-function setup(simulator: Partial<EditorSimulator>) {
+function setup(simulator: Partial<EditorSimulator>, prepare?: (backend: FakeBackend) => void) {
     const backend = new FakeBackend();
+    prepare?.(backend);
     const store = new LocalProjectStore(() => undefined);
     store.put(hello);
     const sync = new ProjectSync({
@@ -83,7 +84,7 @@ function setup(simulator: Partial<EditorSimulator>) {
     };
     const { rerender } = render(<EditorPage projectId={A} sync={sync} simulator={fake} />);
     const show = (projectId: string) => rerender(<EditorPage projectId={projectId} sync={sync} simulator={fake} />);
-    return { fake, store, show };
+    return { fake, store, show, backend };
 }
 
 /** The value the register view shows for one register, e.g. "0x000009". */
@@ -223,6 +224,21 @@ describe("EditorPage execution", () => {
 
         expect((await screen.findByRole("alertdialog")).textContent).toContain("unknown mnemonic");
         expect(registerValue("A")).toBe("0x000000");
+    });
+
+    it("catches the server mirror up once a simulator command shows the server answers again", async () => {
+        const user = userEvent.setup();
+        const { backend } = setup({}, (server) => {
+            server.online = false;
+        });
+        await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/unreachable/i));
+        await waitFor(() => expect((screen.getByRole("button", { name: /Step/ }) as HTMLButtonElement).disabled).toBe(false));
+        backend.online = true;
+
+        await user.click(screen.getByRole("button", { name: /Step/ }));
+
+        await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+        expect(backend.requests(/sessions/)).toEqual(["POST /sessions", expect.stringMatching(/^PUT \/sessions\/[^/]+\/projects$/)]);
     });
 
     it("reports a failed run in the console and the error dialog", async () => {

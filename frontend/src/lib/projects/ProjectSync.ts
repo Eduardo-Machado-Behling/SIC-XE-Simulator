@@ -14,8 +14,8 @@
  * Local writes happen first and never depend on the server; server failures
  * are reported (SyncOutcome / SyncStatus) and the local data is kept. A write
  * that failed is sent again (from the current local state) after the next
- * successful one, on flush() and with every bulk sync; until then the status
- * stays "error".
+ * successful one, on flush() and catchUp() and with every bulk sync; until
+ * then the status stays "error".
  *
  * Every request for one project (its upsert/delete and its files) runs in
  * order on one queue and reads the local store when it is sent, so an older
@@ -383,6 +383,18 @@ export class ProjectSync {
         this.cancelPendingFile(fileKey(projectId, path));
         this.store.removeFile(projectId, path);
         return this.write({ projectId, path });
+    }
+
+    /**
+     * After an error, tries again now instead of waiting for the next edit:
+     * establishes the session if the start failed, then resends every failed
+     * write. Does nothing (and sends nothing) when the last status is not an
+     * error. Call it when the server is known to answer again.
+     */
+    async catchUp(): Promise<void> {
+        if (this.getStatus().state !== "error") return;
+        await this.start();
+        await this.flush();
     }
 
     /** Sends every pending file save and every failed write now, and waits for all requests. */

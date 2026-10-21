@@ -610,6 +610,41 @@ describe("failed mirror writes", () => {
         expect(mirror(backend, session.read()!)).toEqual([{ id: NEW_ID, name: "New", architecture: "SIC", files: { "main.asm": "" } }]);
     });
 
+    it("catches up after a start that could not reach the server, without waiting for an edit", async () => {
+        const { backend, session, sync } = setup({ projects: [helloA] });
+        backend.online = false;
+        await expect(sync.start()).resolves.toMatchObject({ ok: false, kind: "network" });
+        backend.online = true;
+
+        await sync.catchUp();
+
+        expect(mirror(backend, session.read()!)).toEqual([{ id: A, name: "Hello", architecture: "SIC-XE", files: helloA.files }]);
+        expect(sync.getStatus()).toEqual({ state: "synced", recoveredSession: false });
+    });
+
+    it("catches up on a failed save once the server answers again", async () => {
+        const { backend, session, sync } = setup({ projects: [helloA] });
+        await sync.start();
+        backend.online = false;
+        await sync.saveFile(A, "main.asm", "LDA #1");
+        backend.online = true;
+
+        await sync.catchUp();
+
+        expect(mirror(backend, session.read()!)[0].files["main.asm"]).toBe("LDA #1");
+        expect(sync.getStatus()).toEqual({ state: "synced", recoveredSession: false });
+    });
+
+    it("sends nothing to catch up on when nothing failed", async () => {
+        const { backend, sync } = setup({ projects: [helloA] });
+        await sync.start();
+        backend.log.length = 0;
+
+        await sync.catchUp();
+
+        expect(backend.requests()).toEqual([]);
+    });
+
     it("treats inherited names like toString as missing files", async () => {
         const { backend, sync } = setup({ projects: [helloA] });
         await sync.start();

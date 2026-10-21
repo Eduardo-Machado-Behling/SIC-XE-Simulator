@@ -357,6 +357,12 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
         return true;
     }, [executionBlocked]);
 
+    // A simulator command that went through shows the server answers again,
+    // so a failed mirror write need not wait for the next edit.
+    const catchUpSync = useCallback(() => {
+        void getSync().catchUp();
+    }, [getSync]);
+
     const reportFailure = useCallback((action: string, err: unknown) => {
         consoleHandleRef.current?.write(`${action} failed: ${errorMessage(err)}\r\n`);
         reportCommandError(err);
@@ -391,6 +397,7 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
 
             setIsRunning(true);
             consoleHandleRef.current?.write("Program finished.\r\n");
+            catchUpSync();
         } catch (err) {
             setIsRunning(false);
             // The simulator answered the load itself, so the staging before it went through.
@@ -399,7 +406,7 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
             setSymbols(null);
             reportFailure("Run", err);
         }
-    }, [activeFile, applyExecutionEvents, getSync, projectId, refuseExecution, reportFailure, getSimulator, showStagedMachine]);
+    }, [activeFile, applyExecutionEvents, catchUpSync, getSync, projectId, refuseExecution, reportFailure, getSimulator, showStagedMachine]);
 
     const stop = useCallback(() => {
         setIsRunning(false);
@@ -412,10 +419,11 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
             const steps = await getSimulator().step();
             applyExecutionEvents(steps);
             consoleHandleRef.current?.write(JSON.stringify(steps));
+            catchUpSync();
         } catch (err) {
             reportFailure("Step", err);
         }
-    }, [applyExecutionEvents, refuseExecution, reportFailure, getSimulator]);
+    }, [applyExecutionEvents, catchUpSync, refuseExecution, reportFailure, getSimulator]);
 
     const reset = useCallback(async () => {
         if (refuseExecution()) return;
@@ -426,10 +434,11 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
         try {
             const steps = await getSimulator().reset();
             applyExecutionEvents(steps, false);
+            catchUpSync();
         } catch (err) {
             reportFailure("Reset", err);
         }
-    }, [applyExecutionEvents, refuseExecution, reportFailure, getSimulator]);
+    }, [applyExecutionEvents, catchUpSync, refuseExecution, reportFailure, getSimulator]);
 
     const clearMachine = useCallback(async () => {
         if (refuseExecution()) return;
@@ -440,10 +449,11 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
             const events = await getSimulator().clear();
             applyExecutionEvents(events, false);
             setSymbols(null);
+            catchUpSync();
         } catch (err) {
             reportFailure("Clear", err);
         }
-    }, [applyExecutionEvents, refuseExecution, reportFailure, getSimulator]);
+    }, [applyExecutionEvents, catchUpSync, refuseExecution, reportFailure, getSimulator]);
 
     // --------------------------------------------------------
     // Console command handling
