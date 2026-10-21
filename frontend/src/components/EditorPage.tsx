@@ -343,7 +343,7 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
     // Run, Step and Reset need a simulator bound to this project: without
     // one, the shared server would act on whatever project it bound last.
     const executionBlocked = archError
-        ? `The simulator cannot run this project. ${archError} Reload the page to try again.`
+        ? `The simulator cannot run this project. ${archError.replace(/\.?$/, ".")} Reload the page to try again.`
         : arch
             ? null
             : "The simulator is still loading this project.";

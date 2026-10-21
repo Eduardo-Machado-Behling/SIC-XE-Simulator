@@ -105,6 +105,9 @@ describe("EditorPage execution", () => {
         expect((screen.getByRole("button", { name: /Step/ }) as HTMLButtonElement).disabled).toBe(true);
         expect((screen.getByRole("button", { name: /Reset/ }) as HTMLButtonElement).disabled).toBe(true);
         expect((screen.getByRole("button", { name: /^Clear$/ }) as HTMLButtonElement).disabled).toBe(true);
+        expect((screen.getByRole("button", { name: /Run/ }) as HTMLButtonElement).title).toBe(
+            "The simulator cannot run this project. Architecture info unavailable: Simulator did not answer. Reload the page to try again.",
+        );
 
         await consoleCommand("run");
         await consoleCommand("step");
