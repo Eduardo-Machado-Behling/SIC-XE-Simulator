@@ -49,6 +49,14 @@ struct SymbolReference {
   int length = 0;
 };
 
+// Source location of one emitted instruction. The address is the exact
+// instruction entry point; the source line is 1-based for editor APIs.
+struct InstructionSourceLocation {
+  std::size_t address = 0;
+  std::size_t size = 0;
+  int line = 0;
+};
+
 // Everything the CodeMemory alone cannot express.
 struct AssemblyInfo {
   std::vector<Diagnostic> diagnostics;      // warnings and errors, ordered by line
@@ -60,6 +68,7 @@ struct AssemblyInfo {
   std::map<std::string, std::int64_t> symbols;
   std::vector<SymbolLocation> symbolDefinitions;
   std::vector<SymbolReference> symbolReferences;
+  std::vector<InstructionSourceLocation> instructionSourceMap;
   std::string listing;                      // "ADDR  OBJECT  SOURCE" per statement
 };
 

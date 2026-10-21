@@ -1,0 +1,104 @@
+@startuml
+title SIC/XE Language Server - Document and Editor Request Sequence
+autonumber
+hide footbox
+skinparam shadowing false
+
+actor Developer
+participant "Monaco (CodeEditor)" as Editor
+participant "AssemblerLanguageClient" as Client
+participant "WebSocket /language" as WS
+participant "Server language WebSocket handler" as Server
+participant "AssemblerLanguageSession\n(per connection)" as Session
+participant "sicxe::Assembler" as Assembler
+
+note over Session
+Each WebSocket connection gets its own session.
+The session stores open documents, versions, and cached analysis results.
+end note
+
+== Connect and initialize ==
+Editor -> Client: start()
+Client -> WS: Open WebSocket
+WS -> Server: Accept connection
+Server -> Session: Create session
+Client -> WS: initialize request
+WS -> Session: handle(initialize)
+Session --> WS: Capabilities and SIC/XE vocabulary
+WS --> Client: initialize response with request id
+Client -> WS: initialized notification
+WS -> Session: handle(initialized)
+Client --> Editor: Publish language catalog
+
+== Open source document ==
+Developer -> Editor: Open SIC/XE source
+Editor -> Client: openDocument(uri, text)
+Client -> WS: textDocument/didOpen\n(uri, languageId, version, text)
+WS -> Session: handle(didOpen)
+Session -> Session: Store document and version
+Session -> Session: Analyze document when needed
+Session -> Assembler: assembleDetailed(text)
+Assembler --> Session: AssemblyResult and diagnostics
+Session -> Session: Map assembler diagnostics to LSP ranges
+Session --> WS: textDocument/publishDiagnostics\n(uri, version, diagnostics)
+WS --> Client: Diagnostics notification
+Client --> Editor: Set Monaco markers
+
+== Edit and synchronize ==
+Developer -> Editor: Edit source text
+Editor -> Client: changeDocument(uri, text)
+note right of Client
+Client increments the version and debounces
+full-text updates for 250 ms.
+end note
+... debounce interval ...
+Client -> WS: textDocument/didChange\n(version, full document text)
+WS -> Session: handle(didChange)
+Session -> Session: Ignore stale version; replace text;\nmark unsaved and unanalyzed
+Session -> Assembler: assembleDetailed(updated text)
+Assembler --> Session: Updated AssemblyResult
+Session -> Session: Publish diagnostics for this version
+Session --> WS: textDocument/publishDiagnostics
+WS --> Client: Diagnostics notification
+Client --> Editor: Ignore stale diagnostics; update markers
+
+== Language feature request ==
+Developer -> Editor: Request completion, hover, definition,\nreferences, or rename
+Editor -> Client: request(method, params)
+Client -> WS: JSON-RPC request\n(method, document URI, position)
+WS -> Session: handle(request)
+Session -> Session: Find document; analyze if cache is stale
+Session -> Assembler: assembleDetailed(text)\n(only if analysis is stale)
+Assembler --> Session: AssemblyResult
+Session -> Session: Compute feature result from document\nand assembly metadata
+Session --> WS: JSON-RPC result or error\n(matching request id)
+WS --> Client: Result or error
+Client --> Editor: Resolve Monaco provider request
+
+== Save and close ==
+Developer -> Editor: Save or close source file
+Editor -> Client: saveDocument(uri, text)
+Client -> WS: textDocument/didSave
+WS -> Session: Mark saved and analyze
+Session --> WS: publishDiagnostics\n(including save-time missing END warning)
+WS --> Client: Diagnostics notification
+Client --> Editor: Update markers
+Editor -> Client: closeDocument(uri)
+Client -> WS: textDocument/didClose
+WS -> Session: Erase document
+Session --> WS: publishDiagnostics(uri, [])
+WS --> Client: Clear diagnostics notification
+
+note over Client,Session
+didOpen, didChange, didSave, and didClose are notifications and have no
+JSON-RPC response. initialize and language feature calls are requests and
+return a response with the matching id. Invalid JSON is rejected by the
+WebSocket handler with a parse error before session dispatch.
+end note
+
+note over Session,Assembler
+The language service uses the assembler library for source analysis.
+It does not load a project into the Simulator or mutate memory,
+registers, or execution history.
+end note
+@enduml

@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { Terminal as XTerminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as TerminalIcon } from "lucide-react";
+import type { ExecutionEvent } from "@/lib/simulator/ExecutionEvent";
 import "@xterm/xterm/css/xterm.css";
 
 // ============================================================
@@ -13,9 +14,84 @@ import "@xterm/xterm/css/xterm.css";
 export type ConsoleHandle = {
     /** Write raw text (with \r\n line endings) to the terminal. */
     write: (text: string) => void;
+    /** Write one styled status line. */
+    log: (text: string, level?: "info" | "success" | "warning" | "error") => void;
+    /** Render simulator events as a readable execution trace. */
+    writeEvents: (events: ExecutionEvent[]) => void;
     /** Clear the terminal screen. */
     clear: () => void;
 };
+
+function hex(value: number, width = 0): string {
+    return Math.max(0, value).toString(16).toUpperCase().padStart(width, "0");
+}
+
+function bytesText(bytes: number[]): string {
+    return bytes.map((byte) => hex(byte, 2)).join(" ");
+}
+
+function eventLines(event: ExecutionEvent): { text: string; level: "info" | "success" | "warning" }[] {
+    switch (event.type) {
+        case "ProgramAssembled":
+            return [{ text: `Assembly complete · ${event.details.symbols.length} symbols`, level: "success" }];
+        case "InstructionFetched":
+            return [{
+                text: `${event.preview ? "Next" : "Fetch"}  0x${hex(event.address, 5)}  ${bytesText(event.bytes)}`,
+                level: "info",
+            }];
+        case "InstructionExecuted":
+            return event.instruction
+                ? [{ text: `Execute  ${event.instruction.mnemonic}`, level: "success" }]
+                : [];
+        case "RegisterWrite":
+            return [{
+                text: `${event.name.padEnd(3)}  0x${hex(event.old_value)} → 0x${hex(event.value)}`,
+                level: "info",
+            }];
+        case "MemoryWrite":
+            return [{
+                text: `MEM[0x${hex(event.address, 5)}]  ${bytesText(event.old_bytes)} → ${bytesText(event.bytes)}`,
+                level: "info",
+            }];
+        case "MemoryCleared":
+            return [{ text: "Memory cleared", level: "warning" }];
+        case "ProgramCleared":
+            return [{ text: "Assembly state cleared", level: "warning" }];
+        case "InstructionDecoded":
+        case "RegisterRead":
+        case "MemoryRead":
+            return [];
+    }
+}
+
+function attachHandle(terminal: XTerminal): ConsoleHandle {
+    const colors = {
+        info: "\x1b[38;5;110m",
+        success: "\x1b[38;5;114m",
+        warning: "\x1b[38;5;221m",
+        error: "\x1b[38;5;203m",
+    };
+    return {
+        write: (text) => terminal.write(text),
+        log: (text, level = "info") => {
+            const marker = level === "success" ? "✓" : level === "error" ? "✗" : level === "warning" ? "!" : "›";
+            terminal.write(`${colors[level]}${marker}\x1b[0m  ${text}\r\n`);
+        },
+        writeEvents: (events) => {
+            for (const event of events) {
+                for (const line of eventLines(event)) {
+                    const color = line.level === "success"
+                        ? colors.success
+                        : line.level === "warning"
+                            ? colors.warning
+                            : colors.info;
+                    terminal.write(`${color}│\x1b[0m  ${line.text}\r\n`);
+                }
+            }
+        },
+        clear: () => terminal.clear(),
+    };
+}
 
 export type ConsoleProps = {
     /**
@@ -38,13 +114,18 @@ export type ConsoleProps = {
 
 export function Console({
     onCommand,
-    banner = "SIC-XE Simulator\r\nType 'help' for available commands.\r\n",
+    banner = "SIC/XE STUDIO\r\nCPU simulator · session ready\r\nType 'help' for commands.\r\n",
     label = "Terminal",
     handleRef,
 }: ConsoleProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const terminalRef = useRef<XTerminal | null>(null);
     const commandBufferRef = useRef("");
+    const onCommandRef = useRef(onCommand);
+
+    useEffect(() => {
+        onCommandRef.current = onCommand;
+    }, [onCommand]);
 
     useEffect(() => {
         if (!containerRef.current) {
@@ -53,11 +134,33 @@ export function Console({
 
         const terminal = new XTerminal({
             cursorBlink: true,
+            cursorStyle: "bar",
             fontSize: 13,
+            lineHeight: 1.25,
+            scrollback: 2000,
             fontFamily:
                 "JetBrains Mono, Cascadia Code, Consolas, monospace",
             theme: {
-                background: "#18181b",
+                background: "#101216",
+                foreground: "#D5D9E0",
+                cursor: "#7DD3FC",
+                selectionBackground: "#334155",
+                black: "#101216",
+                red: "#F87171",
+                green: "#86EFAC",
+                yellow: "#FDE68A",
+                blue: "#93C5FD",
+                magenta: "#C4B5FD",
+                cyan: "#67E8F9",
+                white: "#E2E8F0",
+                brightBlack: "#64748B",
+                brightRed: "#FCA5A5",
+                brightGreen: "#BBF7D0",
+                brightYellow: "#FEF3C7",
+                brightBlue: "#BFDBFE",
+                brightMagenta: "#DDD6FE",
+                brightCyan: "#A5F3FC",
+                brightWhite: "#FFFFFF",
             },
         });
 
@@ -66,19 +169,15 @@ export function Console({
         terminal.open(containerRef.current);
         fit.fit();
 
-        // Write banner (first line highlighted, rest plain) then a prompt.
-        const bannerLines = banner.split("\r\n");
-        terminal.write(`\x1b[1;32m${bannerLines[0]}\x1b[0m\r\n`);
-        bannerLines.slice(1).forEach((line) => terminal.write(`${line}\r\n`));
-        terminal.write("\r\n> ");
+        const bannerLines = banner.replace(/\r\n/g, "\n").replace(/\n+$/, "").split("\n");
+        terminal.write(`\x1b[1;38;5;117m${bannerLines[0]}\x1b[0m\r\n`);
+        bannerLines.slice(1).forEach((line) => terminal.write(`\x1b[38;5;245m${line}\x1b[0m\r\n`));
+        terminal.write("\r\n\x1b[38;5;75msicxe\x1b[38;5;245m › \x1b[0m");
 
         terminalRef.current = terminal;
 
         if (handleRef) {
-            handleRef.current = {
-                write: (text: string) => terminal.write(text),
-                clear: () => terminal.clear(),
-            };
+            handleRef.current = attachHandle(terminal);
         }
 
         const resizeObserver = new ResizeObserver(() => {
@@ -93,14 +192,13 @@ export function Console({
                 terminal.write("\r\n");
 
                 if (command.length > 0) {
-                    onCommand?.(command, {
-                        write: (text: string) => terminal.write(text),
-                        clear: () => terminal.clear(),
+                    onCommandRef.current?.(command, {
+                        ...attachHandle(terminal),
                     });
                 }
 
                 commandBufferRef.current = "";
-                terminal.write("\r\n> ");
+                terminal.write("\r\n\x1b[38;5;75msicxe\x1b[38;5;245m › \x1b[0m");
                 return;
             }
 
@@ -136,32 +234,31 @@ export function Console({
 
     return (
         <section
-            className="
-                h-full
-                flex
-                flex-col
-                bg-zinc-900
-            "
+                className="flex h-full flex-col border-t border-white/[0.07] bg-[#101216]"
         >
             <div
                 className="
-                    h-9
+                    h-10
                     shrink-0
                     px-3
                     flex
                     items-center
                     gap-2
                     border-b
-                    border-zinc-800
-                    text-xs
+                    border-white/[0.07]
+                    text-[11px]
                     text-zinc-400
                 "
             >
                 <TerminalIcon size={14} />
-                {label.toUpperCase()}
+                <span className="font-semibold tracking-[0.14em] text-zinc-300">{label.toUpperCase()}</span>
+                <span className="ml-auto flex items-center gap-1.5 text-[10px] font-medium tracking-wide text-emerald-300/80">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(74,222,128,0.5)]" />
+                    READY
+                </span>
             </div>
 
-            <div ref={containerRef} className="flex-1 min-h-0 p-2" />
+            <div ref={containerRef} className="min-h-0 flex-1 px-3 py-2" />
         </section>
     );
 }

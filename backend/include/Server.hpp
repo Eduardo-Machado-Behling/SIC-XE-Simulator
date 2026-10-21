@@ -34,8 +34,6 @@ private:
 
     void setup_http();
     void setup_http_api();     // documented API (api_spec/openapi.yaml)
-    void setup_http_project(); // deprecated legacy routes
-    void setup_http_arch();    // deprecated legacy routes
 
     void setup_ws();
     void setup_language_ws();
@@ -45,8 +43,7 @@ private:
     std::vector<std::string> m_architectures; // `Architecture` enum values available
 
     std::string m_host;
-    // Guards m_simulator, which is shared by the /ws handler and the legacy
-    // HTTP routes (httplib runs handlers on a thread pool).
+    // Serializes commands against the single shared simulator instance.
     std::mutex mutex;
 
     int m_port;

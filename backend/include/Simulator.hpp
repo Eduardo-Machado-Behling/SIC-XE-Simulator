@@ -8,7 +8,7 @@
 #include "memory/Memory.hpp"
 #include "memory/Registers.hpp"
 
-#include "project/ProjectManager.hpp"
+#include "project/Project.hpp"
 
 struct EventBatch {
     std::size_t from = 0;
@@ -28,15 +28,8 @@ public:
         , m_memoryAccessor(m_memory.getAccessor(m_eventManager))
         , m_registerAccessor(m_registers.getAccessor(m_eventManager)) {}
 
-    ProjectManager::ProjectView list_projects();
+    const Project& load_project(Project project);
 
-    void create_project(const std::string& projectId,
-                        const std::string& projectName,
-                        const std::string& architectureId);
-
-    const Project& load_project(const std::string& project);
-
-    void set_file(const std::string& filepath, const std::string& content);
     EventBatch load_file(const std::string& filepath);
 
     const std::unordered_set<std::string>& ListAvailableArchitectures();
@@ -59,10 +52,10 @@ public:
     // void remove_breakpoint(Address address);
 
 private:
-    Project* m_currentProject = nullptr;
+    Project m_currentProject;
+    bool m_hasCurrentProject = false;
 
     ArchitectureManager m_architectureManager;
-    ProjectManager m_projectManager;
     Memory m_memory;
     Registers m_registers;
     architecture::events::EventManager m_eventManager;

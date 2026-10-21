@@ -38,18 +38,20 @@ Client --> Transport
 Transport --> "Backend /ws"
 
 note right of Client
-Public operations include:
+Public simulator operations include:
 step()
 reset()
-projects()
-createProject()
-loadProject()
+clear()
+architectures()
+loadProject(sessionId, projectId)
 loadFile()
-setFile()
-run()
-stop()
-unstep()
-breakOn()
 end note
+
+database "Browser project storage" as LocalProjects
+cloud "Session project API" as SessionApi
+[Project Pages] --> LocalProjects : read / create
+[FileExplorer] --> LocalProjects : persist mutations
+LocalProjects --> SessionApi : sync project set on start
+SessionApi --> Transport : load by session and project UUID
 
 @enduml

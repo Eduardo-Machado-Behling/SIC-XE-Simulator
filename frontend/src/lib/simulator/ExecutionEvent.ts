@@ -81,6 +81,8 @@ export interface InstructionFetchedEvent {
     address: number;
     bytes: number[];
     value: number;
+    source_line?: number;
+    preview?: boolean;
 }
 
 export interface InstructionExecutedEvent {
@@ -182,11 +184,21 @@ export function normalizeExecutionEvent(raw: unknown): ExecutionEvent {
     switch (event.type) {
         case "InstructionFetched": {
             const bytes = byteArray(event.value, "value");
+            const sourceLine = event.source_line;
+            if (sourceLine !== undefined &&
+                (typeof sourceLine !== "number" || !Number.isInteger(sourceLine) || sourceLine < 1)) {
+                throw new TypeError("Invalid source line in InstructionFetched event");
+            }
+            if (event.preview !== undefined && typeof event.preview !== "boolean") {
+                throw new TypeError("Invalid preview flag in InstructionFetched event");
+            }
             return {
                 type: "InstructionFetched",
                 address: event.address as number,
                 bytes,
                 value: bytesToNumber(bytes),
+                ...(sourceLine === undefined ? {} : { source_line: sourceLine as number }),
+                ...(event.preview === true ? { preview: true } : {}),
             };
         }
         case "RegisterWrite": {

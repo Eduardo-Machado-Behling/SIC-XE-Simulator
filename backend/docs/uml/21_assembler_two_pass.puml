@@ -1,0 +1,93 @@
+@startuml
+title SIC/XE Assembler - Mapping to the Standard Two-Pass Structure
+skinparam shadowing false
+skinparam activity {
+  BackgroundColor #F4F7FB
+  BorderColor #526579
+  DiamondBackgroundColor #FFF3CD
+  DiamondBorderColor #9A7B20
+  StartColor #58A66A
+  EndColor #D9534F
+  FontColor #17212B
+}
+skinparam note {
+  BackgroundColor #FFFBE6
+  BorderColor #C6B458
+  FontColor #30343B
+}
+
+start
+:Assembly source text;
+:Assembler.assembleDetailed(source);
+:Construct one Engine for this assembly run;
+:Parse each source line with parseLine();
+note right
+  Code: lib/sic-xe/src/Assembler/parser.cpp
+  Produces a vector of Statement records.
+  Parsing identifies labels, instructions, directives,
+  operands and expressions; it does not assign addresses
+  or emit object bytes.
+end note
+
+partition "Pass 1 - Analysis, layout, and symbols" {
+  :Initialize LOC and address-space limit;
+  :Visit each parsed Statement in source order;
+  :Record the current LOC as Statement.address;
+  :Define labels and process layout directives;
+  :Determine instruction sizes from InstructionDef;
+  :Advance LOC and update the high-water address;
+  :Validate layout, duplicate symbols, and address limits;
+}
+
+note right
+  Code: Engine::pass1(), pass1Instruction(), pass1Directive()
+  State: lc_, startAddr_, highWater_, symbols_, ended_.
+  Instruction sizes are known before operands are encoded.
+  START / RESB / RESW / ORG affect layout; EQU is evaluated
+  immediately and cannot depend on a forward symbol here.
+end note
+
+partition "Pass 2 - Synthesis and output" {
+  :Visit each valid Statement in source order;
+  if (Instruction?) then (yes)
+    :Resolve operand expressions using the symbol table;
+    :Encode format 1 / 2, SIC, or XE format 3 / 4;
+  else (directive)
+    :Evaluate BASE / NOBASE / END state;
+    :Encode BYTE and WORD data;
+  endif
+  :Emit bytes at each absolute statement address;
+  :Record relocation entries for relocatable values;
+  :Append every statement to the assembly listing;
+}
+
+note right
+  Code: Engine::pass2(), pass2Instruction(), pass2Directive()
+  Expression evaluation allows forward references in pass 2.
+  Format-3 selection uses PC-relative, BASE-relative, or direct
+  addressing; source may force ,p or ,b. Format 4 records a
+  5-half-byte relocation for relocatable targets.
+end note
+
+:Build AssemblyResult;
+:Return sparse CodeMemory and AssemblyInfo;
+note right
+  AssemblyInfo contains symbols, source locations, references,
+  relocations, listing, diagnostics, start address, entry point,
+  and program length. assemble() wraps assembleDetailed(), saves
+  the metadata, and throws AssemblyError when errors exist.
+end note
+
+:SICXE loader consumes the in-memory CodeMemory image;
+stop
+
+legend right
+  **Textbook concept -> implementation**
+  Symbol table: Engine::symbols_
+  Opcode table: instructionSet() / findInstruction() in isa.cpp
+  Literal pool: none; C'...' and X'...' are inline BYTE data
+  Object program records: none; output is sparse CodeMemory
+  Linker / executable: absent; relocation entries are metadata only
+endlegend
+
+@enduml

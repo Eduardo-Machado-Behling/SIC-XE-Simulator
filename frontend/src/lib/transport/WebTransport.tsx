@@ -4,7 +4,6 @@ import {
     SimulatorProblem,
     SimulatorTransport,
 } from "@/lib/transport/SimulatorTransport";
-import { Project } from "@/lib/simulator/Project";
 import { ExecutionEvent, normalizeExecutionEvents } from "@/lib/simulator/ExecutionEvent";
 
 type Request = {
@@ -254,26 +253,8 @@ export class WebTransport implements SimulatorTransport {
         return body as T;
     }
 
-    async projects(): Promise<Project[]> {
-        return this.request<Project[]>("/projects");
-    }
-
     async architectures(): Promise<string[]> {
-        const response = await this.request<{ archs: string[] }>("/simulator/archs");
-        return response.archs;
-    }
-
-    async createProject(
-        newProject: Project,
-    ): Promise<unknown> {
-        const query = new URLSearchParams({
-            id: newProject.id,
-            name: newProject.name,
-            arch: newProject.architecture,
-        });
-        return this.request(`/project?${query.toString()}`, {
-            method: "PUT",
-        });
+        return this.request<string[]>("/simulator/architectures");
     }
 
     async step(): Promise<ExecutionEvent[]> {
@@ -289,10 +270,11 @@ export class WebTransport implements SimulatorTransport {
     }
 
     async loadProject(
+        sessionId: string,
         projectId: string,
     ): Promise<LoadProjectResponse> {
         return this.send<LoadProjectResponse>(
-            `load $${projectId}`,
+            `load $${sessionId}/${projectId}`,
         );
     }
 
@@ -303,19 +285,4 @@ export class WebTransport implements SimulatorTransport {
         return this.normalizeEventBatch(batch);
     }
 
-    async setFile(
-        file: string,
-        content: string,
-    ): Promise<void> {
-        return this.request(
-            "/simulator/project/file",
-            {
-                method: "PUT",
-                body: JSON.stringify({
-                    filePath: file,
-                    content,
-                }),
-            },
-        );
-    }
 }

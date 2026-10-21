@@ -115,27 +115,13 @@ void Server::setup_cors() {
 void Server::setup_http() {
     // Documented API: api_spec/openapi.yaml.
     this->setup_http_api();
-
-    // DEPRECATED legacy routes below: not part of the OpenAPI document. They
-    // are kept only because the current frontend still calls them (until
-    // issue #41 moves it to the documented API). Use GET /health instead.
-    this->Get("/heartbeat", [](const httplib::Request&, httplib::Response& res) {
-        json response = {{"message", "Hello from C++!"},
-                         {"language", "C++"},
-                         {"framework", "cpp-httplib"}};
-
-        res.set_content(response.dump(), "application/json");
-    });
-
-    this->setup_http_project();
-    this->setup_http_arch();
 }
 
 // TODO: this a Jerry-rig, a Jury-rig, a Makeshift solution, a MacGyver, a Quick fix, a Kludge, ...
 enum class Command { LOAD_PROJECT, LOAD_FILE, RESET, CLEAR, STEP };
 
 const std::vector<std::pair<std::regex, Command>> patterns = {
-    {std::regex{R"(^load \$([A-Za-z0-9._-]+)$)"}, Command::LOAD_PROJECT},
+    {std::regex{R"(^load \$([0-9a-fA-F-]{36})/([0-9a-fA-F-]{36})$)"}, Command::LOAD_PROJECT},
     {std::regex{R"(^load %(.+)$)"}, Command::LOAD_FILE},
     {std::regex{R"(^reset$)"}, Command::RESET},
     {std::regex{R"(^clear$)"}, Command::CLEAR},
@@ -192,9 +178,16 @@ void Server::setup_ws() {
                         matched = true;
                         switch (command) {
                             case Command::LOAD_PROJECT: {
-                                Project project = m_simulator.load_project(match[1]);
+                                const session::StoredProject stored =
+                                    m_sessions.get_project(match[1], match[2]);
+                                Project project;
+                                project.id = stored.id;
+                                project.name = stored.name;
+                                project.architecture = stored.architecture;
+                                project.files.insert(stored.files.begin(), stored.files.end());
+                                const Project& loadedProject = m_simulator.load_project(std::move(project));
                                 json proj;
-                                to_json(proj, project);
+                                to_json(proj, loadedProject);
 
                                 const ArchitectureInfo* info = m_simulator.currentInfo();
                                 response = {{"id", id},

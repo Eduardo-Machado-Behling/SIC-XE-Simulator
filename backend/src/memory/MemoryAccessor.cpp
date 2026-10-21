@@ -82,10 +82,14 @@ void MemoryAccessor::read(size_t address, Iterator begin, Iterator end) {
 
 }
 
-void MemoryAccessor::fetch(size_t address, size_t size, std::vector<byte_t>& buffer) {
+void MemoryAccessor::fetch(size_t address,
+                           size_t size,
+                           std::vector<byte_t>& buffer,
+                           std::optional<std::size_t> sourceLine,
+                           bool preview) {
     m_parent.read(address, size, buffer);
 
     m_eventManager.commit(std::make_unique<architecture::events::InstructionFetched>(
-        address, buffer));
+        address, buffer, sourceLine, preview));
 
 }

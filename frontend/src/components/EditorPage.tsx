@@ -19,6 +19,12 @@ import { AssemblerLanguageClient } from "@/lib/language/LanguageClient";
 import { setAssemblerLanguageClient } from "@/lib/language/sicxeLanguage";
 import { simulatorWebSocketUrl } from "@/lib/transport/urls";
 import { Project } from "@/lib/simulator/Project";
+import { DEFAULT_MAIN_SOURCE } from "@/lib/simulator/defaultMainSource";
+import {
+    getStoredProject,
+    saveStoredProject,
+    syncProjectToSession,
+} from "@/lib/simulator/ProjectSessionSync";
 import { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
 import { RegisterState } from "./RegisterTable";
 import { symbolsFromEvents, type AssemblySymbol, type ExecutionEvent } from "@/lib/simulator/ExecutionEvent";
@@ -51,7 +57,7 @@ function languageDocumentUri(projectId: string, path: string): string {
  * Turns a flat map of path -> content (as returned by the backend) into the
  * nested FileNode[] shape FileExplorer needs, splitting each path on "/".
  */
-function buildFileTree(files: Record<string, string>): FileNode[] {
+function buildFileTree(files: Record<string, string>, folders: string[] = []): FileNode[] {
     const root: FileNode[] = [];
     const foldersById = new Map<string, FileNode[]>([["", root]]);
 
@@ -70,6 +76,10 @@ function buildFileTree(files: Record<string, string>): FileNode[] {
         return node.children!;
     };
 
+    for (const path of [...folders].sort()) {
+        if (path) getChildren(path);
+    }
+
     for (const path of Object.keys(files).sort()) {
         const segments = path.split("/");
         const fileName = segments[segments.length - 1];
@@ -79,6 +89,71 @@ function buildFileTree(files: Record<string, string>): FileNode[] {
     }
 
     return root;
+}
+
+function parentFolders(paths: string[]): string[] {
+    const folders = new Set<string>();
+    for (const path of paths) {
+        const parts = path.split("/").slice(0, -1);
+        for (let i = 1; i <= parts.length; i++) folders.add(parts.slice(0, i).join("/"));
+    }
+    return [...folders];
+}
+
+function hasDirective(source: string, directive: "START" | "END"): boolean {
+    return source.split(/\r?\n/).some((line) => {
+        const code = line.replace(/;.*/, "").trim();
+        if (!code || code.startsWith(".")) return false;
+        const tokens = code.split(/\s+/);
+        return tokens[0]?.toUpperCase() === directive || tokens[1]?.toUpperCase() === directive;
+    });
+}
+
+function entryPointFile(files: Record<string, string>, architecture?: string): string {
+    const paths = Object.keys(files).sort();
+    const namedSources = paths.filter((path) => /\.(asm|sic|sicxe|sxe|s)$/i.test(path));
+    const assemblySources = namedSources.length > 0
+        ? namedSources
+        : paths.filter((path) => hasDirective(files[path], "START") || hasDirective(files[path], "END"));
+    const isSicxe = architecture?.toLowerCase().replace(/[^a-z0-9]/g, "") === "sicxe";
+    const sources = assemblySources.length > 0 ? assemblySources : isSicxe ? [] : paths;
+    return sources.find((path) => hasDirective(files[path], "START")) ??
+        sources.find((path) => hasDirective(files[path], "END")) ??
+        sources.find((path) => /(^|\/)main\.(asm|sic|sicxe|sxe|s)$/i.test(path)) ??
+        sources[0] ?? (isSicxe ? "" : paths[0] ?? "");
+}
+
+function validSegment(name: string): boolean {
+    return Boolean(name) && name !== "." && name !== ".." && !/[\\/:]/.test(name);
+}
+
+type SavedProjectState = { files: Record<string, string>; folders: string[] };
+
+function projectStateKey(projectId: string): string {
+    return `sicxe-project-state:${projectId}`;
+}
+
+function readProjectState(projectId: string): SavedProjectState | null {
+    try {
+        const raw = localStorage.getItem(projectStateKey(projectId));
+        if (!raw) return null;
+        const value = JSON.parse(raw) as Partial<SavedProjectState>;
+        if (!value.files || typeof value.files !== "object" || Array.isArray(value.files)) return null;
+        return {
+            files: Object.fromEntries(Object.entries(value.files).filter((entry): entry is [string, string] => typeof entry[1] === "string")),
+            folders: Array.isArray(value.folders) ? value.folders.filter((path): path is string => typeof path === "string") : [],
+        };
+    } catch {
+        return null;
+    }
+}
+
+function writeProjectState(projectId: string, state: SavedProjectState): void {
+    try {
+        localStorage.setItem(projectStateKey(projectId), JSON.stringify(state));
+    } catch (error) {
+        console.warn("Could not save project changes in browser storage:", error);
+    }
 }
 
 // ============================================================
@@ -97,10 +172,14 @@ export default function EditorPage({ projectId }: PageProps) {
     const [project, setProject] = useState<Project | null>(null);
     const [arch, setArch] = useState<ArchitectureInfo | null>(null);
     const [files, setFiles] = useState<Record<string, string>>({});
+    const [folders, setFolders] = useState<string[]>([]);
     const [activeFile, setActiveFile] = useState("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [pc, setPc] = useState<number>(0)
+    const [executingLine, setExecutingLine] = useState<number | null>(null);
+    const [executingAddress, setExecutingAddress] = useState<number | null>(null);
+    const [executionSourceFile, setExecutionSourceFile] = useState<string | null>(null);
     const [changedRegisters, setChangedRegisters] = useState<string[]>([]);
     const [changedMemory, setChangedMemory] = useState<number[]>([]);
     const [consumedMemory, setConsumedMemory] = useState<number[]>([]);
@@ -143,12 +222,25 @@ export default function EditorPage({ projectId }: PageProps) {
         if (instructionTimerRef.current) clearTimeout(instructionTimerRef.current);
         setConsumedMemory([]);
 
+        const fetchedForSource = events.findLast((event) => event.type === "InstructionFetched");
+        if (fetchedForSource?.type === "InstructionFetched") {
+            setExecutingLine(fetchedForSource.source_line ?? null);
+            setExecutingAddress(fetchedForSource.address);
+        } else if (!animateInstruction || events.some((event) =>
+            event.type === "ProgramAssembled" || event.type === "ProgramCleared"
+        )) {
+            setExecutingLine(null);
+            setExecutingAddress(null);
+        }
+
         const pcWrite = events.findLast((event) =>
             event.type === "RegisterWrite" && event.name === "PC",
         );
 
         if (animateInstruction) {
-            const fetched = events.findLast((event) => event.type === "InstructionFetched");
+            const fetched = events.findLast((event) =>
+                event.type === "InstructionFetched" && event.preview !== true,
+            );
             if (fetched?.type === "InstructionFetched") {
                 const decoded = events.findLast((event) =>
                     event.type === "InstructionDecoded" && event.details.address === fetched.address,
@@ -187,12 +279,17 @@ export default function EditorPage({ projectId }: PageProps) {
     const reportCommandError = useCallback((reason: unknown) => {
         if (reason instanceof SimulatorCommandError) {
             if (reason.events?.length) applyExecutionEvents(reason.events, false);
+            consoleHandleRef.current?.log(reason.problem.detail || reason.message, "error");
             setActionError({
                 title: reason.problem.title,
                 detail: reason.problem.detail || reason.message,
             });
             return;
         }
+        consoleHandleRef.current?.log(
+            reason instanceof Error ? reason.message : "The simulator could not complete the request.",
+            "error",
+        );
         setActionError({
             title: "Simulator request failed",
             detail: reason instanceof Error ? reason.message : "The simulator could not complete the request.",
@@ -213,21 +310,39 @@ export default function EditorPage({ projectId }: PageProps) {
 
         async function loadProject() {
             try {
-                const data =
-                    await simulator.loadProject(projectId);
+                const storedProject = getStoredProject(projectId);
+                if (!storedProject) {
+                    throw new Error("This project is not available in browser storage.");
+                }
+
+                const savedState = readProjectState(projectId) ?? readProjectState(storedProject.id);
+                const existingFiles = savedState?.files ?? storedProject.files;
+                const projectFiles = Object.keys(existingFiles).length > 0
+                    ? existingFiles
+                    : { "main.asm": DEFAULT_MAIN_SOURCE };
+                const projectFolders = [...new Set([
+                    ...(savedState?.folders ?? []),
+                    ...parentFolders(Object.keys(projectFiles)),
+                ])];
+                const projectToLoad = { ...storedProject, files: projectFiles };
+                const sessionId = await syncProjectToSession(projectToLoad);
+                const data = await simulator.loadProject(sessionId, storedProject.id);
 
                 if (cancelled) {
                     return;
                 }
 
-                setProject(data.project);
-                setFiles(data.project.files);
+                setProject(projectToLoad);
+                setFiles(projectFiles);
+                setFolders(projectFolders);
                 setMemory(new Map());
                 setPc(0);
                 setSymbols(null);
+                setExecutingLine(null);
+                setExecutingAddress(null);
+                setExecutionSourceFile(null);
 
-                const firstPath =
-                    Object.keys(data.project.files).sort()[0] ?? "";
+                const firstPath = entryPointFile(projectFiles, data.project.architecture);
                 setArch(data.arch)
 
                 setRegisters(data.arch.registers.map((reg) => {
@@ -265,7 +380,7 @@ export default function EditorPage({ projectId }: PageProps) {
     // File tree (derived from files)
     // --------------------------------------------------------
 
-    const fileTree = useMemo(() => buildFileTree(files), [files]);
+    const fileTree = useMemo(() => buildFileTree(files, folders), [files, folders]);
 
     // --------------------------------------------------------
     // Active file
@@ -277,8 +392,17 @@ export default function EditorPage({ projectId }: PageProps) {
         ? languageDocumentUri(project.id, activeFile)
         : undefined;
 
+    useEffect(() => {
+        if (project && project.id === projectId && !loading) {
+            writeProjectState(project.id, { files, folders });
+            saveStoredProject({ ...project, files });
+        }
+    }, [files, folders, loading, project, projectId]);
+
     const updateFile = useCallback(
         (content: string) => {
+            setExecutingLine(null);
+            setExecutingAddress(null);
             setFiles((current) => ({
                 ...current,
                 [activeFile]: content,
@@ -295,31 +419,155 @@ export default function EditorPage({ projectId }: PageProps) {
         [files],
     );
 
+    const createFile = useCallback((folder: string) => {
+        const name = window.prompt("New file name", "main.asm")?.trim();
+        if (!name || !validSegment(name)) return;
+        const path = [folder, name].filter(Boolean).join("/");
+        if (path in files || folders.includes(path)) {
+            setActionError({ title: "Name already exists", detail: `An item named “${name}” already exists here.` });
+            return;
+        }
+        setFiles((current) => ({ ...current, [path]: "" }));
+        setFolders((current) => [...new Set([...current, ...parentFolders([path])])]);
+        setActiveFile(path);
+    }, [files, folders]);
+
+    const createFolder = useCallback((parent: string) => {
+        const name = window.prompt("New folder name")?.trim();
+        if (!name || !validSegment(name)) return;
+        const path = [parent, name].filter(Boolean).join("/");
+        if (path in files || folders.includes(path)) {
+            setActionError({ title: "Name already exists", detail: `An item named “${name}” already exists here.` });
+            return;
+        }
+        setFolders((current) => [...new Set([...current, ...parentFolders([`${path}/.folder`]), path])]);
+    }, [files, folders]);
+
+    const deletePaths = useCallback((paths: string[]) => {
+        const removed = (candidate: string) => paths.some((path) =>
+            candidate === path || candidate.startsWith(`${path}/`),
+        );
+        const nextFiles = Object.fromEntries(Object.entries(files).filter(([path]) => !removed(path)));
+        const nextFolders = folders.filter((path) => !removed(path));
+        setFiles(nextFiles);
+        setFolders(nextFolders);
+        if (removed(activeFile)) setActiveFile(entryPointFile(nextFiles, project?.architecture));
+    }, [activeFile, files, folders, project?.architecture]);
+
+    const renamePath = useCallback((path: string, name: string) => {
+        if (!validSegment(name)) return;
+        const isFolder = folders.includes(path) || Object.keys(files).some((file) => file.startsWith(`${path}/`));
+        const destination = [...path.split("/").slice(0, -1), name].filter(Boolean).join("/");
+        const sourcePaths = isFolder
+            ? [...Object.keys(files).filter((file) => file.startsWith(`${path}/`)), ...folders.filter((folder) => folder === path || folder.startsWith(`${path}/`))]
+            : [path];
+        const remap = (candidate: string) => candidate === path ? destination : `${destination}${candidate.slice(path.length)}`;
+        const moving = new Set(sourcePaths);
+        const destinationPaths = sourcePaths.map(remap);
+        if (destinationPaths.some((candidate) => (candidate in files && !moving.has(candidate)) || (folders.includes(candidate) && !moving.has(candidate)))) {
+            setActionError({ title: "Name already exists", detail: "An item with that name already exists in this folder." });
+            return;
+        }
+        const nextFiles = Object.fromEntries(Object.entries(files).map(([file, content]) => [
+            isFolder && file.startsWith(`${path}/`) ? remap(file) : file === path ? destination : file,
+            content,
+        ]));
+        const nextFolders = folders.map((folder) =>
+            folder === path || folder.startsWith(`${path}/`) ? remap(folder) : folder,
+        );
+        setFiles(nextFiles);
+        setFolders([...new Set([...nextFolders, ...parentFolders(Object.keys(nextFiles))])]);
+        if (activeFile === path || activeFile.startsWith(`${path}/`)) setActiveFile(remap(activeFile));
+    }, [activeFile, files, folders]);
+
+    const movePaths = useCallback((paths: string[], targetFolder: string) => {
+        const isFolder = (path: string) => folders.includes(path) || Object.keys(files).some((file) => file.startsWith(`${path}/`));
+        const movingFiles = new Set<string>();
+        const movingFolders = new Set<string>();
+        const destinations = new Map<string, string>();
+
+        for (const source of paths) {
+            if (!source || (targetFolder && (targetFolder === source || targetFolder.startsWith(`${source}/`)))) return;
+            const name = source.split("/").at(-1)!;
+            const destination = [targetFolder, name].filter(Boolean).join("/");
+            if (destination === source) continue;
+            const folder = isFolder(source);
+            const sourceFiles = folder ? Object.keys(files).filter((file) => file.startsWith(`${source}/`)) : [source];
+            const sourceFolders = folder ? folders.filter((item) => item === source || item.startsWith(`${source}/`)) : [];
+            for (const item of sourceFiles) {
+                movingFiles.add(item);
+                destinations.set(item, folder ? `${destination}${item.slice(source.length)}` : destination);
+            }
+            for (const item of sourceFolders) {
+                movingFolders.add(item);
+                destinations.set(item, item === source ? destination : `${destination}${item.slice(source.length)}`);
+            }
+            if (folder) movingFolders.add(source);
+        }
+
+        const destinationValues = [...destinations.values()];
+        if (new Set(destinationValues).size !== destinationValues.length || destinationValues.some((destination) =>
+            (destination in files && !movingFiles.has(destination)) ||
+            (folders.includes(destination) && !movingFolders.has(destination)),
+        )) {
+            setActionError({ title: "Cannot move items", detail: "The destination already contains an item with the same name." });
+            return;
+        }
+
+        const nextFiles = Object.fromEntries(Object.entries(files).map(([path, content]) => [destinations.get(path) ?? path, content]));
+        const nextFolders = [...new Set([
+            ...folders.map((path) => destinations.get(path) ?? path),
+            ...parentFolders(Object.keys(nextFiles)),
+            ...(targetFolder ? [targetFolder] : []),
+        ])];
+        setFiles(nextFiles);
+        setFolders(nextFolders);
+        const newActivePath = destinations.get(activeFile);
+        if (newActivePath) setActiveFile(newActivePath);
+    }, [activeFile, files, folders]);
+
     // --------------------------------------------------------
     // Simulator actions
     // --------------------------------------------------------
 
     const run = useCallback(async () => {
-        consoleHandleRef.current?.write(
-            "Running program...\r\nProgram finished.\r\n",
-        );
-
         try {
-            await simulator.setFile(activeFile, activeContent);
-            if (languageClient && activeDocumentUri) {
+            const startFile = entryPointFile(files, project?.architecture);
+            if (!startFile) {
+                setActionError({ title: "No source file", detail: "Add an assembly source file before starting the simulator." });
+                return;
+            }
+            consoleHandleRef.current?.log(`Assembling ${startFile}`, "info");
+            setActiveFile(startFile);
+            setExecutionSourceFile(startFile);
+            setExecutingLine(null);
+            setExecutingAddress(null);
+            writeProjectState(project?.id ?? projectId, { files, folders });
+
+            if (!project) throw new Error("No project is loaded.");
+            const sessionId = await syncProjectToSession({ ...project, files });
+            await simulator.loadProject(sessionId, project.id);
+
+            const source = files[startFile] ?? "";
+            const startDocumentUri = project
+                ? languageDocumentUri(project.id, startFile)
+                : undefined;
+            if (languageClient && startDocumentUri) {
                 try {
-                    await languageClient.saveDocument(activeDocumentUri, activeContent);
+                    await languageClient.saveDocument(startDocumentUri, source);
                 } catch (languageError) {
                     console.warn("Assembler language service save sync failed:", languageError);
                 }
             }
 
-            const steps = await simulator.loadFile(activeFile);
+            const steps = await simulator.loadFile(startFile);
 
             console.log("Solve:", steps);
 
             setSymbols(symbolsFromEvents(steps));
             applyExecutionEvents(steps);
+            consoleHandleRef.current?.writeEvents(steps);
+            consoleHandleRef.current?.log(`Loaded ${startFile}`, "success");
 
             setIsRunning(true);
         } catch (error) {
@@ -327,18 +575,18 @@ export default function EditorPage({ projectId }: PageProps) {
             reportCommandError(error);
             console.error("Run failed:", error);
         }
-    }, [activeDocumentUri, activeFile, activeContent, applyExecutionEvents, languageClient, reportCommandError, simulator]);
+    }, [applyExecutionEvents, files, folders, languageClient, project, projectId, reportCommandError, simulator]);
 
     const stop = useCallback(() => {
         setIsRunning(false);
     }, []);
 
     const step = useCallback(async () => {
-        consoleHandleRef.current?.write("Executing one instruction...\r\n");
+        consoleHandleRef.current?.log("Stepping one instruction", "info");
         try {
             const steps = await simulator.step();
             applyExecutionEvents(steps);
-            consoleHandleRef.current?.write(JSON.stringify(steps));
+            consoleHandleRef.current?.writeEvents(steps);
         } catch (error) {
             reportCommandError(error);
         }
@@ -348,10 +596,11 @@ export default function EditorPage({ projectId }: PageProps) {
         setIsRunning(false);
         if (instructionTimerRef.current) clearTimeout(instructionTimerRef.current);
         setConsumedMemory([]);
-        consoleHandleRef.current?.clear();
+        consoleHandleRef.current?.log("Resetting registers and program counter", "warning");
         try {
             const steps = await simulator.reset();
             applyExecutionEvents(steps, false);
+            consoleHandleRef.current?.writeEvents(steps);
         } catch (error) {
             reportCommandError(error);
         }
@@ -361,9 +610,11 @@ export default function EditorPage({ projectId }: PageProps) {
         setIsRunning(false);
         if (instructionTimerRef.current) clearTimeout(instructionTimerRef.current);
         setConsumedMemory([]);
+        consoleHandleRef.current?.log("Clearing machine state", "warning");
         try {
             const events = await simulator.clear();
             applyExecutionEvents(events, false);
+            consoleHandleRef.current?.writeEvents(events);
             setSymbols(null);
         } catch (error) {
             reportCommandError(error);
@@ -378,14 +629,14 @@ export default function EditorPage({ projectId }: PageProps) {
         (command: string, handle: ConsoleHandle) => {
             switch (command) {
                 case "help":
+                    handle.log("Available commands", "success");
                     handle.write(
-                        "Commands:\r\n" +
-                        "  help     Show this message\r\n" +
-                        "  run      Run the program\r\n" +
-                        "  step     Execute one instruction\r\n" +
-                        "  reset    Reset the simulator\r\n" +
-                        "  clear machine  Clear memory and registers\r\n" +
-                        "  clear    Clear the terminal\r\n",
+                        "  \x1b[38;5;117mrun\x1b[0m            Assemble and load the entry file\r\n" +
+                        "  \x1b[38;5;117mstep\x1b[0m           Execute one instruction\r\n" +
+                        "  \x1b[38;5;117mreset\x1b[0m          Reset registers and PC\r\n" +
+                        "  \x1b[38;5;117mclear machine\x1b[0m  Clear memory and registers\r\n" +
+                        "  \x1b[38;5;117mclear\x1b[0m          Clear terminal output\r\n" +
+                        "  \x1b[38;5;117mhelp\x1b[0m           Show this message\r\n",
                     );
                     break;
 
@@ -410,7 +661,7 @@ export default function EditorPage({ projectId }: PageProps) {
                     break;
 
                 default:
-                    handle.write(`Unknown command: ${command}\r\n`);
+                    handle.log(`Unknown command: ${command}. Type 'help' for commands.`, "error");
                     break;
             }
         },
@@ -423,10 +674,37 @@ export default function EditorPage({ projectId }: PageProps) {
 
     useEffect(() => {
         const handler = (event: KeyboardEvent) => {
+            const key = event.key.toLowerCase();
+            const commandKey = event.ctrlKey || event.metaKey;
+
+            if (event.key === "F2") {
+                event.preventDefault();
+                if (activeFile) {
+                    const currentName = activeFile.split("/").at(-1) ?? activeFile;
+                    const nextName = window.prompt("Rename file", currentName)?.trim();
+                    if (nextName && nextName !== currentName) renamePath(activeFile, nextName);
+                }
+                return;
+            }
+
+            if (commandKey && event.shiftKey && key === "n") {
+                event.preventDefault();
+                const parent = activeFile.split("/").slice(0, -1).join("/");
+                createFolder(parent);
+                return;
+            }
+
+            if (commandKey && !event.shiftKey && key === "n") {
+                event.preventDefault();
+                const parent = activeFile.split("/").slice(0, -1).join("/");
+                createFile(parent);
+                return;
+            }
+
             if (
                 event.ctrlKey &&
                 event.shiftKey &&
-                event.key.toLowerCase() === "p"
+                key === "p"
             ) {
                 event.preventDefault();
                 setCommandPaletteOpen((current) => !current);
@@ -439,7 +717,7 @@ export default function EditorPage({ projectId }: PageProps) {
 
         window.addEventListener("keydown", handler);
         return () => window.removeEventListener("keydown", handler);
-    }, []);
+    }, [activeFile, createFile, createFolder, renamePath]);
 
     // --------------------------------------------------------
     // Loading / error states
@@ -506,6 +784,11 @@ export default function EditorPage({ projectId }: PageProps) {
                             tree={fileTree}
                             activeFile={activeFile}
                             onSelectFile={selectFile}
+                            onCreateFile={createFile}
+                            onCreateFolder={createFolder}
+                            onDelete={deletePaths}
+                            onRename={renamePath}
+                            onMove={movePaths}
                         />
                     </Panel>
 
@@ -526,6 +809,8 @@ export default function EditorPage({ projectId }: PageProps) {
                                     path={activeFile}
                                     value={activeContent}
                                     language={activeLanguage}
+                                    executingLine={executionSourceFile === activeFile ? executingLine : null}
+                                    executingAddress={executionSourceFile === activeFile ? executingAddress : null}
                                     documentUri={activeLanguage === "sicxe" ? activeDocumentUri : undefined}
                                     languageClient={activeLanguage === "sicxe" ? languageClient : null}
                                     onChange={updateFile}

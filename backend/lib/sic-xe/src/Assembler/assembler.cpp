@@ -83,6 +83,10 @@ class Engine {
       collectReferences(st.expr, r.info.symbolReferences, st.line);
       for (const DataItem& item : st.items)
         collectReferences(item.expr, r.info.symbolReferences, st.line);
+      if (st.valid && st.inst && !st.bytes.empty()) {
+        r.info.instructionSourceMap.push_back({
+            static_cast<std::size_t>(st.address), st.bytes.size(), st.line});
+      }
     }
     std::stable_sort(r.info.symbolDefinitions.begin(), r.info.symbolDefinitions.end(),
                      [](const SymbolLocation& a, const SymbolLocation& b) {

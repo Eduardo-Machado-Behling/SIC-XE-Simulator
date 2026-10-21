@@ -2,6 +2,8 @@
 
 #include "assembler/assembler.hpp"
 
+#include <unordered_map>
+
 #include "InstructionSet.hpp"
 #include "architecture/IArchictecture.hpp"
 
@@ -30,4 +32,7 @@ private:
     std::vector<byte_t> m_buffer;
     bool m_halted = false;
     std::uint32_t m_programStart = 0;
+    std::unordered_map<std::uint32_t, std::size_t> m_instructionSourceLines;
+
+    void fetch_for_debugger(std::uint64_t address, bool preview);
 };

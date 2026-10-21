@@ -26,6 +26,10 @@ export type CodeEditorProps = {
     documentUri?: string;
     /** Optional language service client for SIC/XE source files. */
     languageClient?: AssemblerLanguageClient | null;
+    /** 1-based source line of the instruction currently fetched by the CPU. */
+    executingLine?: number | null;
+    /** Address of the fetched instruction, shown in the marker tooltip. */
+    executingAddress?: number | null;
     /** Called with the new content on every edit. */
     onChange: (value: string) => void;
     /** Called when the user closes the tab. Omit to hide the close button. */
@@ -47,6 +51,8 @@ export function CodeEditor({
     documentUri,
     languageClient,
     onChange,
+    executingLine = null,
+    executingAddress = null,
     onCloseTab,
     onMount,
     theme = "vs-dark",
@@ -84,6 +90,36 @@ export function CodeEditor({
         };
     }, [documentUri, editorInstance, language, languageClient, monacoInstance]);
 
+    useEffect(() => {
+        if (!editorInstance || !monacoInstance || !executingLine || language !== "sicxe")
+            return;
+
+        const model = editorInstance.getModel();
+        if (!model || model.isDisposed() || executingLine > model.getLineCount())
+            return;
+
+        const decorations = editorInstance.createDecorationsCollection();
+        decorations.set([{
+            range: new monacoInstance.Range(executingLine, 1, executingLine, 1),
+            options: {
+                isWholeLine: true,
+                className: "sicxe-executing-line",
+                glyphMarginClassName: "sicxe-executing-glyph",
+                glyphMarginHoverMessage: {
+                    value: "Currently executing address " + (executingAddress ?? "unknown") + " (line " + executingLine + ")",
+                },
+                overviewRuler: {
+                    color: "#f87171",
+                    position: monacoInstance.editor.OverviewRulerLane.Left,
+                },
+            },
+        }]);
+
+        // Keep the user's caret and selection intact; only scroll when the
+        // executing statement is outside the current viewport.
+        editorInstance.revealLineInCenterIfOutsideViewport(executingLine);
+        return () => decorations.clear();
+    }, [editorInstance, monacoInstance, executingAddress, executingLine, language]);
     return (
         <section
             className="
@@ -174,6 +210,7 @@ export function CodeEditor({
                         tabSize: 8,
                         insertSpaces: false,
                         lineNumbers: "on",
+                        glyphMargin: true,
                         folding: true,
                         bracketPairColorization: { enabled: true },
                         quickSuggestions: { other: true, comments: false, strings: false },

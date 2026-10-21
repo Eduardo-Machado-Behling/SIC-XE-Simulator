@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <regex>
 #include <sstream>
 #include <stdexcept>
@@ -72,11 +73,14 @@ void SICXE::reset() {
         else
             m_registerAccessor.clear(r.name);
     }
+
+    fetch_for_debugger(m_programStart, /*preview=*/true);
 }
 
 void SICXE::clear() {
     m_memoryAccessor.clear();
     m_assembler.clear();
+    m_instructionSourceLines.clear();
     m_halted = false;
 
     for (auto& r : m_info.registers) {
@@ -89,13 +93,27 @@ void SICXE::clear() {
     m_instructionExecutor.execute(std::make_unique<architecture::events::ProgramCleared>());
 }
 
+void SICXE::fetch_for_debugger(std::uint64_t address, bool preview) {
+    const std::size_t memorySize = m_info.memory.address_space_size;
+    const std::size_t fetchSize = m_info.memory.address_width;
+    if ((address > memorySize ||
+         fetchSize > memorySize - static_cast<std::size_t>(address)) && preview)
+        return;
+
+    const auto source = m_instructionSourceLines.find(static_cast<std::uint32_t>(address));
+    const std::optional<std::size_t> sourceLine = source == m_instructionSourceLines.end()
+        ? std::nullopt
+        : std::optional<std::size_t>{source->second};
+    m_memoryAccessor.fetch(address, fetchSize, m_buffer, sourceLine, preview);
+}
+
 void SICXE::step() {
     if (m_halted)
         return;
 
     const auto pc = Word::from_bytes(m_registerAccessor.read("PC")).as_unsigned();
 
-    m_memoryAccessor.fetch(pc, m_info.memory.address_width, m_buffer);
+    fetch_for_debugger(pc, /*preview=*/false);
     const DecodedInstruction instruction(m_registerAccessor,
                                          m_memoryAccessor,
                                          m_set,
@@ -105,6 +123,10 @@ void SICXE::step() {
 
     instruction.execute();
     m_halted = instruction.description != nullptr && instruction.description->mnemonic == "HALT";
+    if (!m_halted) {
+        const auto nextPc = Word::from_bytes(m_registerAccessor.read("PC")).as_unsigned();
+        fetch_for_debugger(nextPc, /*preview=*/true);
+    }
 }
 
 std::vector<ExecutionEvent> SICXE::load_file(std::string& content) {
@@ -112,6 +134,7 @@ std::vector<ExecutionEvent> SICXE::load_file(std::string& content) {
     // mutations are recorded before parsing so a failed load still reports
     // the cleared state to the client through the websocket error response.
     m_programStart = 0;
+    m_instructionSourceLines.clear();
     clear();
 
     if (!content.empty() && content[0] == ';') {
@@ -145,6 +168,10 @@ std::vector<ExecutionEvent> SICXE::load_file(std::string& content) {
             throw;
         }
         const auto entry_point = m_assembler.lastInfo().entryPoint;
+        for (const auto& source : m_assembler.lastInfo().instructionSourceMap) {
+            m_instructionSourceLines.emplace(static_cast<std::uint32_t>(source.address),
+                                             static_cast<std::size_t>(source.line));
+        }
         m_programStart = static_cast<std::uint32_t>(entry_point);
         m_memoryAccessor.write(0, image);
         m_registerAccessor.write("PC", Word(m_programStart).to_bytes());
@@ -158,6 +185,7 @@ std::vector<ExecutionEvent> SICXE::load_file(std::string& content) {
             nlohmann::json{{"symbols", symbols}}));
     }
     m_halted = false;
+    fetch_for_debugger(m_programStart, /*preview=*/true);
     return consume_events();
 }
 

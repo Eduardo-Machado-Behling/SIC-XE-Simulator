@@ -4,10 +4,12 @@ actor Frontend
 participant "Simulator Client" as Client
 participant "WebSocketServer" as WS
 participant Simulator
-participant Architecture
+participant "SIC/XE Architecture" as Architecture
 participant Registers
+participant "Memory Accessor" as MemoryAccessor
 participant Memory
-participant "Event Queue" as Events
+participant "Instruction Source Map" as SourceMap
+participant "Event Manager" as Events
 
 Frontend -> Client : step()
 Client -> WS : {id, type:"step"}
@@ -16,21 +18,44 @@ WS -> Simulator : step()
 Simulator -> Registers : read(PC)
 Registers --> Simulator : PC
 
-Simulator -> Memory : read(PC)
-Memory --> Simulator : instruction bytes
-
-Simulator -> Events : InstructionFetched
-
-Simulator -> Architecture : execute/step instruction
+Simulator -> Architecture : step()
+Architecture -> Registers : read(PC)
+Registers --> Architecture : PC
+Architecture -> SourceMap : lookup instruction address PC
+SourceMap --> Architecture : 1-based source line (if mapped)
+Architecture -> MemoryAccessor : fetch(PC, size, source line, preview=false)
+MemoryAccessor -> Memory : read(PC, size)
+Memory --> MemoryAccessor : instruction bytes
+MemoryAccessor -> Events : commit InstructionFetched(address, bytes, source_line?)
+MemoryAccessor --> Architecture : instruction bytes
 
 Architecture -> Registers : read/write registers
 Architecture -> Memory : read/write memory
 
-Architecture --> Simulator : execution result/events
-Simulator -> Events : append state events
+Architecture -> Registers : read(PC) after execution
+Registers --> Architecture : next PC
+Architecture -> SourceMap : lookup instruction address next PC
+SourceMap --> Architecture : 1-based source line (if mapped)
+Architecture -> MemoryAccessor : fetch(next PC, size, source line, preview=true)
+MemoryAccessor -> Memory : read(next PC, size)
+Memory --> MemoryAccessor : next instruction bytes
+MemoryAccessor -> Events : commit preview InstructionFetched
+
+Architecture --> Simulator : instruction step complete
+Simulator -> Events : read events since step start
 
 Simulator --> WS : {id, result: events}
 WS --> Client : response
 Client --> Frontend : resolve(events)
+Frontend -> Frontend : map source_line to active Monaco model
+Frontend -> Frontend : animate real fetch as executed instruction
+Frontend -> Frontend : map final fetch source_line to active Monaco model
+Frontend -> Frontend : show debugger arrow on next instruction
+
+note right of SourceMap
+Built by the assembler from emitted
+instruction address and source line.
+Raw hex images have no source map.
+end note
 
 @enduml

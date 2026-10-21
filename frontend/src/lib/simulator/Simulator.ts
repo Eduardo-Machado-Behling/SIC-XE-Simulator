@@ -1,12 +1,8 @@
 import { LoadProjectResponse, SimulatorTransport } from "@/lib/transport/SimulatorTransport";
 import { WebTransport } from "@/lib/transport/WebTransport";
-import { Project } from "@/lib/simulator/Project";
 import { ExecutionEvent } from "@/lib/simulator/ExecutionEvent";
-import { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
 import { RegisterState } from "@/components/RegisterTable";
 import { Dispatch, SetStateAction } from "react";
-import { stripIsPartialByte } from "next/dist/client/components/segment-cache/cache";
-import { ExecutionView } from "@/components/ExecutionView";
 import { simulatorBaseUrl } from "@/lib/transport/urls";
 
 
@@ -78,24 +74,12 @@ export class Simulator {
         });
     }
 
-    public async setFile(filePath: string, content: string): Promise<unknown> {
-        return this.transport!.setFile(filePath, content);
-    }
-
-    public async projects(): Promise<Project[]> {
-        return this.transport!.projects();
-    }
-
     public async architectures(): Promise<string[]> {
         return this.transport!.architectures();
     }
 
-    public async createProject(newProject: Project): Promise<unknown> {
-        return this.transport!.createProject(newProject);
-    }
-
-    public async loadProject(projectId: string): Promise<LoadProjectResponse> {
-        return this.transport!.loadProject(projectId);
+    public async loadProject(sessionId: string, projectId: string): Promise<LoadProjectResponse> {
+        return this.transport!.loadProject(sessionId, projectId);
     }
 
     public loadFile(file: string): Promise<ExecutionEvent[]> {

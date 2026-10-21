@@ -21,7 +21,6 @@ import fileOperations from './suites/files.js';
 import healthAndArchitectures from './suites/health-architectures.js';
 import languageServer from './suites/language-server.js';
 import isolationAndConcurrency from './suites/isolation-concurrency.js';
-import legacy from './suites/legacy.js';
 import projects from './suites/projects.js';
 import sessions from './suites/sessions.js';
 import startup from './suites/startup.js';
@@ -67,7 +66,6 @@ sync(ctx);
 isolationAndConcurrency(ctx);
 errorsAndLimits(ctx);
 contract(ctx);
-legacy(ctx);
 startup(ctx);
 storageLimits();
 

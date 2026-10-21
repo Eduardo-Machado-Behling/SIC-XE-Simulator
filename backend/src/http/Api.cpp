@@ -113,7 +113,7 @@ std::vector<std::string> documented_architectures(const std::unordered_set<std::
 void Server::setup_errors() {
     // Requests that never reach an API handler (unknown route, body over the
     // size limit, malformed HTTP) still get an `Error` problem object. Bodies
-    // already written by a handler (including the legacy routes) are kept.
+    // already written by a handler are kept.
     this->set_error_handler([](const httplib::Request&, httplib::Response& res) {
         if (!res.body.empty())
             return httplib::Server::HandlerResponse::Unhandled;

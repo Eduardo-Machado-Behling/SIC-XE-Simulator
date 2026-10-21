@@ -16,6 +16,8 @@ import { ErrorModal } from "@/components/ErrorModal";
 import Project from "@/components/Project";
 import { Project as TypeProject } from "@/lib/simulator/Project";
 import { Simulator } from "@/lib/simulator/Simulator";
+import { readStoredProjects, saveStoredProjects, syncProjectsToSession } from "@/lib/simulator/ProjectSessionSync";
+import { DEFAULT_MAIN_SOURCE } from "@/lib/simulator/defaultMainSource";
 
 export default function ProjectsPage() {
     const router = useRouter();
@@ -33,9 +35,24 @@ export default function ProjectsPage() {
     useEffect(() => {
         let cancelled = false;
 
-        simulator.projects()
-            .then((items) => {
-                if (!cancelled) setProjects(items);
+        Promise.all([simulator.architectures(), Promise.resolve(readStoredProjects())])
+            .then(async ([items, stored]) => {
+                let localProjects = stored;
+                if (localProjects.length === 0 && items.length > 0) {
+                    const preferred = items.find((item) => item.toLowerCase().replace(/[^a-z0-9]/g, "") === "sicxe") ?? items[0];
+                    localProjects = [{
+                        id: crypto.randomUUID(),
+                        name: "SIC/XE Syntax Tour",
+                        architecture: preferred,
+                        files: { "main.asm": DEFAULT_MAIN_SOURCE },
+                    }];
+                    saveStoredProjects(localProjects);
+                }
+                await syncProjectsToSession(localProjects);
+                if (!cancelled) {
+                    setProjects(localProjects);
+                    setArchitectures(items.sort((a, b) => a.localeCompare(b)));
+                }
             })
             .catch((reason: unknown) => {
                 if (!cancelled) {
@@ -47,14 +64,6 @@ export default function ProjectsPage() {
             })
             .finally(() => {
                 if (!cancelled) setLoading(false);
-            });
-
-        simulator.architectures()
-            .then((items) => {
-                if (!cancelled) setArchitectures(items.sort((a, b) => a.localeCompare(b)));
-            })
-            .catch(() => {
-                if (!cancelled) setArchitectures([]);
             });
 
         return () => {
@@ -97,13 +106,15 @@ export default function ProjectsPage() {
             id: crypto.randomUUID(),
             name,
             architecture,
-            files: {},
+            files: { "main.asm": DEFAULT_MAIN_SOURCE },
         };
 
         setCreating(true);
         try {
-            await simulator.createProject(project);
-            setProjects((current) => [project, ...current]);
+            const updated = [...projects, project];
+            saveStoredProjects(updated);
+            await syncProjectsToSession(updated);
+            setProjects(updated);
             setCreateOpen(false);
             router.push(`/editor/${project.id}/`);
         } catch (reason) {

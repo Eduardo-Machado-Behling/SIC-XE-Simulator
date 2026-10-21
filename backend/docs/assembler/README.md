@@ -12,6 +12,11 @@ input to a parser generator.
   schemas, registers, and SIC-mode availability.
 - [Assembly process and output](implementation.md) — pass behavior, symbol and
   location handling, instruction encoding, diagnostics, and result metadata.
+- [Two-pass assembler UML](../uml/21_assembler_two_pass.puml) — maps the
+  textbook analysis/synthesis passes to the current parser, engine, and output.
+- [Language server sequence UML](../uml/22_language_server_sequence.puml) —
+  shows Monaco document synchronization, diagnostics, and feature requests
+  over the `/language` WebSocket.
 
 ## Implementation sources
 

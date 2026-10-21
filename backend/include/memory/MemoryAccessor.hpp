@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstring>
+#include <optional>
 #include <vector>
 #include "common/Byte.hpp"
 #include "memory/CodeMemory.hpp"
@@ -18,7 +19,11 @@ struct MemoryAccessor : public LinkQueue {
     void clear();
     void read(size_t address, size_t size, std::vector<byte_t>& buffer);
     void read(size_t address, Iterator begin, Iterator end);
-    void fetch(size_t address, size_t size, std::vector<byte_t>& buffer);
+    void fetch(size_t address,
+               size_t size,
+               std::vector<byte_t>& buffer,
+               std::optional<std::size_t> sourceLine = std::nullopt,
+               bool preview = false);
 
 
 	template <typename T>
