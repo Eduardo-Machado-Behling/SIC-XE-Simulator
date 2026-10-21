@@ -1,0 +1,62 @@
+source ::= line*
+line ::= blank-line | dot-comment | statement-line
+blank-line ::= whitespace* semicolon-comment?
+dot-comment ::= "." any-character*
+statement-line ::= statement whitespace? semicolon-comment?
+
+statement ::= operation-line | labeled-line | label-only-line
+operation-line ::= operation (whitespace operand-text)?
+labeled-line ::= identifier whitespace operation (whitespace operand-text)?
+label-only-line ::= identifier
+
+operation ::= "+"? instruction relative-selector? | directive
+relative-selector ::= ",p" | ",b"
+operand-text ::= operand ("," operand)*
+operand ::= memory-operand | indexed-operand | register | expression | data-item
+memory-operand ::= ("#" | "@")? expression
+indexed-operand ::= expression "," "$X"
+
+instruction ::= format-1-instruction | format-2-instruction | format-3-or-4-instruction
+format-1-instruction ::= "FIX" | "FLOAT" | "HALT" | "HIO" | "NORM" | "SIO" | "TIO"
+format-2-instruction ::= "ADDR" | "CLEAR" | "COMPR" | "DIVR" | "MULR" | "RMO" | "SHIFTL" | "SHIFTR" | "SUBR" | "SVC" | "TIXR"
+format-3-or-4-instruction ::= "ADD" | "ADDF" | "AND" | "COMP" | "COMPF" | "DIV" | "DIVF" | "J" | "JEQ" | "JGT" | "JLT" | "JSUB" | "LDA" | "LDB" | "LDCH" | "LDF" | "LDL" | "LDS" | "LDT" | "LDX" | "LPS" | "MUL" | "MULF" | "OR" | "RD" | "RSUB" | "SSK" | "STA" | "STB" | "STCH" | "STF" | "STI" | "STL" | "STS" | "STSW" | "STT" | "STX" | "SUB" | "SUBF" | "TD" | "TIX" | "WD"
+
+directive ::= "START" | "END" | "BYTE" | "WORD" | "RESB" | "RESW" | "BASE" | "NOBASE" | "EQU" | "ORG"
+
+format-2-operands ::= register | register "," register | register "," expression | expression
+register-form-alias ::= ("ADD" | "SUB" | "MUL" | "DIV" | "COMP") register "," register | "TIX" register
+
+directive-operands ::= "START" expression
+                     | "END" expression?
+                     | "BYTE" data-item ("," data-item)*
+                     | "WORD" expression ("," expression)*
+                     | ("RESB" | "RESW" | "BASE" | "EQU") expression
+                     | "NOBASE"
+                     | "ORG" expression?
+
+data-item ::= expression | character-literal | hexadecimal-literal
+character-literal ::= ("C" | "c") "'" character+ "'"
+hexadecimal-literal ::= ("X" | "x") "'" hex-digit hex-digit (hex-digit hex-digit)* "'"
+
+expression ::= sum
+sum ::= product (("+" | "-") product)*
+product ::= unary (("*" | "/") unary)*
+unary ::= ("+" | "-")? unary | primary
+primary ::= number | identifier | "*" | "(" expression ")"
+number ::= decimal-number | hex-number
+decimal-number ::= digit+
+hex-number ::= ("0x" | "0X") hex-digit+
+
+register ::= "$" register-name
+register-name ::= "A" | "X" | "L" | "B" | "S" | "T" | "F" | "PC" | "SW"
+identifier ::= identifier-start identifier-character*
+identifier-start ::= letter | "_"
+identifier-character ::= letter | digit | "_"
+
+whitespace ::= [#x9#xA#xB#xC#xD#x20]+
+letter ::= [A-Za-z]
+digit ::= [0-9]
+hex-digit ::= [0-9A-Fa-f]
+character ::= [^']
+any-character ::= [#x0-#x10FFFF]
+semicolon-comment ::= ";" any-character*

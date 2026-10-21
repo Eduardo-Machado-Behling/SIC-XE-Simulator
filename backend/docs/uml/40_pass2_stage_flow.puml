@@ -1,0 +1,50 @@
+@startuml
+title Assembler Stage 2 - Evaluation and Emission
+skinparam linetype ortho
+skinparam shadowing false
+skinparam state {
+  BackgroundColor White
+  BorderColor #455A64
+  ArrowColor #546E7A
+}
+
+[*] --> Next
+state "Next Statement in source order" as Next
+state "Statement valid?" as Valid
+state "Select statement kind" as Kind
+state "Instruction" as Instruction
+state "Directive" as Directive
+state "Instruction schema" as Schema
+state "Encode instruction\nformat-specific path" as Encode
+state "BYTE\ncopy parsed literal bytes\nevaluate expression items\ncheck 8-bit range; emit bytes" as Byte
+state "WORD\nevaluate each expression\ncheck 24-bit range; emit 3 bytes\nrecord relocation for relocatable value" as Word
+state "BASE / NOBASE\nevaluate and store base\nor clear active base" as Base
+state "END\nevaluate optional entry expression" as End
+state "No pass-2 output\nSTART / RESB / RESW / EQU / ORG" as NoOutput
+state "Append listing line\naddress, emitted bytes, source text" as Listing
+state "More statements?" as More
+state "Pass 2 complete\nsparse CodeMemory + listing + relocations" as Done
+
+Next --> Valid
+Valid --> Kind : yes
+Valid --> Listing : no
+Kind --> Instruction : instruction
+Kind --> Directive : directive
+Instruction --> Schema
+Schema --> Encode : None / Reg / RegReg / RegCount / Number / Memory
+Encode --> Listing
+Directive --> Byte : BYTE
+Directive --> Word : WORD
+Directive --> Base : BASE / NOBASE
+Directive --> End : END
+Directive --> NoOutput : other directives
+Byte --> Listing
+Word --> Listing
+Base --> Listing
+End --> Listing
+NoOutput --> Listing
+Listing --> More
+More --> Next : yes
+More --> Done : no
+Done --> [*]
+@enduml

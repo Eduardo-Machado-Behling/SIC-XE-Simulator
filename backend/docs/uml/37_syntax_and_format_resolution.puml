@@ -1,0 +1,55 @@
+@startuml
+title SIC/XE Syntax and Instruction Format Resolution
+skinparam linetype ortho
+skinparam shadowing false
+skinparam state {
+  BackgroundColor White
+  BorderColor #455A64
+  ArrowColor #546E7A
+}
+
+[*] --> Source
+
+state "Source line" as Source
+state "Lexical helpers\n\nStrip comments outside quotes\nscan whitespace-delimited fields\nsplit operands on commas outside literals" as Lex
+state "Resolve first field\n\nKnown instruction/directive -> operation\notherwise -> label, then read operation\nuppercase name for lookup" as FirstField
+state "ISA / directive lookup\n\nInstructionDef: opcode, base format,\nOperandSchema, SIC support\nDirectiveKind resolved separately" as Lookup
+state "Operand alias check\n\nRegister-first ADD/SUB/MUL/DIV/COMP\nselect ADDR/SUBR/MULR/DIVR/COMPR\nTIX + register selects TIXR" as Alias
+state "Parse by schema\n\nMemory: expr, optional # / @, optional $X\nReg / RegReg / RegCount / Number\nvalidate arity and register names" as Schema
+state "Select architecture and size" as Size
+state "SIC mode\n\n3-byte instruction size\nreject unsupported instruction, '+',\nand immediate / indirect mode" as SIC
+state "SIC/XE mode\n\nFormat 1 -> 1 byte\nFormat 2 -> 2 bytes\nFormat 3 -> 3 bytes\n'+' -> format 4 (4 bytes) only when\nInstructionDef allows extension" as XE
+state "Format-3 address selection\n\nForced ,p or ,b -> validate that mode\nAutomatic -> PC-relative if in range;\nelse BASE-relative if active and in range;\nelse direct 12-bit if absolute and in range;\notherwise error suggests '+'\nNo automatic format-4 promotion" as AddressMode
+state "Directive path\n\nDirectiveKind-specific parsing and validation\nPass 1 handles layout and symbols\nPass 2 emits BYTE / WORD data where needed" as DirectivePath
+state "Encode bytes" as Encode
+state "Diagnostics + AssemblyResult" as Result
+
+Source --> Lex
+Lex --> FirstField
+FirstField --> Lookup : operation
+Lookup --> Alias : instruction
+Lookup --> DirectivePath : directive
+Lookup --> Result : unknown operation
+Alias --> Schema
+Schema --> Size
+Size --> SIC : SIC option
+Size --> XE : SIC/XE option
+SIC --> Encode
+XE --> AddressMode : format-3 memory
+XE --> Encode : format 1 / 2 / 4 or non-memory
+AddressMode --> Encode
+Encode --> Result
+DirectivePath --> Result
+Result --> [*]
+
+note right of Lookup
+The language server sends this vocabulary to Monaco's
+Monarch tokenizer during initialize for token coloring.
+Coloring is separate from parser validation and format selection.
+end note
+
+note bottom of AddressMode
+Out-of-range format-3 targets are diagnosed.
+The user must explicitly add '+' for format 4.
+end note
+@enduml

@@ -1,0 +1,35 @@
+@startuml
+title SIC/XE Assembler - High-Level Pipeline
+left to right direction
+skinparam linetype ortho
+skinparam shadowing false
+skinparam state {
+  BackgroundColor White
+  BorderColor #455A64
+  ArrowColor #546E7A
+}
+
+[*] --> Parse
+
+state "Parse source\n\nparseLine per physical line\ncomments, fields, mnemonic, operands\nproduce Statement records + diagnostics" as Parse
+state "Parsed statements\n\nSource order\nlabels, instruction/directive identity\noperand schema data" as IR
+state "First stage (Pass 1)\n\nAssign addresses and sizes\nProcess layout directives\ndefine symbols\nvalidate address-space constraints" as Pass1
+state "Second stage (Pass 2)\n\nResolve expression values\nprocess BASE / NOBASE / END\ncreate listing and relocation metadata" as Pass2
+state "Instruction encoding\n\nFormat 1 / 2 / 3 / 4\nSIC or SIC/XE memory encoding\nvalidate field ranges and addressing" as Encode
+state "Data encoding\n\nBYTE literals or values\nWORD 24-bit values + relocation" as Data
+state "Assembly result\n\nsparse CodeMemory\nsymbols, entry point, length\nlisting, relocations, diagnostics" as Result
+
+Parse --> IR
+IR --> Pass1
+Pass1 --> Pass2
+Pass2 --> Encode : instruction
+Pass2 --> Data : BYTE / WORD
+Encode --> Result
+Data --> Result
+Result --> [*]
+
+note bottom of Pass1
+Each assembly run owns its own Engine state.
+The parser builds Statements before either pass begins.
+end note
+@enduml

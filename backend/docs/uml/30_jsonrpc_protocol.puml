@@ -1,0 +1,108 @@
+@startuml
+skinparam linetype ortho
+skinparam shadowing false
+title JSON-RPC message flow over the language WebSocket
+autonumber
+hide footbox
+
+actor "Monaco editor" as Editor
+participant "AssemblerLanguageClient" as Client
+participant "WebSocket /language" as WS
+participant "WebSocket handler" as Handler
+participant "AssemblerLanguageSession" as Session
+participant "sicxe::Assembler" as Assembler
+
+note over Client,WS
+One JSON-RPC message is sent in each WebSocket text frame.
+This endpoint does not use stdio Content-Length framing.
+end note
+
+note over Client,Session
+Request:
+{jsonrpc:"2.0", id, method, params}
+
+Response:
+{jsonrpc:"2.0", id, result} or
+{jsonrpc:"2.0", id, error}
+
+Notification:
+{jsonrpc:"2.0", method, params}
+A notification has no id and receives no JSON-RPC response.
+end note
+
+== Initialize: request and response ==
+Client -> WS : initialize request (id = 1)
+WS -> Handler : text frame
+Handler -> Session : handle(request)
+Session --> Handler : response with capabilities/catalog
+Handler --> WS : JSON-RPC response
+WS --> Client : same id = 1
+Client -> WS : initialized notification (no id)
+WS -> Handler : text frame
+Handler -> Session : handle(notification)
+note over Client,Session
+No response is sent for this notification.
+end note
+Client -> Editor : install language catalog
+
+== Document notification and diagnostics ==
+Editor -> Client : open or change document
+Client -> WS : didOpen / didChange notification\n(no id, URI, version, full text)
+WS -> Handler : text frame
+Handler -> Session : replace document snapshot
+Session -> Assembler : assembleDetailed(text)
+Assembler --> Session : AssemblyResult
+Session --> Handler : publishDiagnostics notification\n(no id, URI, version, diagnostics)
+Handler -> WS : send notification
+WS --> Client : server notification
+Client --> Editor : update Monaco markers
+note over Client,Session
+didOpen, didChange, didSave, and didClose
+are notifications. Diagnostics are a separate
+server-initiated notification.
+end note
+
+== Language feature: request and response ==
+Editor -> Client : completion / hover / definition /\nreferences / rename
+Client -> WS : JSON-RPC request (id = 42)
+WS -> Handler : text frame
+Handler -> Session : handle(request)
+opt cached analysis is stale
+  Session -> Assembler : assembleDetailed(current text)
+  Assembler --> Session : AssemblyResult
+end
+Session -> Session : compute feature result
+Session --> Handler : result or error with id = 42
+Handler --> WS : JSON-RPC response
+WS --> Client : same id = 42
+Client --> Editor : resolve provider request
+
+== Close document ==
+Editor -> Client : close document
+Client -> WS : didClose notification (no id)
+WS -> Handler : text frame
+Handler -> Session : erase document
+Session --> Handler : publishDiagnostics with empty list
+Handler -> WS : send notification
+WS --> Client : clear markers
+
+== Protocol errors ==
+alt invalid JSON text frame
+  Client -> WS : malformed JSON
+  WS -> Handler : text frame
+  Handler -> Handler : parse fails
+  Handler -> WS : parse error with id = null
+  WS --> Client : error response
+else failed request
+  Session --> Handler : error object with request id
+  Handler --> WS : JSON-RPC error response
+  WS --> Client : same id and error details
+end
+
+note over Session,Assembler
+The session owns documents and cached analysis.
+The assembler supplies source analysis only;
+this channel does not execute programs or mutate
+Simulator memory, registers, or project state.
+end note
+@enduml

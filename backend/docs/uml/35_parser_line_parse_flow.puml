@@ -1,0 +1,59 @@
+@startuml
+title SIC/XE parseLine - Detailed Horizontal Parser Flow
+left to right direction
+skinparam linetype ortho
+skinparam shadowing false
+skinparam state {
+  BackgroundColor White
+  BorderColor #455A64
+  ArrowColor #546E7A
+}
+
+[*] --> Normalize
+
+state "1. Normalize and filter line\n\n- Remove trailing CR/LF\n- If column 1 is '.', ignore the line\n- Strip ';' comment outside apostrophe quotes\n- Return null for blank/comment-only input" as Normalize
+
+state "2. Read first field\n\nnextField skips isSpace and scans\nto the next whitespace boundary" as FirstField
+
+state "3. Decide label or operation\n\nLookup uses operationMnemonic + uppercase\n(ignores leading '+' and suffix after ',')\n\nKnown opcode/directive -> operation\nOtherwise -> label; validate identifier and\nreject register names as labels\n\nRead next field as operation; if absent,\nreturn label-only Statement" as Classify
+
+state "4. Parse operation modifiers\n\nRecord 1-based mnemonic column\nLeading '+' sets extended\nSuffix accepts case-insensitive ',p' or ',b'\nStore selector; remove it from mnemonic\nUppercase mnemonic; resolve directive first,\nthen instruction; unknown name reports error\n'+' on a directive reports error" as Resolve
+
+state "5. Split operands and apply alias\n\nCapture remaining text; trim trailing whitespace\nRecord 1-based operand column\nsplitOperands splits commas outside quotes,\ntrims each field, and preserves its start column\n\nFor non-extended instructions, a register-like\nfirst field may select ADDR/SUBR/MULR/DIVR/\nCOMPR or TIXR alias" as Split
+
+state "6A. Instruction schema dispatch\n\nNone: require 0 fields\nMemory: require 1-2; parse # / @ / simple\naddress expression; optional second field\nrequires '$X'; reject indexing with # or @\nReg: 1 register\nRegReg: 2 registers\nRegCount: register + expression\nNumber: 1 expression\n\nRegister parser requires '$' and resolves\nname through registerNumber" as InstructionPath
+
+state "6B. Directive dispatch\n\nNOBASE: 0 fields\nEND / ORG: 0-1 expression\nSTART / RESB / RESW / BASE / EQU: 1 expression\nBYTE / WORD: at least 1 item\n\nC'...' literal -> one byte per source char\nX'...' literal -> even-length hex, decode pairs\nWORD rejects literals; non-literals use\nparseExpression and become DataItems" as DirectivePath
+
+state "Expression service boundary\n\nparseExprField passes text, source line,\nand starting column to parseExpression\nExpression parsing/evaluation is a separate\nservice from this line parser" as ExpressionBoundary
+
+state "Validation and diagnostics\n\narity() checks operand counts\nfail() reports line + 1-based column\nand sets Statement.valid = false\nLiteral errors cover malformed form,\nodd hex length, and invalid hex digits\nParsing can continue after recoverable errors" as Errors
+
+state "Return Statement\n\nSyntax, source text/positions, parsed\noperands and validity are populated\nAddress, size, and emitted bytes are\nfilled later by assembler passes" as Result
+
+Normalize --> FirstField
+FirstField --> Classify
+Classify --> Resolve : operation found
+Classify --> Result : blank / comment / label-only
+Resolve --> Split : known instruction or directive
+Resolve --> Result : unknown operation
+Split --> InstructionPath : instruction
+Split --> DirectivePath : directive
+InstructionPath --> ExpressionBoundary : expression field(s)
+DirectivePath --> ExpressionBoundary : expression item(s)
+InstructionPath --> Errors
+DirectivePath --> Errors
+ExpressionBoundary --> Errors
+Errors --> Result
+Result --> [*]
+
+note top of Normalize
+There is no standalone Lexer object or general token stream.
+Lexical work happens in parser.cpp helper functions.
+end note
+
+note bottom of Resolve
+The parser checks selectors against the memory operand schema.
+The assembler engine later enforces format-3 restrictions.
+end note
+@enduml

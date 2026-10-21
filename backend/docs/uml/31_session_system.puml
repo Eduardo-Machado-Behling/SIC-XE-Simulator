@@ -1,0 +1,60 @@
+@startuml
+skinparam linetype ortho
+skinparam componentStyle rectangle
+skinparam shadowing false
+title Session and project storage system
+
+top to bottom direction
+
+actor "User" as User
+component "Browser application" as Browser
+database "Browser localStorage\nproject snapshots" as Local
+component "Session cookie\nsicxe_session" as Cookie
+component "ProjectSessionSync" as Sync
+component "HTTP session/project API" as API
+database "SessionStore\nin-memory" as Store
+component "WebSocket /ws\ncommand handler" as WS
+component "Simulator\nserver-wide instance" as Simulator
+
+User --> Browser
+Browser --> Local
+Browser --> Sync
+Sync --> Cookie
+Sync --> API
+API --> Store
+Browser --> WS
+WS --> Store
+WS --> Simulator
+
+note right of Sync
+  Validates or creates a session,
+  then bulk-syncs the browser's
+  full project set over HTTP.
+end note
+
+note right of API
+  Session and project endpoints:
+  create / read session
+  list or replace project set
+  get / upsert / delete project
+  upsert / delete file
+end note
+
+note right of Store
+  Owns session-scoped project and
+  file snapshots. In-memory limits,
+  expiry and LRU eviction apply.
+end note
+
+note bottom of WS
+  After project sync, load uses
+  sessionId + projectId to fetch
+  the selected project from Store.
+end note
+
+note bottom of Simulator
+  Machine state is held by the
+  server-wide Simulator instance,
+  not inside SessionStore.
+end note
+@enduml

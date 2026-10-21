@@ -1,0 +1,67 @@
+@startuml
+title Instruction Encoding - SIC and SIC/XE
+skinparam linetype ortho
+skinparam shadowing false
+skinparam state {
+  BackgroundColor White
+  BorderColor #455A64
+  ArrowColor #546E7A
+}
+
+[*] --> Mode
+state "Input from Pass 2\nInstructionDef + parsed Statement\naddress, operands, selected options" as Mode
+state "SIC mode?" as ModeChoice
+state "SIC encoder\nevaluate address\nrequire 0..0x7FFF\nencode opcode + x bit + 15-bit address" as SIC
+state "Instruction format?" as Format
+state "Format 1\nemit opcode byte" as Format1
+state "Format 2\nemit opcode + packed register/count/number byte" as Format2
+state "Format 3, no operands\nemit opcode with n=i=1 and zero address field\nin SIC/XE; plain opcode + zero address in SIC" as Format3None
+state "Memory instruction" as Memory
+state "Format 4 explicitly requested?" as Extended
+state "Extension supported?" as AllowsExtended
+state "Format 4 encoder\nevaluate target; require 20-bit range\nset e=1, b=p=0\nemit 4 bytes; add relocation when needed" as Format4
+state "Format 3 addressing" as Format3
+state "Absolute immediate constant?" as Immediate
+state "Require 12-bit value\nb=p=0; encode direct field" as ImmediateField
+state "Relative mode explicitly selected?" as Forced
+state "Forced PC-relative ,p\ncompute target - PC\nrequire -2048..2047" as PCForced
+state "Forced base-relative ,b\nrequire active BASE\ncompute target - BASE\nrequire 0..4095" as BaseForced
+state "Automatic selection\ntry PC-relative range first\nthen active BASE-relative range\nthen direct absolute 12-bit field" as Automatic
+state "Target representable?" as Representable
+state "Report range error\nsuggest explicit '+' for format 4" as RangeError
+state "Build format-3 flags\ncombine n/i/x/b/p/e + 12-bit field\nemit 3 bytes" as Emit3
+state "Build SIC/XE output bytes" as Output
+
+Mode --> ModeChoice
+ModeChoice --> SIC : yes
+ModeChoice --> Format : no
+SIC --> Output
+Format --> Format1 : format 1
+Format --> Format2 : format 2
+Format --> Memory : format 3 + Memory schema
+Format --> Format3None : format 3 + None schema
+Memory --> Extended
+Extended --> AllowsExtended : yes
+Extended --> Format3 : no
+AllowsExtended --> Format4 : supported
+AllowsExtended --> RangeError : unsupported
+Format4 --> Output
+Format3 --> Immediate
+Immediate --> ImmediateField : yes
+Immediate --> Forced : no
+ImmediateField --> Emit3
+Forced --> PCForced : ,p
+Forced --> BaseForced : ,b
+Forced --> Automatic : none
+PCForced --> Representable
+BaseForced --> Representable
+Automatic --> Representable
+Representable --> Emit3 : yes
+Representable --> RangeError : no
+Emit3 --> Output
+Format1 --> Output
+Format2 --> Output
+Format3None --> Output
+RangeError --> Output
+Output --> [*]
+@enduml

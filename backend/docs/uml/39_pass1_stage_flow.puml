@@ -1,0 +1,63 @@
+@startuml
+title Assembler Stage 1 - Pass 1 Layout and Symbols
+skinparam linetype ortho
+skinparam shadowing false
+skinparam state {
+  BackgroundColor White
+  BorderColor #455A64
+  ArrowColor #546E7A
+}
+
+[*] --> Initialize
+state "Initialize layout state\nLC = 0; high-water mark = 0\nempty symbol table; END not seen" as Initialize
+state "Next parsed Statement\nset statement.address = LC" as Next
+state "END already seen?" as Ended
+state "Ignore later statement\nwarn once; mark invalid" as Ignored
+state "Statement kind?" as Kind
+state "Instruction\ndefine label at LC\nvalidate SIC/XE and format request\nselect statement size" as Instruction
+state "Directive" as Directive
+state "Label-only / invalid operation\ndefine label at LC when present" as LabelOnly
+state "Apply layout directive" as LayoutDirective
+state "START\nonly before code; evaluate absolute start\nset start, LC, high-water mark, program name" as Start
+state "BYTE / WORD\nBYTE size = literal bytes or 1 per expression\nWORD size = 3 bytes per item\ndefine label at LC" as DataSize
+state "RESB / RESW\nevaluate absolute count\nsize = count * 1 or 3 bytes" as Reserve
+state "EQU\nevaluate expression without forward refs\ndefine relocatable/absolute symbol value" as Equ
+state "ORG\nevaluate target or restore saved LC\nupdate statement address" as Org
+state "END / BASE / NOBASE\nmark END state or define label\nBASE state is evaluated later in Pass 2" as Other
+state "Advance location\nLC += statement.size\nupdate high-water mark" as Advance
+state "Address-space overflow?" as Overflow
+state "Report overflow once" as ReportOverflow
+state "More statements?" as More
+state "Pass 1 complete\naddresses, sizes, symbols, layout diagnostics" as Done
+
+Initialize --> Next
+Next --> Ended
+Ended --> Ignored : yes
+Ended --> Kind : no
+Ignored --> More
+Kind --> Instruction : instruction
+Kind --> Directive : directive
+Kind --> LabelOnly : otherwise
+Instruction --> Advance
+Directive --> LayoutDirective
+LayoutDirective --> Start : START
+LayoutDirective --> DataSize : BYTE / WORD
+LayoutDirective --> Reserve : RESB / RESW
+LayoutDirective --> Equ : EQU
+LayoutDirective --> Org : ORG
+LayoutDirective --> Other : END / BASE / NOBASE
+Start --> Advance
+DataSize --> Advance
+Reserve --> Advance
+Equ --> Advance
+Org --> Advance
+Other --> Advance
+LabelOnly --> Advance
+Advance --> Overflow
+Overflow --> ReportOverflow : yes, not reported
+Overflow --> More : no or already reported
+ReportOverflow --> More
+More --> Next : yes
+More --> Done : no
+Done --> [*]
+@enduml

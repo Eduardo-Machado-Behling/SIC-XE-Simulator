@@ -1,0 +1,55 @@
+@startuml
+skinparam linetype ortho
+skinparam componentStyle rectangle
+skinparam shadowing false
+title SIC/XE assembler - high-level structure
+
+top to bottom direction
+
+component "Assembler API\nassemble / assembleDetailed" as API
+component "Engine\nper-assembly state" as Engine
+component "Line parser\nparseLine" as Parser
+component "Statement vector\nsource order" as Statements
+component "ISA catalog\ninstructions and directives" as ISA
+component "Pass 1\nlayout and symbols" as Pass1
+component "Pass 2\nbytes and listing" as Pass2
+component "Value evaluation\nopaque dependency" as Values
+component "CodeMemory\nsparse initialized bytes" as Memory
+component "AssemblyInfo\ndiagnostics, symbols,\nrelocations, source map" as Info
+component "SIC/XE loader" as Runtime
+component "Language service" as Language
+
+API --> Engine
+Engine --> Parser
+Parser --> ISA
+Parser --> Statements
+Statements --> Pass1
+ISA --> Pass1
+Pass1 --> Pass2
+Values --> Pass1
+Values --> Pass2
+Pass2 --> Memory
+Pass1 --> Info
+Pass2 --> Info
+Memory --> Runtime
+Info --> Runtime
+Info --> Language
+
+note right of Engine
+  Owns location counter, symbols,
+  diagnostics, BASE/ORG state,
+  output and metadata for one run.
+end note
+
+note right of Values
+  Expression parser/evaluator
+  internals are intentionally
+  outside this high-level view.
+end note
+
+note bottom of Info
+  assembleDetailed returns both
+  outputs. assemble() stores the
+  metadata and throws on errors.
+end note
+@enduml

@@ -1,0 +1,57 @@
+@startuml
+skinparam linetype ortho
+skinparam componentStyle rectangle
+skinparam shadowing false
+title Language server system architecture
+
+top to bottom direction
+
+component "Monaco editor\nCodeEditor" as Editor
+component "Monarch tokenizer\nand language providers" as Providers
+component "AssemblerLanguageClient" as Client
+component "WebSocket /language" as WS
+component "Server WebSocket handler" as Handler
+component "AssemblerLanguageSession\none per connection" as Session
+component "Open documents\nURI, text, version,\nsaved flag, cached analysis" as Documents
+component "Assembler library\nassembleDetailed()" as Assembler
+component "AssemblyResult\nCodeMemory + AssemblyInfo" as Result
+
+Editor --> Providers
+Providers --> Client
+Client --> WS
+WS --> Handler
+Handler --> Session
+Session --> Documents
+Session --> Assembler
+Assembler --> Result
+Result --> Session
+Session --> Handler
+Handler --> WS
+WS --> Client
+Client --> Editor
+
+note right of Client
+  Sends JSON-RPC requests and
+  document lifecycle notifications.
+  Reconnect reopens known documents.
+end note
+
+note right of Session
+  Handles initialization, full-text
+  open/change/save/close, diagnostics,
+  completion, hover, definition,
+  references and rename.
+end note
+
+note right of Assembler
+  Whole-document analysis is reused
+  until document text changes.
+  It does not load or run a project.
+end note
+
+note bottom of WS
+  One JSON-RPC message per WebSocket
+  text frame. This is an LSP-shaped
+  subset over WebSocket transport.
+end note
+@enduml

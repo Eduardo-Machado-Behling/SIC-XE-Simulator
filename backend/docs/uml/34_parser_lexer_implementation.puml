@@ -1,0 +1,159 @@
+@startuml
+title SIC/XE Parser and Lexical Helpers — Implementation Structure
+top to bottom direction
+skinparam linetype ortho
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+
+package "Assembler::Engine (caller)" {
+  class "Engine::run / source scan" as Engine
+  class "parseLine(text, lineNo, diagnostics)" as ParseLine
+  Engine --> ParseLine : one physical line at a time
+}
+
+package "parser.cpp — anonymous namespace" {
+  class "Line parser" as ParseImpl {
+    parseLine(text, lineNo, diagnostics)
+    first-field operation/label decision
+    modifier parsing and ISA resolution
+  }
+  class "Line field scanner" as FieldScanner {
+    nextField(start)
+    whitespace-delimited string_view
+  }
+  class "Operand field splitter" as OperandSplitter {
+    splitOperands(text, baseCol)
+    quote-aware comma split
+    trim and preserve source columns
+  }
+  class "Mnemonic normalization" as MnemonicNorm {
+    toUpper(text)
+    operationMnemonic(text)
+  }
+  class "Comment stripping" as CommentStrip {
+    stripComment(line)
+    apostrophe quote tracking
+  }
+  class "Character predicates" as CharPredicates {
+    isSpace(char)
+    isIdentifier(text)
+  }
+  class "Instruction operand dispatcher" as InstParser {
+    parseInstructionOperands(ctx)
+    switch on OperandSchema
+  }
+  class "Directive operand dispatcher" as DirParser {
+    parseDirectiveOperands(ctx)
+    switch on DirectiveKind
+  }
+  class "Memory operand parser" as MemoryParser {
+    parseMemoryOperand(ctx)
+    # / @ prefix, optional index
+  }
+  class "Register parser" as RegisterParser {
+    parseRegister(ctx, field)
+    require '$' prefix
+  }
+  class "Literal decoder" as LiteralParser {
+    parseLiteral(ctx, field, bytes)
+    C literal / X literal
+  }
+  class "Expression boundary" as ExprBoundary {
+    parseExprField(ctx, field)
+    delegates to parseExpression
+  }
+  class "Error helper" as ErrorHelpers {
+    fail(ctx, col, message)
+    arity(ctx, min, max)
+  }
+  class "Register alias selector" as AliasSelector {
+    looksLikeRegisterOperand(field)
+    registerFormAlias(mnemonic)
+  }
+}
+
+package "Assembler model / shared services" {
+  class Statement {
+    line, source
+    label, labelCol
+    mnemonic, mnemonicCol, operandCol
+    extended, relativeMode
+    instruction or directive identity
+    mode, indexed
+    expr, reg1, reg2, items
+    valid
+  }
+  class "Field" as Field {
+    text : string
+    col : int
+  }
+  class "Diagnostics" as Diagnostics
+  class "InstructionDef" as InstructionDef {
+    schema : OperandSchema
+  }
+  class "DataItem" as DataItem {
+    isLiteral
+    literal bytes or expression
+  }
+  class "ISA catalog" as ISA {
+    findInstruction
+    findDirective
+    registerNumber
+  }
+  class "Expression parser" as ExprParser
+}
+
+ParseLine --> ParseImpl : delegates
+ParseImpl ..> CommentStrip : remove semicolon comment
+ParseImpl ..> FieldScanner : scan whitespace fields
+ParseImpl ..> MnemonicNorm : normalize / peel modifiers
+ParseImpl ..> CharPredicates : whitespace and label checks
+ParseImpl ..> OpcodeLookup : classify first field + resolve operation
+ParseImpl ..> OperandSplitter : preserve comma-separated operands
+ParseImpl ..> AliasSelector : inspect register-form aliases
+ParseImpl ..> InstParser : dispatch by instruction schema
+ParseImpl ..> DirParser : dispatch by directive kind
+ParseImpl ..> ErrorHelpers : report diagnostic and invalidate
+
+CommentStrip ..> CharPredicates
+FieldScanner ..> CharPredicates
+OperandSplitter ..> CharPredicates : trim fields
+OpcodeLookup --> ISA
+AliasSelector --> ISA : registerNumber / lookup alias
+InstParser --> InstructionDef : schema switch
+InstParser ..> MemoryParser : Memory schema
+InstParser ..> RegisterParser : Reg / RegReg / RegCount
+InstParser ..> ExprBoundary : numeric expression fields
+DirParser ..> LiteralParser : BYTE / WORD literal candidates
+DirParser ..> ExprBoundary : expression items
+MemoryParser ..> RegisterParser : optional index field
+MemoryParser ..> ExprBoundary : address expression
+RegisterParser --> ISA : registerNumber
+LiteralParser ..> ErrorHelpers : malformed / odd-length / bad hex
+ExprBoundary --> ExprParser : expression text + line + source column
+
+ParseImpl --> Statement : returns Statement
+OperandSplitter --> Field : list of (text, start column)
+InstParser --> Statement : mode, registers, expr, indexed
+DirParser --> Statement : expr or DataItem vector
+DirParser --> DataItem
+ErrorHelpers --> Diagnostics : error(line, column, message)
+ErrorHelpers --> Statement : valid = false
+ParseImpl --> Diagnostics : line-level errors
+
+note right of ParseImpl
+There is no standalone Lexer class or token stream.
+Lexical work is performed by local helpers in parser.cpp:
+line comments, whitespace fields, comma splitting,
+quote tracking, normalization, and identifier checks.
+The parser consumes string_views and creates Field records
+only for comma-separated operand pieces.
+end note
+
+note bottom of Statement
+Parsing records syntax and source locations only.
+Address, size, bytes, and pass validity are filled later
+by the assembler passes.
+end note
+@enduml

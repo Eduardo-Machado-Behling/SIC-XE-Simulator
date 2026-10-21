@@ -1,46 +1,123 @@
 @startuml
-title SIC/XE Simulator - WebSocket Protocol
+skinparam linetype ortho
+title SIC/XE Simulator - WebSocket /ws Protocol
+autonumber
+hide footbox
+
 actor Frontend
 participant "WebSocket /ws" as WS
+participant "Server command handler" as Handler
+participant "SessionStore" as SessionStore
 participant Simulator
-participant "Architecture / CPU" as CPU
-
-Frontend -> WS : Request {id, type, payload}
-WS -> Simulator : dispatch(request)
-
-alt Run
-  Simulator -> CPU : run until breakpoint/halt/input
-  CPU --> Simulator : execution state/events
-else Step
-  Simulator -> CPU : step()
-  CPU --> Simulator : ExecutionEvent[]
-else Stop
-  Simulator -> CPU : stop()
-  CPU --> Simulator : stopped state
-else Unstep
-  Simulator -> CPU : restore command/history state
-  CPU --> Simulator : restored state
-else BreakOn
-  Simulator -> CPU : register breakpoint
-  CPU --> Simulator : breakpoint registered
-end
-
-Simulator --> WS : {id, result, error}
-WS --> Frontend : response matched by id
+participant "SIC/XE Architecture" as CPU
+participant Assembler
+participant "Event manager" as Events
 
 note over Frontend,WS
-Every request carries an id.
-The frontend keeps pending promises keyed by id.
+Request envelope:
+{id, type: "command", payload: "..."}
+
+The response echoes the request id.
 end note
 
-note right of Simulator
-Commands:
-Request
-Run
-Step
-Stop
-Unstep
-BreakOn
+== Project synchronization ==
+note over Frontend,SessionStore
+Project files are synchronized through HTTP
+before the project-load command is sent.
 end note
 
+== Project load ==
+Frontend -> WS : load $session-id/project-id
+WS -> Handler : validate envelope and dispatch
+Handler -> SessionStore : get_project(sessionId, projectId)
+SessionStore --> Handler : StoredProject
+Handler -> Simulator : load_project(project)
+Simulator -> CPU : select architecture and reset state
+CPU -> Events : record reset / machine events
+Simulator --> Handler : project and architecture info
+Handler --> WS : {id, result: {project, arch}}
+WS --> Frontend : Project-load response
+
+== Source file load ==
+Frontend -> WS : load %file-path
+WS -> Handler : dispatch command
+Handler -> Simulator : load_file(path)
+Simulator -> CPU : load_file(source)
+CPU -> CPU : clear current program state
+CPU -> Assembler : assemble(source)
+Assembler --> CPU : CodeMemory and AssemblyInfo
+CPU -> CPU : install source map and set PC
+CPU -> Events : memory, symbol and instruction-fetch events
+note right of CPU
+InstructionFetched may include:
+- source_line (1-based)
+- preview: true for debugger positioning
+end note
+Simulator --> Handler : EventBatch {from, to, events}
+Handler --> WS : {id, result: EventBatch}
+WS --> Frontend : Apply events
+
+== Step ==
+Frontend -> WS : step
+WS -> Handler : dispatch command
+Handler -> Simulator : step()
+Simulator -> CPU : execute one instruction
+CPU -> Events : fetch / execution / preview events
+Simulator --> Handler : events array
+Handler --> WS : {id, result: events[]}
+WS --> Frontend : Apply events
+
+== Reset and clear ==
+alt reset
+  Frontend -> WS : reset
+  WS -> Handler : dispatch command
+  Handler -> Simulator : reset()
+  Simulator -> CPU : reset registers and PC
+  CPU -> Events : reset and preview fetch events
+  Simulator --> Handler : EventBatch {from, to, events}
+  Handler --> WS : {id, result: EventBatch}
+  WS --> Frontend : Apply events
+else clear
+  Frontend -> WS : clear
+  WS -> Handler : dispatch command
+  Handler -> Simulator : clear()
+  Simulator -> CPU : clear program and machine state
+  CPU -> Events : MemoryCleared / ProgramCleared / register events
+  Simulator --> Handler : EventBatch {from, to, events}
+  Handler --> WS : {id, result: EventBatch}
+  WS --> Frontend : Apply events
+end
+
+== Error handling ==
+alt malformed JSON
+  Frontend -> WS : invalid JSON text frame
+  WS --> Frontend : {id: null, error: problem}
+else invalid envelope or unknown command
+  Frontend -> WS : invalid request / unsupported payload
+  WS -> Handler : validate or dispatch
+  Handler --> WS : error response
+  WS --> Frontend : {id, error: problem}
+else state changed before command failure
+  Handler -> Simulator : event_batch(eventStart)
+  Simulator --> Handler : changed events (if any)
+  Handler --> WS : problem plus optional events[]
+  WS --> Frontend : apply events, then show problem
+end
+
+note over Frontend,Handler
+Supported payloads are case-sensitive:
+load $session-id/project-id
+load %file-path
+reset | clear | step
+
+load project returns {project, arch}.
+load file, reset, and clear return an event batch.
+step returns the events array directly.
+end note
+
+note over CPU,Events
+A normal InstructionFetched event indicates an executed fetch.
+preview: true is an artificial debugger-positioning fetch,
+not an instruction consumed by execution.
+end note
 @enduml

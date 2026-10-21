@@ -41,7 +41,7 @@ format-1-instruction = "FIX" | "FLOAT" | "HALT" | "HIO" | "NORM"
 format-2-instruction = "ADDR" | "CLEAR" | "COMPR" | "DIVR" | "MULR"
                      | "RMO" | "SHIFTL" | "SHIFTR" | "SUBR" | "SVC"
                      | "TIXR" ;
-format-3/4-instruction = "ADD" | "ADDF" | "AND" | "COMP" | "COMPF"
+format-3-or-4-instruction = "ADD" | "ADDF" | "AND" | "COMP" | "COMPF"
                        | "DIV" | "DIVF" | "J" | "JEQ" | "JGT" | "JLT"
                        | "JSUB" | "LDA" | "LDB" | "LDCH" | "LDF" | "LDL"
                        | "LDS" | "LDT" | "LDX" | "LPS" | "MUL" | "MULF"
