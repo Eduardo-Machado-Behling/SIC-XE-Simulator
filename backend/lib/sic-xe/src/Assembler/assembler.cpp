@@ -93,6 +93,7 @@ class Engine {
                        return a.line == b.line ? a.column < b.column : a.line < b.line;
                      });
     r.info.listing = std::move(listing_);
+    r.info.lines = std::move(lines_);
     return r;
   }
 
@@ -468,6 +469,14 @@ class Engine {
     std::snprintf(line, sizeof line, "%04llX  %-14s  %s\n", static_cast<unsigned long long>(st.address),
                   bytes.c_str(), st.source.c_str());
     listing_ += line;
+
+    // Like Beck's Fig. 2.6, END and BASE (and whatever follows END) take no location.
+    const bool located = !listedEnd_ && !(st.directive && (*st.directive == DirectiveKind::End ||
+                                                           *st.directive == DirectiveKind::Base ||
+                                                           *st.directive == DirectiveKind::Nobase));
+    if (st.directive == DirectiveKind::End) listedEnd_ = true;
+    lines_.push_back({st.line, located ? std::optional<std::size_t>(static_cast<std::size_t>(st.address)) : std::nullopt,
+                      st.bytes, st.source});
   }
 
   // ======================= state ===========================================
@@ -478,11 +487,12 @@ class Engine {
   std::unordered_map<std::string, Symbol> symbols_;
   CodeMemory mem_;
   std::vector<Relocation> relocs_;
+  std::vector<ListingLine> lines_;
   std::string listing_, programName_;
   i64 lc_ = 0, startAddr_ = 0, highWater_ = 0, entry_ = 0;
   std::optional<i64> orgReturn_, base_;
   bool seenCode_ = false, ended_ = false, sawEnd_ = false, entrySet_ = false;
-  bool warnedAfterEnd_ = false, overflowReported_ = false;
+  bool warnedAfterEnd_ = false, overflowReported_ = false, listedEnd_ = false;
 };
 
 }  // namespace
