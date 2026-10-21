@@ -16,6 +16,8 @@ import {
 export type TopBarProps = {
     title: string;
     isRunning: boolean;
+    /** When set, Run, Step, Reset and Clear are disabled and show this as their tooltip. */
+    executionDisabledReason?: string | null;
     onRun: () => void;
     onStop: () => void;
     onStep: () => void;
@@ -31,6 +33,7 @@ export type TopBarProps = {
 export function TopBar({
     title,
     isRunning,
+    executionDisabledReason = null,
     onRun,
     onStop,
     onStep,
@@ -38,6 +41,9 @@ export function TopBar({
     onClear,
     onOpenCommandPalette,
 }: TopBarProps) {
+    const blocked = Boolean(executionDisabledReason);
+    const disabledTitle = executionDisabledReason ?? undefined;
+
     return (
         <header
             className="
@@ -56,6 +62,8 @@ export function TopBar({
 
             <button
                 onClick={isRunning ? onStop : onRun}
+                disabled={!isRunning && blocked}
+                title={isRunning ? undefined : disabledTitle}
                 className="
                     flex
                     items-center
@@ -65,6 +73,9 @@ export function TopBar({
                     rounded
                     text-xs
                     hover:bg-zinc-800
+                    disabled:opacity-40
+                    disabled:cursor-not-allowed
+                    disabled:hover:bg-transparent
                 "
             >
                 {isRunning ? (
@@ -82,6 +93,8 @@ export function TopBar({
 
             <button
                 onClick={onStep}
+                disabled={blocked}
+                title={disabledTitle}
                 className="
                     flex
                     items-center
@@ -91,6 +104,9 @@ export function TopBar({
                     rounded
                     text-xs
                     hover:bg-zinc-800
+                    disabled:opacity-40
+                    disabled:cursor-not-allowed
+                    disabled:hover:bg-transparent
                 "
             >
                 <StepForward size={14} />
@@ -99,6 +115,8 @@ export function TopBar({
 
             <button
                 onClick={onReset}
+                disabled={blocked}
+                title={disabledTitle}
                 className="
                     flex
                     items-center
@@ -108,6 +126,9 @@ export function TopBar({
                     rounded
                     text-xs
                     hover:bg-zinc-800
+                    disabled:opacity-40
+                    disabled:cursor-not-allowed
+                    disabled:hover:bg-transparent
                 "
             >
                 <RotateCcw size={14} />
@@ -116,8 +137,9 @@ export function TopBar({
 
             <button
                 onClick={onClear}
-                title="Clear memory, assembly data, and registers"
-                className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs text-zinc-400 transition hover:bg-red-950/40 hover:text-red-200"
+                disabled={blocked}
+                title={disabledTitle ?? "Clear memory, assembly data, and registers"}
+                className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs text-zinc-400 transition hover:bg-red-950/40 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-400"
             >
                 <Eraser size={14} />
                 Clear

@@ -23,7 +23,7 @@ import { symbolsFromEvents, type AssemblySymbol, type ExecutionEvent } from "@/l
 import { filePathProblem } from "@/lib/api/contract";
 import { describeApiError } from "@/lib/api/errors";
 import { getProjectSync } from "@/lib/projects/projectSyncInstance";
-import type { SyncStatus } from "@/lib/projects/ProjectSync";
+import type { ProjectSync, SyncStatus } from "@/lib/projects/ProjectSync";
 
 // ============================================================
 // Helpers
@@ -74,12 +74,23 @@ function buildFileTree(files: Record<string, string>): FileNode[] {
 // Page
 // ============================================================
 
+/** What the page needs from the simulator (Simulator.get() by default). */
+export type EditorSimulator = Pick<Simulator, "bindProject" | "runFile" | "step" | "reset" | "clear" | "resolve">;
+
 interface PageProps {
     projectId: string
+    /** Defaults to the page-wide instances; tests pass their own. */
+    sync?: ProjectSync
+    simulator?: EditorSimulator
 }
 
-export default function EditorPage({ projectId }: PageProps) {
-    const simulator = Simulator.get();
+function errorMessage(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
+}
+
+export default function EditorPage({ projectId, sync: syncProp, simulator: simulatorProp }: PageProps) {
+    const [simulator] = useState<EditorSimulator>(() => simulatorProp ?? Simulator.get());
+    const getSync = useCallback(() => syncProp ?? getProjectSync(), [syncProp]);
 
     const [memory, setMemory] = useState<Map<number, number>>(new Map());
     const [registers, setRegisters] = useState<RegisterState[]>([]);
@@ -189,13 +200,14 @@ export default function EditorPage({ projectId }: PageProps) {
     // Load the project on mount (and whenever projectId changes).
     // Project data comes from this browser's store, the source of truth,
     // which ProjectSync mirrors to the server session over HTTP. The
-    // detailed ArchitectureInfo still comes from the /ws project load:
-    // the HTTP contract only lists architecture identifiers.
+    // detailed ArchitectureInfo comes from binding the simulator to the
+    // project over /ws (temporary legacy staging: LegacyExecutionBridge.ts),
+    // since the HTTP contract only lists architecture identifiers.
     // --------------------------------------------------------
 
     useEffect(() => {
         let cancelled = false;
-        const sync = getProjectSync();
+        const sync = getSync();
         const stopStatus = sync.subscribe(setSyncStatus);
 
         async function loadProject() {
@@ -219,7 +231,7 @@ export default function EditorPage({ projectId }: PageProps) {
             void sync.start();
 
             try {
-                const info = await simulator.loadArchitecture(projectId);
+                const info = await simulator.bindProject(local);
                 if (cancelled) return;
 
                 setArch(info);
@@ -231,7 +243,7 @@ export default function EditorPage({ projectId }: PageProps) {
                 })));
             } catch (err) {
                 if (!cancelled) {
-                    setArchError(`Architecture info unavailable: ${err instanceof Error ? err.message : String(err)}`);
+                    setArchError(`Architecture info unavailable: ${errorMessage(err)}`);
                 }
             }
         }
@@ -242,7 +254,7 @@ export default function EditorPage({ projectId }: PageProps) {
             cancelled = true;
             stopStatus();
         };
-    }, [projectId, simulator]);
+    }, [getSync, projectId, simulator]);
 
     // --------------------------------------------------------
     // File tree (derived from files)
@@ -254,7 +266,7 @@ export default function EditorPage({ projectId }: PageProps) {
     // Active file
     // --------------------------------------------------------
 
-    const activeContent = files[activeFile] ?? "";
+    const activeContent = Object.hasOwn(files, activeFile) ? files[activeFile] : "";
 
     const updateFile = useCallback(
         (content: string) => {
@@ -264,16 +276,19 @@ export default function EditorPage({ projectId }: PageProps) {
                 [activeFile]: content,
             }));
             // Saved in this browser at once; mirrored to the server shortly after.
-            getProjectSync()
+            getSync()
                 .saveFile(projectId, activeFile, content)
+                .then((outcome) => {
+                    if (outcome.ok) setNotice(null);
+                })
                 .catch((err: unknown) => setNotice(describeApiError(err).message));
         },
-        [activeFile, projectId],
+        [activeFile, getSync, projectId],
     );
 
     const createFile = useCallback(
         (path: string) => {
-            if (path in files) {
+            if (Object.hasOwn(files, path)) {
                 setActiveFile(path);
                 return;
             }
@@ -285,11 +300,11 @@ export default function EditorPage({ projectId }: PageProps) {
             setNotice(null);
             setFiles((current) => ({ ...current, [path]: "" }));
             setActiveFile(path);
-            getProjectSync()
+            getSync()
                 .saveFile(projectId, path, "")
                 .catch((err: unknown) => setNotice(describeApiError(err).message));
         },
-        [files, projectId],
+        [files, getSync, projectId],
     );
 
     const deleteFile = useCallback(
@@ -302,16 +317,16 @@ export default function EditorPage({ projectId }: PageProps) {
                 return next;
             });
             if (activeFile === path) setActiveFile(remaining[0] ?? "");
-            getProjectSync()
+            getSync()
                 .deleteFile(projectId, path)
                 .catch((err: unknown) => setNotice(describeApiError(err).message));
         },
-        [activeFile, files, projectId],
+        [activeFile, files, getSync, projectId],
     );
 
     const selectFile = useCallback(
         (path: string) => {
-            if (!(path in files)) return;
+            if (!Object.hasOwn(files, path)) return;
             setActiveFile(path);
         },
         [files],
@@ -321,46 +336,67 @@ export default function EditorPage({ projectId }: PageProps) {
     // Simulator actions
     // --------------------------------------------------------
 
+    // Run, Step and Reset need a simulator bound to this project: without
+    // one, the shared server would act on whatever project it bound last.
+    const executionBlocked = archError
+        ? `The simulator cannot run this project. ${archError} Reload the page to try again.`
+        : arch
+            ? null
+            : "The simulator is still loading this project.";
+
+    const refuseExecution = useCallback((): boolean => {
+        if (!executionBlocked) return false;
+        consoleHandleRef.current?.write(`${executionBlocked}\r\n`);
+        return true;
+    }, [executionBlocked]);
+
+    const reportFailure = useCallback((action: string, err: unknown) => {
+        consoleHandleRef.current?.write(`${action} failed: ${errorMessage(err)}\r\n`);
+        reportCommandError(err);
+    }, [reportCommandError]);
+
     const run = useCallback(async () => {
-        consoleHandleRef.current?.write(
-            "Running program...\r\nProgram finished.\r\n",
-        );
+        if (refuseExecution()) return;
+        consoleHandleRef.current?.write("Running program...\r\n");
 
         try {
-            // Execution stays on /ws; make sure pending edits reached the server mirror first.
-            await getProjectSync().flush();
+            // The browser's copy is the source of truth; the simulator gets it staged right before the run.
+            const current = getSync().getProject(projectId);
+            if (!current) throw new Error("This project is no longer stored in this browser.");
 
-            const steps = await simulator.loadFile(activeFile);
-
-            console.log("Solve:", steps);
+            const steps = await simulator.runFile(current, activeFile);
 
             setSymbols(symbolsFromEvents(steps));
             applyExecutionEvents(steps);
 
             setIsRunning(true);
-        } catch (error) {
+            consoleHandleRef.current?.write("Program finished.\r\n");
+        } catch (err) {
             setIsRunning(false);
-            reportCommandError(error);
-            console.error("Run failed:", error);
+            // The previous program's symbols no longer describe the source.
+            setSymbols(null);
+            reportFailure("Run", err);
         }
-    }, [activeFile, applyExecutionEvents, reportCommandError, simulator]);
+    }, [activeFile, applyExecutionEvents, getSync, projectId, refuseExecution, reportFailure, simulator]);
 
     const stop = useCallback(() => {
         setIsRunning(false);
     }, []);
 
     const step = useCallback(async () => {
+        if (refuseExecution()) return;
         consoleHandleRef.current?.write("Executing one instruction...\r\n");
         try {
             const steps = await simulator.step();
             applyExecutionEvents(steps);
             consoleHandleRef.current?.write(JSON.stringify(steps));
-        } catch (error) {
-            reportCommandError(error);
+        } catch (err) {
+            reportFailure("Step", err);
         }
-    }, [applyExecutionEvents, reportCommandError, simulator]);
+    }, [applyExecutionEvents, refuseExecution, reportFailure, simulator]);
 
     const reset = useCallback(async () => {
+        if (refuseExecution()) return;
         setIsRunning(false);
         if (instructionTimerRef.current) clearTimeout(instructionTimerRef.current);
         setConsumedMemory([]);
@@ -368,12 +404,13 @@ export default function EditorPage({ projectId }: PageProps) {
         try {
             const steps = await simulator.reset();
             applyExecutionEvents(steps, false);
-        } catch (error) {
-            reportCommandError(error);
+        } catch (err) {
+            reportFailure("Reset", err);
         }
-    }, [applyExecutionEvents, reportCommandError, simulator]);
+    }, [applyExecutionEvents, refuseExecution, reportFailure, simulator]);
 
     const clearMachine = useCallback(async () => {
+        if (refuseExecution()) return;
         setIsRunning(false);
         if (instructionTimerRef.current) clearTimeout(instructionTimerRef.current);
         setConsumedMemory([]);
@@ -381,10 +418,10 @@ export default function EditorPage({ projectId }: PageProps) {
             const events = await simulator.clear();
             applyExecutionEvents(events, false);
             setSymbols(null);
-        } catch (error) {
-            reportCommandError(error);
+        } catch (err) {
+            reportFailure("Clear", err);
         }
-    }, [applyExecutionEvents, reportCommandError, simulator]);
+    }, [applyExecutionEvents, refuseExecution, reportFailure, simulator]);
 
     // --------------------------------------------------------
     // Console command handling
@@ -507,6 +544,7 @@ export default function EditorPage({ projectId }: PageProps) {
             <TopBar
                 title={project.name}
                 isRunning={isRunning}
+                executionDisabledReason={executionBlocked}
                 onRun={run}
                 onStop={stop}
                 onStep={step}

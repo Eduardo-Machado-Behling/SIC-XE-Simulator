@@ -3,6 +3,8 @@ import { WebTransport } from "@/lib/transport/WebTransport";
 import { resolveBackendUrl } from "@/lib/api/config";
 import { ExecutionEvent } from "@/lib/simulator/ExecutionEvent";
 import { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
+import { LegacyExecutionBridge } from "@/lib/simulator/LegacyExecutionBridge";
+import type { Project } from "@/lib/simulator/Project";
 import { RegisterState } from "@/components/RegisterTable";
 import { Dispatch, SetStateAction } from "react";
 
@@ -21,13 +23,13 @@ export class Simulator {
     }
 
     public async step(): Promise<ExecutionEvent[]> {
-        return this.transport!.step();
+        return this.bridge!.exclusive(() => this.transport!.step());
     }
     public async reset(): Promise<ExecutionEvent[]> {
-        return this.transport!.reset();
+        return this.bridge!.exclusive(() => this.transport!.reset());
     }
     public async clear(): Promise<ExecutionEvent[]> {
-        return this.transport!.clear();
+        return this.bridge!.exclusive(() => this.transport!.clear());
     }
 
     resolve(
@@ -78,23 +80,26 @@ export class Simulator {
     }
 
     /**
-     * Binds the simulator to a project over /ws (`load $<id>`) and returns the
-     * detailed ArchitectureInfo the register and memory views need. The HTTP
-     * contract only lists architecture identifiers, so this stays on /ws.
+     * Binds the simulator to a browser-stored project and returns the detailed
+     * ArchitectureInfo the register and memory views need (the HTTP contract
+     * only lists architecture identifiers). Goes through the temporary legacy
+     * staging described in LegacyExecutionBridge.ts.
      */
-    public async loadArchitecture(projectId: string): Promise<ArchitectureInfo> {
-        const { arch } = await this.transport!.loadProject(projectId);
-        return arch;
+    public bindProject(project: Project): Promise<ArchitectureInfo> {
+        return this.bridge!.bind(project);
     }
 
-    public loadFile(file: string): Promise<ExecutionEvent[]> {
-        return this.transport!.loadFile(file)
+    /** Stages the project as it is in this browser now, then runs one of its files. */
+    public runFile(project: Project, file: string): Promise<ExecutionEvent[]> {
+        return this.bridge!.run(project, file);
     }
 
     private constructor() {
         if (this.is_web()) {
-            this.transport = new WebTransport(resolveBackendUrl());
-            this.transport.connect();
+            const baseUrl = resolveBackendUrl();
+            this.transport = new WebTransport(baseUrl);
+            this.bridge = new LegacyExecutionBridge({ baseUrl, transport: this.transport });
+            this.transport.connect().catch(() => undefined); // reported by the first command instead
         }
     }
 
@@ -106,4 +111,5 @@ export class Simulator {
 
     private static instance: Simulator | null = null;
     private transport: SimulatorTransport | null = null;
+    private bridge: LegacyExecutionBridge | null = null;
 };
