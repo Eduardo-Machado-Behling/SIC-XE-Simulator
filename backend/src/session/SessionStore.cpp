@@ -87,11 +87,6 @@ void SessionStore::set_limits(StoreLimits limits) {
     m_limits = limits;
 }
 
-StoreLimits SessionStore::limits() const {
-    std::shared_lock lock(m_mutex);
-    return m_limits;
-}
-
 void SessionStore::touch(const Session& session) const {
     session.lastUsedTick.store(m_tick.fetch_add(1, std::memory_order_relaxed) + 1, std::memory_order_relaxed);
     session.lastUsedTime.store(Clock::now().time_since_epoch().count(), std::memory_order_relaxed);

@@ -89,7 +89,6 @@ struct StoredProject {
 class SessionStore {
 public:
     void set_limits(StoreLimits limits);
-    StoreLimits limits() const;
 
     std::string create_session();
     bool has_session(const std::string& sessionId) const;

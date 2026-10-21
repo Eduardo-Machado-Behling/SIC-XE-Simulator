@@ -23,7 +23,6 @@ public:
     void set_socket_flags(int socket_flags);
     void set_max_body_bytes(std::size_t bytes);
     void set_session_limits(const session::StoreLimits& limits);
-    session::StoreLimits session_limits() const;
     // Binds exclusively, then serves until stopped. False if the bind failed.
     bool listen();
 
