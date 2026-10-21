@@ -6,6 +6,8 @@ import type {
 import { hex, hexBytes } from "@/lib/simulator/hex";
 
 // The records of a SIC/XE object program (Beck, section 2.1.1 and Fig. 2.8).
+// Every address is absolute except an M record's, which is relative to the
+// start of the program (Beck, p. 64).
 export type ObjectRecord =
     | { type: "H"; name: string; start: number; length: number }
     | { type: "T"; start: number; code: number[][] }
@@ -59,9 +61,15 @@ export function objectProgram({ program, listing, relocations }: ObjectProgramIn
     return [
         { type: "H", name: program.name, start: program.start, length: program.length },
         ...texts,
-        ...relocations.map((relocation): ObjectRecord => ({ type: "M", ...relocation })),
+        ...relocations.map((relocation) => modificationRecord(relocation, program.start)),
         { type: "E", entry: program.entry },
     ];
+}
+
+// The M record of a relocation: the assembler reports the field's absolute
+// address, the record holds it relative to the start of the program.
+export function modificationRecord(relocation: AssemblyRelocation, start: number): ObjectRecord {
+    return { type: "M", address: relocation.address - start, halfBytes: relocation.halfBytes };
 }
 
 // The fields of a record, which Beck's figures separate with ^; a Text

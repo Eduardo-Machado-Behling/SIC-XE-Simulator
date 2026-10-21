@@ -64,7 +64,11 @@ export function AssemblyView({ assembly, pc }: AssemblyViewProps) {
     const tabs: TabDefinition[] = [
         { id: "listing", label: "Listing", content: <ListingTable listing={assembly.listing} pc={pc} /> },
         { id: "symbols", label: "Symbols", content: <SymbolTable symbols={assembly.symbols} /> },
-        { id: "relocation", label: "Relocation", content: <RelocationTable relocations={assembly.relocations} /> },
+        {
+            id: "relocation",
+            label: "Relocation",
+            content: <RelocationTable relocations={assembly.relocations} start={assembly.program?.start} />,
+        },
         { id: "object", label: "Object", content: <ObjectProgramView report={assembly} /> },
         {
             id: "warnings",

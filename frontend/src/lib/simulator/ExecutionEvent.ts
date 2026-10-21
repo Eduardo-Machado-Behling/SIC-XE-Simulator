@@ -152,7 +152,8 @@ export interface AssemblyListingLine {
 }
 
 // A modification record: `halfBytes` hex digits from the high nibble of
-// `address` hold an address the loader must relocate.
+// `address` hold an address the loader must relocate. `address` is absolute,
+// like the listing's; the M record's text is relative to the program's start.
 export interface AssemblyRelocation {
     address: number;
     halfBytes: number;
