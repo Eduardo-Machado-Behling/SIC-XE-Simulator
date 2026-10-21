@@ -37,6 +37,7 @@
     "orval": "^8.37.0",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.12"
+    "vitest": "^4.1.12",
+    "yaml": "^2.9.1"
   }
 }
