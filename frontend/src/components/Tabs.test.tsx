@@ -97,6 +97,80 @@ describe("Tabs", () => {
         expect(tabIndexes).toEqual([["CPU", -1], ["Assembler", -1], ["Listing", 0]]);
     });
 
+    it("leaves arrow keys pressed with Alt, Ctrl or Meta to the browser", async () => {
+        const user = userEvent.setup();
+        render(<Tabs label="Execution view" tabs={TABS} />);
+        screen.getByRole("tab", { name: "CPU" }).focus();
+
+        for (const chord of ["{Alt>}{ArrowLeft}{/Alt}", "{Control>}{ArrowRight}{/Control}", "{Meta>}{End}{/Meta}"]) {
+            await user.keyboard(chord);
+            expect(selectedTab()).toBe("CPU");
+        }
+    });
+
+    it("does not cancel the browser's default action for a chord", () => {
+        render(<Tabs label="Execution view" tabs={TABS} />);
+        const cpu = screen.getByRole("tab", { name: "CPU" });
+
+        const back = new KeyboardEvent("keydown", { key: "ArrowLeft", altKey: true, bubbles: true, cancelable: true });
+        cpu.dispatchEvent(back);
+
+        expect(back.defaultPrevented).toBe(false);
+    });
+
+    it("falls back to the first tab when the default id is unknown", async () => {
+        const user = userEvent.setup();
+        render(<Tabs label="Execution view" tabs={TABS} defaultTabId="missing" />);
+
+        expect(selectedTab()).toBe("CPU");
+        expect(screen.getByRole("tabpanel", { name: "CPU" })).toBeTruthy();
+        expect(screen.getByRole("tab", { name: "CPU" }).tabIndex).toBe(0);
+
+        screen.getByRole("tab", { name: "CPU" }).focus();
+        await user.keyboard("{ArrowLeft}");
+        expect(selectedTab()).toBe("Listing");
+    });
+
+    it("lets keyboard users reach the shown panel even when it has nothing focusable", async () => {
+        const user = userEvent.setup();
+        render(<Tabs label="Execution view" tabs={TABS} defaultTabId="assembler" />);
+        screen.getByRole("tab", { name: "Assembler" }).focus();
+
+        await user.tab();
+
+        expect(document.activeElement).toBe(screen.getByRole("tabpanel", { name: "Assembler" }));
+    });
+
+    it("can be controlled by its parent, which is told about every selection", async () => {
+        const user = userEvent.setup();
+        const selections: string[] = [];
+
+        function Controlled() {
+            const [selected, setSelected] = useState("listing");
+            return (
+                <Tabs
+                    label="Execution view"
+                    tabs={TABS}
+                    selectedId={selected}
+                    onSelect={(id) => {
+                        selections.push(id);
+                        setSelected(id);
+                    }}
+                />
+            );
+        }
+
+        render(<Controlled />);
+        expect(selectedTab()).toBe("Listing");
+
+        await user.click(screen.getByRole("tab", { name: "CPU" }));
+        screen.getByRole("tab", { name: "CPU" }).focus();
+        await user.keyboard("{ArrowRight}");
+
+        expect(selections).toEqual(["cpu", "assembler"]);
+        expect(selectedTab()).toBe("Assembler");
+    });
+
     it("ties each tab to its panel for assistive technology", () => {
         render(<Tabs label="Execution view" tabs={TABS} />);
 
