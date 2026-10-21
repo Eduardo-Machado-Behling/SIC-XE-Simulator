@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { Eraser, Play, RotateCcw, Square, StepForward } from "lucide-react";
 
@@ -554,7 +555,7 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
             <div className="flex h-screen w-screen items-center justify-center bg-zinc-950 px-6 text-sm text-zinc-400">
                 <div className="text-center">
                     <p>{error ?? "Project not found."}</p>
-                    <a href="/" className="mt-3 inline-block text-blue-300 hover:text-blue-200">Back to projects</a>
+                    <Link href="/" className="mt-3 inline-block text-blue-300 hover:text-blue-200">Back to projects</Link>
                 </div>
                 {error && <ErrorModal title="Could not open project" detail={error} onClose={() => setError(null)} />}
             </div>
