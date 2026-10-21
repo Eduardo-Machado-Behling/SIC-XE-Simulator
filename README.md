@@ -195,6 +195,11 @@ empty projects or files count too. An evicted or expired session answers
 session and re-sync. These limits keep memory bounded on a small instance,
 since `POST /sessions` needs no authentication.
 
+`bin/api` binds its port exclusively: it prints `Listening on <host>:<port>`
+once the port is bound, and exits with code `1` if another process already
+uses it (a second server must never share the port, because sessions live in
+the memory of one process).
+
 ## HTTP API
 
 The HTTP contract is [`api_spec/openapi.yaml`](api_spec/openapi.yaml)
@@ -228,7 +233,9 @@ installed, `npm --prefix backend/tests/api test` is enough.)
 
 Optional overrides: `API_BIN` (path to the executable, default
 `backend/bin/api`), `API_TEST_PORTS` (port range, default `18440-18449`) and
-`OPENAPI_SPEC` (path to the spec).
+`OPENAPI_SPEC` (path to the spec). Several runs can share the port range:
+the harness waits for its own server's `Listening on` line and moves to the
+next port if another run took the one it picked.
 
 ---
 

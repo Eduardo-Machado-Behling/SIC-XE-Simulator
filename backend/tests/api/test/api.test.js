@@ -23,6 +23,7 @@ import isolationAndConcurrency from './suites/isolation-concurrency.js';
 import legacy from './suites/legacy.js';
 import projects from './suites/projects.js';
 import sessions from './suites/sessions.js';
+import startup from './suites/startup.js';
 import storageLimits from './suites/storage-limits.js';
 import sync from './suites/sync.js';
 
@@ -65,6 +66,7 @@ isolationAndConcurrency(ctx);
 errorsAndLimits(ctx);
 contract(ctx);
 legacy(ctx);
+startup(ctx);
 storageLimits();
 
 describe('coverage of the OpenAPI document', () => {
