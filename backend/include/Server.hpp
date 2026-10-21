@@ -22,6 +22,8 @@ public:
     void set_host(const std::string& host);
     void set_socket_flags(int socket_flags);
     void set_max_body_bytes(std::size_t bytes);
+    void set_session_limits(const session::StoreLimits& limits);
+    session::StoreLimits session_limits() const;
     void listen();
 
 private:

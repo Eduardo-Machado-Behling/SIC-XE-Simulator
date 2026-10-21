@@ -23,6 +23,7 @@ import isolationAndConcurrency from './suites/isolation-concurrency.js';
 import legacy from './suites/legacy.js';
 import projects from './suites/projects.js';
 import sessions from './suites/sessions.js';
+import storageLimits from './suites/storage-limits.js';
 import sync from './suites/sync.js';
 
 const ctx = { server: null, api: null };
@@ -64,6 +65,7 @@ isolationAndConcurrency(ctx);
 errorsAndLimits(ctx);
 contract(ctx);
 legacy(ctx);
+storageLimits();
 
 describe('coverage of the OpenAPI document', () => {
   it('every documented response except 500 was exercised and validated', () => {
