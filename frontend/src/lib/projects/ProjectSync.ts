@@ -70,6 +70,8 @@ export class ProjectSync {
     private pendingFiles = new Map<string, PendingFile>();
     private inflight = new Map<string, Promise<unknown>>();
 
+    private projectsCache: Project[] | null = null;
+
     private status: SyncStatus = { state: "idle" };
     private running = 0;
     private listeners = new Set<(status: SyncStatus) => void>();
@@ -81,6 +83,9 @@ export class ProjectSync {
         this.validateStoredSession = options.validateStoredSession ?? true;
         this.generateId = options.generateId ?? (() => crypto.randomUUID());
         this.fileDebounceMs = options.fileDebounceMs ?? 400;
+        this.store.subscribe(() => {
+            this.projectsCache = null;
+        });
     }
 
     // ----------------------------------------------------------------- status
@@ -210,6 +215,17 @@ export class ProjectSync {
 
     listProjects(): Project[] {
         return this.store.list();
+    }
+
+    /** Same array until the local project set changes (for useSyncExternalStore). */
+    projectsSnapshot(): Project[] {
+        this.projectsCache ??= this.store.list();
+        return this.projectsCache;
+    }
+
+    /** Called whenever the local project set changes; returns an unsubscribe function. */
+    subscribeProjects(listener: () => void): () => void {
+        return this.store.subscribe(listener);
     }
 
     /** The project as stored in this browser, or null. */

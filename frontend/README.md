@@ -20,6 +20,23 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Backend and persistence
+
+- `NEXT_PUBLIC_BACKEND_URL` picks the backend (default `http://localhost:8080`;
+  production is `https://sic-xe-engine.onrender.com`). It is inlined at build
+  time, so set it before `npm run build`. The simulator WebSocket is derived
+  from it (`ws(s)://<host>/ws`).
+- Projects live in the browser (`localStorage`) and are mirrored to the
+  session-scoped HTTP API in `../api_spec/openapi.yaml`
+  (`src/lib/api`, `src/lib/projects`). The session id is kept in the
+  `sicxe_session` cookie.
+- Execution (`step`, `reset`, `load %file`) and the detailed architecture
+  description (`load $project`) stay on the WebSocket, which the OpenAPI
+  document does not cover.
+- `npm test` includes a contract test that runs the HTTP client against the
+  OpenAPI document. `npm run api:generate` (optional) writes an orval client
+  to the git-ignored `src/api/generated` for reference.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

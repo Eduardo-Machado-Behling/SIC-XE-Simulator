@@ -5,12 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import EditorPage from "@/components/EditorPage";
 import type { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
 import type { ExecutionEvent } from "@/lib/simulator/ExecutionEvent";
+import type { Project } from "@/lib/simulator/Project";
 
 // The simulator talks to the backend over a WebSocket; this fake stands in for
 // it, so each test decides what a run, a step or a reset returns.
 const fake = vi.hoisted(() => ({
-    loadProject: vi.fn(),
-    setFile: vi.fn(),
+    loadArchitecture: vi.fn(),
     loadFile: vi.fn(),
     step: vi.fn(),
     reset: vi.fn(),
@@ -19,6 +19,21 @@ const fake = vi.hoisted(() => ({
 
 vi.mock("@/lib/simulator/Simulator", () => ({
     Simulator: { get: () => fake },
+}));
+
+// Projects come from this browser's store through ProjectSync; this fake holds them.
+const projects = vi.hoisted(() => new Map<string, Project>());
+const sync = vi.hoisted(() => ({
+    getProject: vi.fn((id: string) => projects.get(id) ?? null),
+    subscribe: vi.fn(() => () => undefined),
+    start: vi.fn(async () => undefined),
+    flush: vi.fn(async () => undefined),
+    saveFile: vi.fn(async () => undefined),
+    deleteFile: vi.fn(async () => undefined),
+}));
+
+vi.mock("@/lib/projects/projectSyncInstance", () => ({
+    getProjectSync: () => sync,
 }));
 
 // Monaco and xterm need a real browser; the page wiring under test does not use them.
@@ -65,11 +80,9 @@ function assemblerPanel(): HTMLElement {
 
 describe("EditorPage symbol table", () => {
     beforeEach(() => {
-        fake.loadProject.mockResolvedValue({
-            project: { id: "demo", name: "Demo", architecture: "SIC/XE", files: { "main.asm": "FIRST START 1000" } },
-            arch: ARCH,
-        });
-        fake.setFile.mockResolvedValue(undefined);
+        projects.set("demo", { id: "demo", name: "Demo", architecture: "SIC-XE", files: { "main.asm": "FIRST START 1000" } });
+        projects.set("other", { id: "other", name: "Other", architecture: "SIC-XE", files: { "main.asm": "" } });
+        fake.loadArchitecture.mockResolvedValue(ARCH);
         fake.step.mockResolvedValue([]);
         fake.reset.mockResolvedValue([]);
         vi.spyOn(console, "log").mockImplementation(() => {});
@@ -79,6 +92,7 @@ describe("EditorPage symbol table", () => {
     afterEach(() => {
         vi.restoreAllMocks();
         for (const fn of Object.values(fake)) fn.mockReset();
+        projects.clear();
     });
 
     it("shows the symbols of a run, keeps them across a step and replaces them on reassembly", async () => {
@@ -89,7 +103,7 @@ describe("EditorPage symbol table", () => {
         fake.loadFile.mockResolvedValueOnce(assembled("FIRST", "LOOP"));
         await run(user);
         expect(await within(assemblerPanel()).findByText("LOOP")).toBeTruthy();
-        expect(fake.setFile).toHaveBeenCalledWith("main.asm", "FIRST START 1000");
+        expect(sync.flush).toHaveBeenCalled();
         expect(fake.loadFile).toHaveBeenCalledWith("main.asm");
 
         await user.click(screen.getByRole("button", { name: "Step" }));
@@ -145,7 +159,7 @@ describe("EditorPage symbol table", () => {
         rerender(<EditorPage projectId="other" />);
 
         await within(assemblerPanel()).findByRole("status");
-        expect(fake.loadProject).toHaveBeenLastCalledWith("other");
+        expect(fake.loadArchitecture).toHaveBeenLastCalledWith("other");
         expect(within(assemblerPanel()).queryByText("FIRST")).toBeNull();
     });
 

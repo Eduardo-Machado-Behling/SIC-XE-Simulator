@@ -12,6 +12,7 @@ import { TopBar } from "@/components/TopBar";
 import { StatusBar } from "@/components/StatusBar";
 import { ExecutionView } from "@/components/ExecutionView";
 import { ErrorModal } from "@/components/ErrorModal";
+import { SyncStatusNotice } from "@/components/SyncStatusNotice";
 
 import { Simulator } from "@/lib/simulator/Simulator";
 import { SimulatorCommandError } from "@/lib/transport/SimulatorTransport";
@@ -19,6 +20,10 @@ import { Project } from "@/lib/simulator/Project";
 import { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
 import { RegisterState } from "./RegisterTable";
 import { symbolsFromEvents, type AssemblySymbol, type ExecutionEvent } from "@/lib/simulator/ExecutionEvent";
+import { filePathProblem } from "@/lib/api/contract";
+import { describeApiError } from "@/lib/api/errors";
+import { getProjectSync } from "@/lib/projects/projectSyncInstance";
+import type { SyncStatus } from "@/lib/projects/ProjectSync";
 
 // ============================================================
 // Helpers
@@ -84,6 +89,9 @@ export default function EditorPage({ projectId }: PageProps) {
     const [activeFile, setActiveFile] = useState("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [syncStatus, setSyncStatus] = useState<SyncStatus>({ state: "idle" });
+    const [archError, setArchError] = useState<string | null>(null);
+    const [notice, setNotice] = useState<string | null>(null);
     const [pc, setPc] = useState<number>(0)
     const [changedRegisters, setChangedRegisters] = useState<string[]>([]);
     const [changedMemory, setChangedMemory] = useState<number[]>([]);
@@ -178,51 +186,52 @@ export default function EditorPage({ projectId }: PageProps) {
     }, []);
 
     // --------------------------------------------------------
-    // Fetch the project on mount (and whenever projectId changes)
+    // Load the project on mount (and whenever projectId changes).
+    // Project data comes from this browser's store, the source of truth,
+    // which ProjectSync mirrors to the server session over HTTP. The
+    // detailed ArchitectureInfo still comes from the /ws project load:
+    // the HTTP contract only lists architecture identifiers.
     // --------------------------------------------------------
 
     useEffect(() => {
         let cancelled = false;
+        const sync = getProjectSync();
+        const stopStatus = sync.subscribe(setSyncStatus);
 
         async function loadProject() {
+            const local = sync.getProject(projectId);
+            if (cancelled) return;
+
+            if (!local) {
+                setError("This project is not stored in this browser.");
+                setLoading(false);
+                return;
+            }
+
+            setProject(local);
+            setFiles(local.files);
+            setMemory(new Map());
+            setPc(0);
+            setSymbols(null);
+            setActiveFile(Object.keys(local.files).sort()[0] ?? "");
+            setLoading(false);
+
+            void sync.start();
+
             try {
-                const data =
-                    await simulator.loadProject(projectId);
+                const info = await simulator.loadArchitecture(projectId);
+                if (cancelled) return;
 
-                if (cancelled) {
-                    return;
-                }
-
-                setProject(data.project);
-                setFiles(data.project.files);
-                setMemory(new Map());
-                setPc(0);
-                setSymbols(null);
-
-                const firstPath =
-                    Object.keys(data.project.files).sort()[0] ?? "";
-                setArch(data.arch)
-
-                setRegisters(data.arch.registers.map((reg) => {
-                    return {
-                        id: reg.id,
-                        name: reg.name,
-                        value: 0
-                    }
-                }))
-
-                setActiveFile(firstPath);
+                setArch(info);
+                setArchError(null);
+                setRegisters(info.registers.map((reg) => ({
+                    id: reg.id,
+                    name: reg.name,
+                    value: 0,
+                })));
             } catch (err) {
                 if (!cancelled) {
-                    setError(
-                        err instanceof Error
-                            ? err.message
-                            : "Failed to load project",
-                    );
-                }
-            } finally {
-                if (!cancelled) {
-                    setLoading(false);
+                    setArchError(`Architecture info unavailable: ${err instanceof Error ? err.message : String(err)}`);
                 }
             }
         }
@@ -231,6 +240,7 @@ export default function EditorPage({ projectId }: PageProps) {
 
         return () => {
             cancelled = true;
+            stopStatus();
         };
     }, [projectId, simulator]);
 
@@ -248,12 +258,55 @@ export default function EditorPage({ projectId }: PageProps) {
 
     const updateFile = useCallback(
         (content: string) => {
+            if (!activeFile) return;
             setFiles((current) => ({
                 ...current,
                 [activeFile]: content,
             }));
+            // Saved in this browser at once; mirrored to the server shortly after.
+            getProjectSync()
+                .saveFile(projectId, activeFile, content)
+                .catch((err: unknown) => setNotice(describeApiError(err).message));
         },
-        [activeFile],
+        [activeFile, projectId],
+    );
+
+    const createFile = useCallback(
+        (path: string) => {
+            if (path in files) {
+                setActiveFile(path);
+                return;
+            }
+            const problem = filePathProblem(path);
+            if (problem) {
+                setNotice(`Invalid file path "${path}": ${problem}.`);
+                return;
+            }
+            setNotice(null);
+            setFiles((current) => ({ ...current, [path]: "" }));
+            setActiveFile(path);
+            getProjectSync()
+                .saveFile(projectId, path, "")
+                .catch((err: unknown) => setNotice(describeApiError(err).message));
+        },
+        [files, projectId],
+    );
+
+    const deleteFile = useCallback(
+        (path: string) => {
+            if (!window.confirm(`Delete ${path}?`)) return;
+            const remaining = Object.keys(files).filter((candidate) => candidate !== path).sort();
+            setFiles((current) => {
+                const next = { ...current };
+                delete next[path];
+                return next;
+            });
+            if (activeFile === path) setActiveFile(remaining[0] ?? "");
+            getProjectSync()
+                .deleteFile(projectId, path)
+                .catch((err: unknown) => setNotice(describeApiError(err).message));
+        },
+        [activeFile, files, projectId],
     );
 
     const selectFile = useCallback(
@@ -274,7 +327,8 @@ export default function EditorPage({ projectId }: PageProps) {
         );
 
         try {
-            await simulator.setFile(activeFile, activeContent);
+            // Execution stays on /ws; make sure pending edits reached the server mirror first.
+            await getProjectSync().flush();
 
             const steps = await simulator.loadFile(activeFile);
 
@@ -289,7 +343,7 @@ export default function EditorPage({ projectId }: PageProps) {
             reportCommandError(error);
             console.error("Run failed:", error);
         }
-    }, [activeFile, activeContent, applyExecutionEvents, reportCommandError, simulator]);
+    }, [activeFile, applyExecutionEvents, reportCommandError, simulator]);
 
     const stop = useCallback(() => {
         setIsRunning(false);
@@ -461,6 +515,11 @@ export default function EditorPage({ projectId }: PageProps) {
                 onOpenCommandPalette={() => setCommandPaletteOpen(true)}
             />
 
+            <SyncStatusNotice
+                status={syncStatus}
+                extra={[archError, notice].filter(Boolean).join(" ") || null}
+            />
+
             <div className="flex-1 min-h-0">
                 <Group orientation="horizontal" className="h-full">
                     <Panel defaultSize="18%" minSize="12%" maxSize="35%">
@@ -468,6 +527,8 @@ export default function EditorPage({ projectId }: PageProps) {
                             tree={fileTree}
                             activeFile={activeFile}
                             onSelectFile={selectFile}
+                            onCreateFile={createFile}
+                            onDeleteFile={deleteFile}
                         />
                     </Panel>
 

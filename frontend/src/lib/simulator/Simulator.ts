@@ -1,15 +1,15 @@
-import { LoadProjectResponse, SimulatorTransport } from "@/lib/transport/SimulatorTransport";
+import { SimulatorTransport } from "@/lib/transport/SimulatorTransport";
 import { WebTransport } from "@/lib/transport/WebTransport";
-import { Project } from "@/lib/simulator/Project";
+import { resolveBackendUrl } from "@/lib/api/config";
 import { ExecutionEvent } from "@/lib/simulator/ExecutionEvent";
 import { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
 import { RegisterState } from "@/components/RegisterTable";
 import { Dispatch, SetStateAction } from "react";
-import { stripIsPartialByte } from "next/dist/client/components/segment-cache/cache";
-import { ExecutionView } from "@/components/ExecutionView";
 
-
-
+/**
+ * Simulator execution, over the WebSocket transport. Project persistence is
+ * not here: see src/lib/projects/ProjectSync.ts (documented HTTP API).
+ */
 export class Simulator {
 
     public static get(): Simulator {
@@ -77,24 +77,14 @@ export class Simulator {
         });
     }
 
-    public async setFile(filePath: string, content: string): Promise<unknown> {
-        return this.transport!.setFile(filePath, content);
-    }
-
-    public async projects(): Promise<Project[]> {
-        return this.transport!.projects();
-    }
-
-    public async architectures(): Promise<string[]> {
-        return this.transport!.architectures();
-    }
-
-    public async createProject(newProject: Project): Promise<unknown> {
-        return this.transport!.createProject(newProject);
-    }
-
-    public async loadProject(projectId: string): Promise<LoadProjectResponse> {
-        return this.transport!.loadProject(projectId);
+    /**
+     * Binds the simulator to a project over /ws (`load $<id>`) and returns the
+     * detailed ArchitectureInfo the register and memory views need. The HTTP
+     * contract only lists architecture identifiers, so this stays on /ws.
+     */
+    public async loadArchitecture(projectId: string): Promise<ArchitectureInfo> {
+        const { arch } = await this.transport!.loadProject(projectId);
+        return arch;
     }
 
     public loadFile(file: string): Promise<ExecutionEvent[]> {
@@ -103,7 +93,7 @@ export class Simulator {
 
     private constructor() {
         if (this.is_web()) {
-            this.transport = new WebTransport(this.get_url());
+            this.transport = new WebTransport(resolveBackendUrl());
             this.transport.connect();
         }
     }
@@ -111,10 +101,6 @@ export class Simulator {
     //TODO: temp
     private is_web() {
         return true;
-    }
-
-    private get_url() {
-        return "localhost:8080";
     }
 
 

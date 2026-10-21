@@ -4,8 +4,8 @@ import {
     SimulatorProblem,
     SimulatorTransport,
 } from "@/lib/transport/SimulatorTransport";
-import { Project } from "@/lib/simulator/Project";
 import { ExecutionEvent, normalizeExecutionEvents } from "@/lib/simulator/ExecutionEvent";
+import { toWebSocketUrl } from "@/lib/api/config";
 
 type Request = {
     id: string;
@@ -30,12 +30,17 @@ type PendingRequest = {
     reject: (reason?: unknown) => void;
 };
 
+export type WebTransportOptions = {
+    /** How long a project load may stay unanswered before it fails. Default 8 s. */
+    loadTimeoutMs?: number;
+};
+
 export class WebTransport implements SimulatorTransport {
     private socket: WebSocket | null = null;
     private connection: Promise<void> | null = null;
 
-    private readonly httpUrl: string;
     private readonly wsUrl: string;
+    private readonly loadTimeoutMs: number;
 
     private pending = new Map<string, PendingRequest>();
 
@@ -53,9 +58,10 @@ export class WebTransport implements SimulatorTransport {
         return normalizeExecutionEvents((batch as EventBatchResponse).events);
     }
 
-    constructor(readonly baseUrl: string) {
-        this.httpUrl = `http://${baseUrl}`;
-        this.wsUrl = `ws://${baseUrl}/ws`;
+    /** @param baseUrl backend base URL, e.g. http://localhost:8080 (see src/lib/api/config.ts) */
+    constructor(readonly baseUrl: string, options: WebTransportOptions = {}) {
+        this.wsUrl = toWebSocketUrl(baseUrl);
+        this.loadTimeoutMs = options.loadTimeoutMs ?? 8_000;
     }
 
     async connect(): Promise<void> {
@@ -187,7 +193,7 @@ export class WebTransport implements SimulatorTransport {
         this.pending.clear();
     }
 
-    private async send<T>(message: string): Promise<T> {
+    private async send<T>(message: string, timeoutMs?: number): Promise<T> {
         await this.connect();
 
         const socket = this.socket;
@@ -204,11 +210,25 @@ export class WebTransport implements SimulatorTransport {
         const id = crypto.randomUUID();
 
         return new Promise<T>((resolve, reject) => {
+            const timer = timeoutMs === undefined
+                ? null
+                : setTimeout(() => {
+                    this.pending.delete(id);
+                    reject(new Error(`Simulator did not answer "${message}" within ${timeoutMs / 1000} s`));
+                }, timeoutMs);
+            const settle = () => {
+                if (timer) clearTimeout(timer);
+            };
+
             this.pending.set(id, {
                 resolve: (value) => {
+                    settle();
                     resolve(value as T);
                 },
-                reject,
+                reject: (reason) => {
+                    settle();
+                    reject(reason);
+                },
             });
 
             const request: Request = {
@@ -218,58 +238,6 @@ export class WebTransport implements SimulatorTransport {
             };
 
             socket.send(JSON.stringify(request));
-        });
-    }
-
-    private async request<T>(
-        path: string,
-        options: RequestInit = {},
-    ): Promise<T> {
-        const response = await fetch(
-            `${this.httpUrl}${path}`,
-            {
-                ...options,
-                headers: {
-                    "Content-Type": "application/json",
-                    ...options.headers,
-                },
-            },
-        );
-
-        const text = await response.text();
-
-        const body = text
-            ? JSON.parse(text)
-            : null;
-
-        if (!response.ok) {
-            throw new Error(
-                body?.error ?? `HTTP ${response.status}`,
-            );
-        }
-
-        return body as T;
-    }
-
-    async projects(): Promise<Project[]> {
-        return this.request<Project[]>("/projects");
-    }
-
-    async architectures(): Promise<string[]> {
-        const response = await this.request<{ archs: string[] }>("/simulator/archs");
-        return response.archs;
-    }
-
-    async createProject(
-        newProject: Project,
-    ): Promise<unknown> {
-        const query = new URLSearchParams({
-            id: newProject.id,
-            name: newProject.name,
-            arch: newProject.architecture,
-        });
-        return this.request(`/project?${query.toString()}`, {
-            method: "PUT",
         });
     }
 
@@ -290,6 +258,7 @@ export class WebTransport implements SimulatorTransport {
     ): Promise<LoadProjectResponse> {
         return this.send<LoadProjectResponse>(
             `load $${projectId}`,
+            this.loadTimeoutMs,
         );
     }
 
@@ -298,21 +267,5 @@ export class WebTransport implements SimulatorTransport {
             `load %${file}`,
         );
         return this.normalizeEventBatch(batch);
-    }
-
-    async setFile(
-        file: string,
-        content: string,
-    ): Promise<void> {
-        return this.request(
-            "/simulator/project/file",
-            {
-                method: "PUT",
-                body: JSON.stringify({
-                    filePath: file,
-                    content,
-                }),
-            },
-        );
     }
 }

@@ -11,9 +11,11 @@ type ProjectProps = {
     title: string;
     architecture: string;
     fileTree: FilePath[];
+    /** When given, the card shows a delete button. */
+    onDelete?: () => void;
 };
 
-export default function Project({ id, title, architecture, fileTree }: ProjectProps) {
+export default function Project({ id, title, architecture, fileTree, onDelete }: ProjectProps) {
     const [isOpen, setIsOpen] = useState(false);
     const titleId = useId();
 
@@ -33,6 +35,16 @@ export default function Project({ id, title, architecture, fileTree }: ProjectPr
                     </div>
                     <ArrowUpRight size={16} className="mt-1 shrink-0 text-zinc-600 transition group-hover:text-blue-300" />
                 </Link>
+                {onDelete && (
+                    <button
+                        type="button"
+                        onClick={onDelete}
+                        aria-label={`Delete project ${title}`}
+                        className="shrink-0 rounded-lg px-2 py-1.5 text-xs text-zinc-500 transition hover:bg-white/[0.07] hover:text-red-300 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    >
+                        Delete
+                    </button>
+                )}
                 <button
                     type="button"
                     onClick={() => setIsOpen((open) => !open)}

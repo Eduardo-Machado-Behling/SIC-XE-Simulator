@@ -7,6 +7,11 @@ export interface LoadProjectResponse {
     arch: ArchitectureInfo
 }
 
+/**
+ * Simulator execution over the /ws protocol, which api_spec/openapi.yaml does
+ * not describe. Project persistence (sessions, projects, files) is not here:
+ * it goes through the documented HTTP API (src/lib/api, src/lib/projects).
+ */
 export interface SimulatorTransport {
     connect(): Promise<void>;
     disconnect(): void;
@@ -15,10 +20,7 @@ export interface SimulatorTransport {
     reset(): Promise<ExecutionEvent[]>;
     clear(): Promise<ExecutionEvent[]>;
 
-    setFile(filePath: string, content: string): Promise<void>;
-    projects(): Promise<Project[]>;
-    architectures(): Promise<string[]>;
-    createProject(newProject: Project): Promise<unknown>;
+    /** WebSocket `load $<id>`: binds the simulator to a project and returns its ArchitectureInfo. */
     loadProject(projectId: string): Promise<LoadProjectResponse>;
     loadFile(file: string): Promise<ExecutionEvent[]>;
 }
