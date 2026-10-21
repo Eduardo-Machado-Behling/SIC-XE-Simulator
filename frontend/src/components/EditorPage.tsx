@@ -16,7 +16,7 @@ import { Simulator } from "@/lib/simulator/Simulator";
 import { Project } from "@/lib/simulator/Project";
 import { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
 import { RegisterState } from "./RegisterTable";
-import type { ExecutionEvent } from "@/lib/simulator/ExecutionEvent";
+import { symbolsFromEvents, type AssemblySymbol, type ExecutionEvent } from "@/lib/simulator/ExecutionEvent";
 
 // ============================================================
 // Helpers
@@ -87,6 +87,7 @@ export default function EditorPage({ projectId }: PageProps) {
     const [changedMemory, setChangedMemory] = useState<number[]>([]);
     const [consumedMemory, setConsumedMemory] = useState<number[]>([]);
     const [changeRevision, setChangeRevision] = useState(0);
+    const [symbols, setSymbols] = useState<AssemblySymbol[] | null>(null);
     const changeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const instructionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -167,6 +168,7 @@ export default function EditorPage({ projectId }: PageProps) {
 
                 setProject(data.project);
                 setFiles(data.project.files);
+                setSymbols(null);
 
                 const firstPath =
                     Object.keys(data.project.files).sort()[0] ?? "";
@@ -249,6 +251,7 @@ export default function EditorPage({ projectId }: PageProps) {
 
             console.log("Solve:", steps);
 
+            setSymbols(symbolsFromEvents(steps));
             applyExecutionEvents(steps);
 
             setIsRunning(true);
@@ -468,7 +471,7 @@ export default function EditorPage({ projectId }: PageProps) {
                                     transition-colors
                                 "
                         />
-                        <ExecutionView arch={arch} memory={memory} registers={registers} memorySize={arch?.memory.address_space_size} pc={pc} changedMemory={changedMemory} changedRegisters={changedRegisters} changeRevision={changeRevision} consumedMemory={consumedMemory} />
+                        <ExecutionView arch={arch} memory={memory} registers={registers} memorySize={arch?.memory.address_space_size} pc={pc} changedMemory={changedMemory} changedRegisters={changedRegisters} changeRevision={changeRevision} consumedMemory={consumedMemory} symbols={symbols} />
                     </Panel>
                 </Group>
             </div>

@@ -1,0 +1,86 @@
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import type { ReactElement } from "react";
+import { Group, Panel } from "react-resizable-panels";
+import { describe, expect, it } from "vitest";
+
+import { ExecutionView, type ArchProps } from "@/components/ExecutionView";
+import type { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
+
+const ARCH: ArchitectureInfo = {
+    name: "SIC/XE",
+    description: "SIC/XE architecture",
+    memory: { address_space_size: 1 << 10, address_width: 4, word_size: 3, alignment: 1, endianness: "big" },
+    registers: [{ id: 0, name: "A", description: "Accumulator", width: 3, type: "special_purpose" }],
+    instructions: [],
+};
+
+function props(overrides: Partial<ArchProps> = {}): ArchProps {
+    return {
+        arch: ARCH,
+        memorySize: 1 << 10,
+        memory: new Map([[0, 0xAB]]),
+        registers: [{ id: 0, name: "A", value: 0x123456 }],
+        pc: 0,
+        changedMemory: [],
+        changedRegisters: [],
+        changeRevision: 0,
+        consumedMemory: [],
+        symbols: null,
+        ...overrides,
+    };
+}
+
+// EditorPage renders the view inside a resizable Panel, whose Group its Separator needs.
+function inLayout(view: ReactElement): ReactElement {
+    return (
+        <Group orientation="horizontal">
+            <Panel>{view}</Panel>
+        </Group>
+    );
+}
+
+describe("ExecutionView", () => {
+    it("opens on the CPU tab, which shows the registers and the memory", () => {
+        render(inLayout(<ExecutionView {...props()} />));
+
+        const cpu = screen.getByRole("tabpanel", { name: "CPU" });
+        expect(within(cpu).getByText("0x123456")).toBeTruthy();
+        expect(within(cpu).getByText("AB")).toBeTruthy();
+        expect(screen.queryByRole("tabpanel", { name: "Assembler" })).toBeNull();
+    });
+
+    it("shows the latest symbol table on the Assembler tab", async () => {
+        const user = userEvent.setup();
+        const { rerender } = render(inLayout(<ExecutionView {...props({ symbols: [{ name: "FIRST", value: 0x1000 }] })} />));
+
+        await user.click(screen.getByRole("tab", { name: "Assembler" }));
+        expect(within(screen.getByRole("tabpanel", { name: "Assembler" })).getByText("FIRST")).toBeTruthy();
+
+        rerender(inLayout(<ExecutionView {...props({ symbols: [{ name: "AGAIN", value: 0x2000 }] })} />));
+        const assembler = screen.getByRole("tabpanel", { name: "Assembler" });
+        expect(within(assembler).getByText("AGAIN")).toBeTruthy();
+        expect(within(assembler).queryByText("FIRST")).toBeNull();
+    });
+
+    it("shows an empty state on the Assembler tab before anything is assembled", async () => {
+        const user = userEvent.setup();
+        render(inLayout(<ExecutionView {...props({ symbols: null })} />));
+
+        await user.click(screen.getByRole("tab", { name: "Assembler" }));
+
+        expect(within(screen.getByRole("tabpanel", { name: "Assembler" })).getByRole("status")).toBeTruthy();
+    });
+
+    it("keeps the register and memory values when switching back to CPU", async () => {
+        const user = userEvent.setup();
+        render(inLayout(<ExecutionView {...props()} />));
+
+        await user.click(screen.getByRole("tab", { name: "Assembler" }));
+        await user.click(screen.getByRole("tab", { name: "CPU" }));
+
+        const cpu = screen.getByRole("tabpanel", { name: "CPU" });
+        expect(within(cpu).getByText("0x123456")).toBeTruthy();
+        expect(within(cpu).getByText("AB")).toBeTruthy();
+    });
+});
