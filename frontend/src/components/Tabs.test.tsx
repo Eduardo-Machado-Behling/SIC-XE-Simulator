@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Tabs, type TabDefinition } from "@/components/Tabs";
 
@@ -182,5 +182,30 @@ describe("Tabs", () => {
             expect(panel?.getAttribute("role")).toBe("tabpanel");
             expect(panel?.getAttribute("aria-labelledby")).toBe(tab.id);
         }
+    });
+
+    describe("in a tab bar too narrow for its tabs", () => {
+        // jsdom has no layout and no scrollIntoView, so it is stubbed and
+        // spied on.
+        const scrollIntoView = vi.fn();
+
+        afterEach(() => {
+            scrollIntoView.mockClear();
+            delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
+        });
+
+        it("scrolls the tab chosen with the keyboard into view", async () => {
+            HTMLElement.prototype.scrollIntoView = scrollIntoView;
+            const user = userEvent.setup();
+            render(<Tabs label="Execution view" tabs={TABS} />);
+
+            await user.click(screen.getByRole("tab", { name: "CPU" }));
+            scrollIntoView.mockClear();
+            await user.keyboard("{ArrowLeft}");
+
+            expect(scrollIntoView).toHaveBeenCalledTimes(1);
+            expect(scrollIntoView.mock.contexts[0]).toBe(screen.getByRole("tab", { name: "Listing" }));
+            expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
+        });
     });
 });
