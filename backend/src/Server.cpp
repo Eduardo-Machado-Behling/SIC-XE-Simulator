@@ -114,9 +114,10 @@ void Server::setup_http() {
     // Documented API: api_spec/openapi.yaml.
     this->setup_http_api();
 
-    // DEPRECATED legacy routes below: not part of the OpenAPI document. They
-    // are kept only because the current frontend still calls them (until
-    // issue #41 moves it to the documented API). Use GET /health instead.
+    // DEPRECATED legacy routes below: not part of the OpenAPI document. The
+    // frontend no longer calls /heartbeat (use GET /health) or
+    // /simulator/archs (use GET /simulator/architectures), but it still needs
+    // two of the project routes to run anything: see http/Project.cpp.
     this->Get("/heartbeat", [](const httplib::Request&, httplib::Response& res) {
         json response = {{"message", "Hello from C++!"},
                          {"language", "C++"},

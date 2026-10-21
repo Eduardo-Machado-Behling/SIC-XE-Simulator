@@ -1,6 +1,6 @@
-// DEPRECATED legacy routes, not part of api_spec/openapi.yaml. Kept only
-// because the current frontend still calls them until issue #41 lands.
-// Use GET /simulator/architectures instead of GET /simulator/archs.
+// DEPRECATED legacy routes, not part of api_spec/openapi.yaml. The frontend
+// no longer calls them: use GET /simulator/architectures instead of
+// GET /simulator/archs.
 
 #include "Server.hpp"
 

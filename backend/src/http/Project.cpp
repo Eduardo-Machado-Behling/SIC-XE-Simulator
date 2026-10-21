@@ -1,7 +1,14 @@
 // DEPRECATED legacy routes, not part of api_spec/openapi.yaml. They act on
-// the global (non-session) project list used by the /ws protocol and are
-// kept only because the current frontend still calls them until issue #41
-// lands. New clients must use the session-scoped routes in http/Api.cpp.
+// the global (non-session) project list, the only one the /ws protocol reads.
+// New clients must use the session-scoped routes in http/Api.cpp.
+//
+// Do NOT remove PUT /project and PUT /simulator/project/file yet: the frontend
+// (frontend/src/lib/simulator/LegacyExecutionBridge.ts) stages every browser
+// project through them before it binds the simulator and before every Run,
+// because /ws `load $<id>` cannot load session projects. They can go once /ws
+// can (the open contract question of issue #41). GET /projects,
+// POST /project/load and POST /simulator/project/file are no longer called by
+// the frontend.
 
 #include "Server.hpp"
 

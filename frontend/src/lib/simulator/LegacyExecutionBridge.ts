@@ -4,11 +4,12 @@
  * Projects now live in the browser and are mirrored to a server *session*
  * over the documented HTTP API (src/lib/projects). The /ws simulator, which
  * api_spec/openapi.yaml does not describe, still reads only the backend's
- * legacy, server-global project list: `load $<id>` accepts `[\w_]+` ids
- * (not UUIDs) and `load %<file>` runs that project's copy of the file. Until
- * the backend lets /ws use session projects (a contract decision for the
- * backend owner, tracked from issue #41), execution stages the browser's
- * project there through the legacy routes the frontend used before:
+ * legacy, server-global project list: `load $<id>` looks the id up there,
+ * never in a session, and `load %<file>` runs that project's copy of the
+ * file. Until the backend lets /ws use session projects (a contract decision
+ * for the backend owner, tracked from issue #41), execution stages the
+ * browser's project there through the legacy routes the frontend used before
+ * (backend/src/http/Project.cpp says they must stay for this):
  *
  *   PUT /project?id=<hex>&name=…&arch=<library>   (re)creates it, files reset
  *   /ws `load $<hex>`                              binds it, returns ArchitectureInfo
