@@ -55,6 +55,23 @@ function setViewportHeight(height: number) {
     });
 }
 
+/**
+ * Makes the scroll region follow Chrome's rules for a display:none scroller
+ * (a hidden tab panel): while its clientHeight is 0, scrollTop reads 0 and
+ * writes to it are dropped; showing it again restores the last position.
+ */
+function emulateHiddenScroller() {
+    const element = region();
+    let position = element.scrollTop;
+    Object.defineProperty(element, "scrollTop", {
+        configurable: true,
+        get: () => (element.clientHeight === 0 ? 0 : position),
+        set: (value: number) => {
+            if (element.clientHeight !== 0) position = value;
+        },
+    });
+}
+
 function userScrollsTo(top: number) {
     region().scrollTop = top;
     fireEvent.scroll(region());
@@ -155,6 +172,32 @@ describe("MemoryTable viewport", () => {
         userScrollsTo(1500);
 
         setViewportHeight(0);
+
+        expect(region().scrollTop).toBe(1500);
+    });
+
+    it("re-centres when its tab is shown again after the PC moved while it was hidden", () => {
+        const { rerender } = render(<MemoryTable {...props({ pcAddress: 0x200, pcScrollRevision: 1 })} />);
+        emulateHiddenScroller();
+        setViewportHeight(300);
+        expect(region().scrollTop).toBe(825);
+
+        setViewportHeight(0);
+        rerender(<MemoryTable {...props({ pcAddress: 0x300, pcScrollRevision: 2 })} />);
+        setViewportHeight(300);
+
+        // Row 48: 48 * 30 + 15 - 150 = 1305.
+        expect(region().scrollTop).toBe(1305);
+    });
+
+    it("keeps a manual scroll across hiding and showing its tab when no update arrived", () => {
+        render(<MemoryTable {...props({ pcAddress: 0x200 })} />);
+        emulateHiddenScroller();
+        setViewportHeight(300);
+        userScrollsTo(1500);
+
+        setViewportHeight(0);
+        setViewportHeight(300);
 
         expect(region().scrollTop).toBe(1500);
     });

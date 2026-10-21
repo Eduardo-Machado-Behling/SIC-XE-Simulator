@@ -59,6 +59,10 @@ export function MemoryTable({
     const headRef = useRef<HTMLTableSectionElement>(null);
     const [layout, setLayout] = useState<Layout>({ viewportHeight: 0, rowHeight: DEFAULT_ROW_HEIGHT });
     const [scrollTop, setScrollTop] = useState(0);
+    // A browser drops scrollTop writes to a hidden (display:none) scroller, so
+    // a centring done while the table's tab is hidden is redone when it shows.
+    const centreWhenShownRef = useRef(false);
+    const [shownRevision, setShownRevision] = useState(0);
 
     // Bytes written by the last two execution updates, keyed to the update
     // that wrote them. Updated while rendering when a new revision arrives
@@ -94,6 +98,11 @@ export function MemoryTable({
         const region = regionRef.current;
         if (!region || region.clientHeight === 0) return;
 
+        if (centreWhenShownRef.current) {
+            centreWhenShownRef.current = false;
+            setShownRevision((revision) => revision + 1);
+        }
+
         const headerHeight = headRef.current?.getBoundingClientRect().height ?? 0;
         const rows = region.querySelectorAll<HTMLElement>("tr[data-memory-row]");
         let rowHeight = 0;
@@ -128,12 +137,15 @@ export function MemoryTable({
     // Centre the PC row whenever the PC moves, an execution update arrives or
     // the viewport is resized, replacing any manual scroll position. The jump
     // is immediate: the rows around the PC are already rendered (see `blocks`).
+    // While the table is hidden the write is lost, so it is repeated once the
+    // table shows again; a manual scroll with no update in between is kept.
     useLayoutEffect(() => {
         const region = regionRef.current;
         if (!region || pcScrollTop === null) return;
 
         region.scrollTop = pcScrollTop;
-    }, [pcScrollTop, pcAddress, pcScrollRevision]);
+        if (region.clientHeight === 0) centreWhenShownRef.current = true;
+    }, [pcScrollTop, pcAddress, pcScrollRevision, shownRevision]);
 
     // Render only the rows near the scroll position, plus the rows near the
     // centred PC so they are there before the scroll event for the jump
