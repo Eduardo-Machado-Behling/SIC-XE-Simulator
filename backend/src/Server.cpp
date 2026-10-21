@@ -67,10 +67,6 @@ void Server::set_session_limits(const session::StoreLimits& limits) {
     m_sessions.set_limits(limits);
 }
 
-session::StoreLimits Server::session_limits() const {
-    return m_sessions.limits();
-}
-
 void Server::set_host(const std::string& host) {
     m_host = host;
 }
