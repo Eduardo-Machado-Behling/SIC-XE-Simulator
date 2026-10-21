@@ -29,6 +29,8 @@ export class FakeBackend {
     private sessionCounter = 0;
     private clock = 0;
     online = true;
+    /** What GET /simulator/architectures lists. */
+    architectures: string[] = ["SIC", "SIC-XE"];
 
     constructor(readonly baseUrl = "http://localhost:8080") {}
 
@@ -77,6 +79,8 @@ export class FakeBackend {
 
     private route(method: string, path: string, query: URLSearchParams, body: unknown): Response {
         const segments = path.split("/").filter(Boolean).map(decodeURIComponent);
+
+        if (method === "GET" && path === "/simulator/architectures") return json(200, this.architectures);
 
         if (method === "POST" && path === "/sessions") {
             const id = this.newSessionId();

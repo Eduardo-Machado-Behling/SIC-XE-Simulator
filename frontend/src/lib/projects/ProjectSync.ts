@@ -42,7 +42,7 @@ export type SyncStatus =
 
 type ProjectApi = Pick<
     SimulatorApiClient,
-    "createSession" | "getSession" | "listProjects" | "getProject" | "syncProjects" | "upsertProject" | "deleteProject" | "upsertFile" | "deleteFile"
+    "listArchitectures" | "createSession" | "getSession" | "listProjects" | "getProject" | "syncProjects" | "upsertProject" | "deleteProject" | "upsertFile" | "deleteFile"
 >;
 
 export type ProjectSyncOptions = {
@@ -108,6 +108,13 @@ export class ProjectSync {
         this.store.subscribe(() => {
             this.projectsCache = null;
         });
+    }
+
+    // ---------------------------------------------------------- architectures
+
+    /** The architectures this server can simulate (GET /simulator/architectures). */
+    availableArchitectures(): Promise<Architecture[]> {
+        return this.api.listArchitectures();
     }
 
     // ----------------------------------------------------------------- status

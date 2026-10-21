@@ -44,7 +44,7 @@ describe("ProjectsHome", () => {
         render(<ProjectsHome sync={sync} />);
 
         expect(screen.getByRole("heading", { name: "Hello" })).toBeTruthy();
-        await waitFor(() => expect(backend.requests()).toEqual(["POST /sessions", `PUT /sessions/${session.read()}/projects`]));
+        await waitFor(() => expect(backend.requests(/sessions/)).toEqual(["POST /sessions", `PUT /sessions/${session.read()}/projects`]));
     });
 
     it("creates a project with the chosen name and architecture and opens it", async () => {
@@ -107,5 +107,30 @@ describe("ProjectsHome", () => {
         await waitFor(() => expect(status.textContent).toMatch(/unreachable/i));
         expect(within(status).getByText(/kept in this browser/i)).toBeTruthy();
         expect(screen.getByRole("heading", { name: "Hello" })).toBeTruthy();
+    });
+
+    it("marks the architectures the server cannot run, while still offering every documented one", async () => {
+        const { backend, sync } = setup();
+        backend.architectures = ["SIC-XE"];
+
+        render(<ProjectsHome sync={sync} />);
+
+        const select = screen.getByLabelText("Architecture");
+        await waitFor(() =>
+            expect(within(select).getByRole("option", { name: "SIC (not available on this server)" })).toBeTruthy(),
+        );
+        expect(within(select).getByRole("option", { name: "SIC-XE" })).toBeTruthy();
+        expect(backend.requests(/architectures/)).toEqual(["GET /simulator/architectures"]);
+    });
+
+    it("lists every documented architecture unmarked when the server cannot be asked", async () => {
+        const { backend, sync } = setup();
+        backend.online = false;
+
+        render(<ProjectsHome sync={sync} />);
+
+        await screen.findByRole("status");
+        const select = screen.getByLabelText("Architecture");
+        expect(within(select).getAllByRole("option").map((option) => option.textContent)).toEqual(["SIC", "SIC-XE"]);
     });
 });

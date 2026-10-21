@@ -43,9 +43,24 @@ export function ProjectsHome({ sync: injected }: ProjectsHomeProps) {
     const [formError, setFormError] = useState<string | null>(null);
     const [name, setName] = useState("");
     const [architecture, setArchitecture] = useState<Architecture>("SIC-XE");
+    // What this server can run; null until known (or if it cannot be asked).
+    const [runnable, setRunnable] = useState<Architecture[] | null>(null);
 
     useEffect(() => {
         void getSync().start();
+    }, [getSync]);
+
+    useEffect(() => {
+        let cancelled = false;
+        getSync()
+            .availableArchitectures()
+            .then((list) => {
+                if (!cancelled) setRunnable(list);
+            })
+            .catch(() => undefined); // every documented architecture stays on offer, unmarked
+        return () => {
+            cancelled = true;
+        };
     }, [getSync]);
 
     const create = (event: FormEvent) => {
@@ -88,7 +103,9 @@ export function ProjectsHome({ sync: injected }: ProjectsHomeProps) {
                             className="rounded bg-zinc-900 px-2 py-1"
                         >
                             {ARCHITECTURES.map((value) => (
-                                <option key={value} value={value}>{value}</option>
+                                <option key={value} value={value}>
+                                    {runnable && !runnable.includes(value) ? `${value} (not available on this server)` : value}
+                                </option>
                             ))}
                         </select>
                         <button type="submit" className="rounded bg-blue-600 px-2 py-1 hover:bg-blue-500">
