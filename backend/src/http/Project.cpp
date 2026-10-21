@@ -1,3 +1,7 @@
+// DEPRECATED legacy routes, not part of api_spec/openapi.yaml. They act on
+// the global (non-session) project list used by the /ws protocol and are
+// kept only because the current frontend still calls them until issue #41
+// lands. New clients must use the session-scoped routes in http/Api.cpp.
 
 #include "Server.hpp"
 
@@ -5,6 +9,7 @@ using json = nlohmann::json;
 
 void Server::setup_http_project() {
     this->Get("/projects", [this](const httplib::Request& req, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(this->mutex);
         json response = json::array();
 
         for (const auto& project : this->m_simulator.list_projects()) {
@@ -15,6 +20,7 @@ void Server::setup_http_project() {
     });
 
     this->Put("/project", [this](const httplib::Request& req, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(this->mutex);
         try {
             if (!(req.has_param("name") && req.has_param("id") && req.has_param("arch"))) {
                 throw std::runtime_error("Missing 'project' parameter");
@@ -35,6 +41,7 @@ void Server::setup_http_project() {
     });
 
     this->Post("/project/load", [this](const httplib::Request& req, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(this->mutex);
         try {
             if (!(req.has_param("id"))) {
                 throw std::runtime_error("Missing 'project' parameter");
@@ -54,6 +61,7 @@ void Server::setup_http_project() {
 
     this->Post("/simulator/project/file",
                [this](const httplib::Request& req, httplib::Response& res) {
+                   std::lock_guard<std::mutex> lock(this->mutex);
                    try {
                        const auto request_json = nlohmann::json::parse(req.body);
 
@@ -74,6 +82,7 @@ void Server::setup_http_project() {
 
     this->Put("/simulator/project/file",
               [this](const httplib::Request& req, httplib::Response& res) {
+                   std::lock_guard<std::mutex> lock(this->mutex);
                   try {
                       const auto json = nlohmann::json::parse(req.body);
 
