@@ -16,6 +16,10 @@ export type TabsProps = {
     tabs: TabDefinition[];
     label: string;
     defaultTabId?: string;
+    // Set selectedId to control the selection from the parent; onSelect is
+    // called whenever the user picks a tab, controlled or not.
+    selectedId?: string;
+    onSelect?: (id: string) => void;
 };
 
 // ============================================================
@@ -25,20 +29,29 @@ export type TabsProps = {
 // Accessible tabs (WAI-ARIA tabs pattern). Every panel stays mounted and the
 // inactive ones are hidden, so a view keeps its state, such as its scroll
 // position, while another tab is shown.
-export function Tabs({ tabs, label, defaultTabId }: TabsProps) {
+export function Tabs({ tabs, label, defaultTabId, selectedId: controlledId, onSelect }: TabsProps) {
     const baseId = useId();
-    const [selectedId, setSelectedId] = useState(defaultTabId ?? tabs[0]?.id);
+    const [uncontrolledId, setUncontrolledId] = useState(defaultTabId);
     const tabRefs = useRef(new Map<string, HTMLButtonElement>());
+
+    // An id that names no tab falls back to the first one, so a tab is always
+    // selected and reachable with the keyboard.
+    const requestedId = controlledId ?? uncontrolledId;
+    const selectedId = tabs.some((tab) => tab.id === requestedId) ? requestedId : tabs[0]?.id;
 
     const tabId = (id: string) => `${baseId}-tab-${id}`;
     const panelId = (id: string) => `${baseId}-panel-${id}`;
 
     const select = (id: string, focus: boolean) => {
-        setSelectedId(id);
+        setUncontrolledId(id);
+        onSelect?.(id);
         if (focus) tabRefs.current.get(id)?.focus();
     };
 
     const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+        // Chords such as Alt+ArrowLeft (Back) belong to the browser.
+        if (event.altKey || event.ctrlKey || event.metaKey) return;
+
         const current = tabs.findIndex((tab) => tab.id === selectedId);
         let next: number;
 
@@ -131,7 +144,12 @@ export function Tabs({ tabs, label, defaultTabId }: TabsProps) {
                         id={panelId(tab.id)}
                         aria-labelledby={tabId(tab.id)}
                         hidden={!selected}
-                        className={selected ? "flex min-h-0 flex-1 flex-col" : undefined}
+                        // Focusable, so Tab moves from the tab to the panel even
+                        // when the panel's content has nothing focusable.
+                        tabIndex={0}
+                        className={selected
+                            ? "flex min-h-0 flex-1 flex-col focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-blue-500"
+                            : undefined}
                     >
                         {tab.content}
                     </div>
