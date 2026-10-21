@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { Group, Panel } from "react-resizable-panels";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ExecutionView, type ArchProps } from "@/components/ExecutionView";
 import type { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
@@ -40,7 +40,17 @@ function inLayout(view: ReactElement): ReactElement {
     );
 }
 
+// jsdom has no layout, so scrolling is observed through the calls the memory
+// table makes to scroll its rows container.
+function spyOnScrolling() {
+    return vi.spyOn(Element.prototype, "scrollTo");
+}
+
 describe("ExecutionView", () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
     it("opens on the CPU tab, which shows the registers and the memory", () => {
         render(inLayout(<ExecutionView {...props()} />));
 
@@ -82,5 +92,38 @@ describe("ExecutionView", () => {
         const cpu = screen.getByRole("tabpanel", { name: "CPU" });
         expect(within(cpu).getByText("0x123456")).toBeTruthy();
         expect(within(cpu).getByText("AB")).toBeTruthy();
+    });
+
+    it("scrolls the memory to the PC on return to CPU when the PC moved while CPU was hidden", async () => {
+        const user = userEvent.setup();
+        const { rerender } = render(inLayout(<ExecutionView {...props({ pc: 0, changeRevision: 1 })} />));
+
+        await user.click(screen.getByRole("tab", { name: "Assembler" }));
+        rerender(inLayout(<ExecutionView {...props({ pc: 0x40, changeRevision: 2 })} />));
+
+        const scrollTo = spyOnScrolling();
+        await user.click(screen.getByRole("tab", { name: "CPU" }));
+
+        expect(scrollTo).toHaveBeenCalled();
+    });
+
+    it("keeps the user's memory scroll position on return to CPU when nothing ran meanwhile", async () => {
+        const user = userEvent.setup();
+        render(inLayout(<ExecutionView {...props({ pc: 0x40, changeRevision: 3 })} />));
+
+        const scrollTo = spyOnScrolling();
+        await user.click(screen.getByRole("tab", { name: "Assembler" }));
+        await user.click(screen.getByRole("tab", { name: "CPU" }));
+
+        expect(scrollTo).not.toHaveBeenCalled();
+    });
+
+    it("scrolls the memory to the PC on each execution update while CPU is shown", () => {
+        const { rerender } = render(inLayout(<ExecutionView {...props({ pc: 0, changeRevision: 1 })} />));
+
+        const scrollTo = spyOnScrolling();
+        rerender(inLayout(<ExecutionView {...props({ pc: 0, changeRevision: 2 })} />));
+
+        expect(scrollTo).toHaveBeenCalledTimes(1);
     });
 });

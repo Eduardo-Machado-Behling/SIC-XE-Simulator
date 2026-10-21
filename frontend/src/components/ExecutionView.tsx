@@ -8,6 +8,7 @@ import MemoryTable from "@/components/MemoryTable";
 import SymbolTable from "@/components/SymbolTable";
 import { Tabs, type TabDefinition } from "@/components/Tabs";
 import { Separator } from "react-resizable-panels";
+import { useState } from "react";
 
 export interface ArchProps {
     arch: ArchitectureInfo | null
@@ -23,6 +24,18 @@ export interface ArchProps {
 }
 
 export function ExecutionView({ arch, registers, memory, memorySize, pc, changedMemory, changedRegisters, changeRevision, consumedMemory, symbols }: ArchProps) {
+    const [selectedTab, setSelectedTab] = useState("cpu");
+
+    // The memory table scrolls to the PC on every execution update, but a
+    // hidden table has no layout and cannot scroll. Count the updates the CPU
+    // tab has been shown for, so an update that arrived while it was hidden
+    // scrolls the memory when the tab is shown again. Plain tab switches leave
+    // the count, and so the user's scroll position, alone.
+    const [pcScroll, setPcScroll] = useState({ revision: changeRevision, pc, count: 0 });
+    if (selectedTab === "cpu" && (pcScroll.revision !== changeRevision || pcScroll.pc !== pc)) {
+        setPcScroll({ revision: changeRevision, pc, count: pcScroll.count + 1 });
+    }
+
     if (!arch)
         return (
             <aside
@@ -48,7 +61,7 @@ export function ExecutionView({ arch, registers, memory, memorySize, pc, changed
                     <RegisterTable registers={registers} changedRegisters={changedRegisters} changeRevision={changeRevision} />
                     <Separator></Separator>
 
-                    <MemoryTable memory={memory} addressSpaceSize={memorySize ? memorySize : 1 << 10} offset={pc} pcAddress={pc} pcScrollRevision={changeRevision} consumedAddresses={consumedMemory} changedAddresses={changedMemory} changeRevision={changeRevision}/>
+                    <MemoryTable memory={memory} addressSpaceSize={memorySize ? memorySize : 1 << 10} offset={pc} pcAddress={pc} pcScrollRevision={pcScroll.count} consumedAddresses={consumedMemory} changedAddresses={changedMemory} changeRevision={changeRevision}/>
                     <div className="w-full h-4"></div>
                 </div>
             ),
@@ -60,5 +73,5 @@ export function ExecutionView({ arch, registers, memory, memorySize, pc, changed
         },
     ];
 
-    return <Tabs label="Execution view" tabs={tabs} />;
+    return <Tabs label="Execution view" tabs={tabs} selectedId={selectedTab} onSelect={setSelectedTab} />;
 }
