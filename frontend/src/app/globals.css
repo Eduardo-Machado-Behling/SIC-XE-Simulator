@@ -86,8 +86,9 @@ body {
   }
 
   /* Without the animation, the memory bytes of the latest write stay marked
-     until the next execution update (see MemoryTable). */
-  .sim-value-change[data-write="latest"] {
+     until the next execution update (see MemoryTable), also after the
+     component drops their animation class. */
+  [data-byte-value][data-write="latest"] {
     animation: none;
     background-color: rgb(59 130 246 / 28%);
     color: rgb(219 234 254);
