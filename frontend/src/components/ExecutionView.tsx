@@ -61,7 +61,7 @@ export function ExecutionView({ arch, registers, memory, memorySize, pc, changed
                     <RegisterTable registers={registers} changedRegisters={changedRegisters} changeRevision={changeRevision} />
                     <Separator></Separator>
 
-                    <MemoryTable memory={memory} addressSpaceSize={memorySize ? memorySize : 1 << 10} offset={pc} pcAddress={pc} pcScrollRevision={pcScroll.count} consumedAddresses={consumedMemory} changedAddresses={changedMemory} changeRevision={changeRevision}/>
+                    <MemoryTable memory={memory} addressSpaceSize={memorySize ? memorySize : 1 << 10} pcAddress={pc} pcScrollRevision={pcScroll.count} consumedAddresses={consumedMemory} changedAddresses={changedMemory} changeRevision={changeRevision}/>
                     <div className="w-full h-4"></div>
                 </div>
             ),
