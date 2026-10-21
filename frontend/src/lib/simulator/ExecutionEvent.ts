@@ -5,7 +5,8 @@ export type ExecutionEvent =
     | RegisterWriteEvent
     | RegisterReadEvent
     | MemoryReadEvent
-    | MemoryWriteEvent;
+    | MemoryWriteEvent
+    | ProgramAssembledEvent;
 
 export type InstructionFormat =
     | "format1"
@@ -117,6 +118,20 @@ export interface MemoryReadEvent {
     value: number;
 }
 
+// A label and its assembled address (or EQU value).
+export interface AssemblySymbol {
+    name: string;
+    value: number;
+}
+
+// Emitted by the backend when it assembles a source file.
+export interface ProgramAssembledEvent {
+    type: "ProgramAssembled";
+    details: {
+        symbols: AssemblySymbol[];
+    };
+}
+
 function byteArray(value: unknown, field: string): number[] {
     if (!Array.isArray(value) || value.some((byte) =>
         typeof byte !== "number" || !Number.isInteger(byte) || byte < 0 || byte > 255
@@ -125,6 +140,20 @@ function byteArray(value: unknown, field: string): number[] {
     }
 
     return value;
+}
+
+function symbolArray(value: unknown): AssemblySymbol[] {
+    if (!Array.isArray(value) || value.some((symbol) =>
+        symbol === null ||
+        typeof symbol !== "object" ||
+        typeof symbol.name !== "string" ||
+        typeof symbol.value !== "number" ||
+        !Number.isInteger(symbol.value)
+    )) {
+        throw new TypeError("Invalid symbol table in ProgramAssembled event");
+    }
+
+    return value.map((symbol) => ({ name: symbol.name, value: symbol.value }));
 }
 
 export function bytesToNumber(bytes: number[]): number {
@@ -207,6 +236,13 @@ export function normalizeExecutionEvent(raw: unknown): ExecutionEvent {
         }
         case "InstructionExecuted":
             return event as unknown as InstructionExecutedEvent;
+        case "ProgramAssembled": {
+            const details = (event.details ?? {}) as Record<string, unknown>;
+            return {
+                type: "ProgramAssembled",
+                details: { symbols: symbolArray(details.symbols) },
+            };
+        }
         default:
             throw new TypeError(`Unknown execution event type '${String(event.type)}'`);
     }
@@ -217,4 +253,11 @@ export function normalizeExecutionEvents(raw: unknown): ExecutionEvent[] {
         throw new TypeError("Expected the simulator response to be an event array");
     }
     return raw.map(normalizeExecutionEvent);
+}
+
+// The symbol table of the last assembly in a batch of events, or null when the
+// batch assembled nothing (for example, a hex dump was loaded).
+export function symbolsFromEvents(events: ExecutionEvent[]): AssemblySymbol[] | null {
+    const assembled = events.findLast((event) => event.type === "ProgramAssembled");
+    return assembled?.type === "ProgramAssembled" ? assembled.details.symbols : null;
 }
