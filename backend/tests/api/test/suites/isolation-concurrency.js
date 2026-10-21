@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { PATHS, newSession, projectInput, sessionWithProject, uuid } from '../support/fixtures.js';
+import { PATHS, newSession, projectInput, runConcurrently, sessionWithProject, uuid } from '../support/fixtures.js';
 import { expectError, expectStatus } from '../support/http.js';
 
 export default function isolationAndConcurrency(ctx) {
@@ -41,11 +41,9 @@ export default function isolationAndConcurrency(ctx) {
   describe('concurrent requests', () => {
     it('parallel file upserts into one project are all kept', async () => {
       const { sessionId, projectId } = await sessionWithProject(ctx.api, projectInput({ files: {} }));
-      const count = 150;
-      const results = await Promise.all(
-        Array.from({ length: count }, (_, i) =>
-          ctx.api.op('PUT', PATHS.files, { sessionId, projectId }, { json: { path: `f${i}.asm`, content: `${i}` } }),
-        ),
+      const count = 300;
+      const results = await runConcurrently(count, 16, (i) =>
+        ctx.api.op('PUT', PATHS.files, { sessionId, projectId }, { json: { path: `f${i}.asm`, content: `${i}` } }),
       );
       for (const res of results) expectStatus(res, 204);
       const res = await ctx.api.op('GET', PATHS.project, { sessionId, projectId });
@@ -54,18 +52,20 @@ export default function isolationAndConcurrency(ctx) {
     });
 
     it('parallel project upserts, syncs and reads across sessions stay consistent', async () => {
-      const sessions = await Promise.all(Array.from({ length: 8 }, () => newSession(ctx.api)));
+      const sessions = await runConcurrently(8, 8, () => newSession(ctx.api));
       const work = [];
       for (const sessionId of sessions) {
         const ids = Array.from({ length: 10 }, () => uuid());
         work.push(
           (async () => {
-            await Promise.all(
-              ids.map((projectId) =>
-                ctx.api.op('PUT', PATHS.project, { sessionId, projectId }, { json: projectInput({ name: projectId }) }),
-              ),
+            await runConcurrently(ids.length, 2, (i) =>
+              ctx.api.op('PUT', PATHS.project, { sessionId, projectId: ids[i] }, {
+                json: projectInput({ name: ids[i] }),
+              }),
             );
-            await Promise.all(ids.map((projectId) => ctx.api.op('GET', PATHS.project, { sessionId, projectId })));
+            await runConcurrently(ids.length, 2, (i) =>
+              ctx.api.op('GET', PATHS.project, { sessionId, projectId: ids[i] }),
+            );
             const keep = ids.slice(0, 5).map((id) => ({ id, ...projectInput({ name: `kept ${id}` }) }));
             await ctx.api.op('PUT', PATHS.projects, { sessionId }, { json: keep });
             const list = await ctx.api.op('GET', PATHS.projects, { sessionId });

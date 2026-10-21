@@ -53,3 +53,22 @@ export function paddedJson(size, build) {
   if (Buffer.byteLength(text) !== size) throw new Error('padding miscalculated');
   return text;
 }
+
+/**
+ * Runs `count` async tasks with at most `limit` in flight. Browsers open only
+ * a handful of connections per origin, so the concurrency tests stay in that
+ * range instead of opening hundreds of sockets at once.
+ */
+export async function runConcurrently(count, limit, task) {
+  const results = new Array(count);
+  let next = 0;
+  const worker = async () => {
+    while (next < count) {
+      const i = next;
+      next += 1;
+      results[i] = await task(i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, count) }, worker));
+  return results;
+}

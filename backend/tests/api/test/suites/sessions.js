@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { PATHS, newSession, projectInput, uuid } from '../support/fixtures.js';
+import { PATHS, newSession, projectInput, runConcurrently, uuid } from '../support/fixtures.js';
 import { expectError, expectStatus } from '../support/http.js';
 
 export default function sessions(ctx) {
@@ -13,7 +13,7 @@ export default function sessions(ctx) {
     });
 
     it('issues a different session ID on every call', async () => {
-      const ids = await Promise.all(Array.from({ length: 50 }, () => newSession(ctx.api)));
+      const ids = await runConcurrently(50, 8, () => newSession(ctx.api));
       assert.equal(new Set(ids).size, ids.length);
     });
   });
