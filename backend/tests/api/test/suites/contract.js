@@ -85,7 +85,7 @@ export default function contract(ctx) {
     });
 
     it('DELETE .../files?path= rejects exactly the paths the schema rejects', async () => {
-      const { sessionId, projectId } = await sessionWithProject(ctx.api);
+      const { sessionId, projectId } = await sessionWithProject(ctx.api, projectInput({ files: {} }));
       for (const path of FILE_PATHS) {
         const valid = validateSchema('FilePath', path).ok;
         const res = await ctx.api.op('DELETE', PATHS.files, { sessionId, projectId }, { query: { path } });
