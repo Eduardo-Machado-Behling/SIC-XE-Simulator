@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -27,6 +30,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
 });
 
@@ -310,6 +314,55 @@ describe("MemoryTable write effects", () => {
         expect(byteValue(0x10).dataset.write).toBe("latest");
     });
 
+    it("does not replay a finished effect when the written byte scrolls into view later", () => {
+        vi.useFakeTimers();
+        const { rerender } = render(<MemoryTable {...props({ pcAddress: 0 })} />);
+        setViewportHeight(300);
+
+        rerender(<MemoryTable {...props({ pcAddress: 0, changedAddresses: [0x300], changeRevision: 1 })} />);
+        expect(byteCell(0x300)).toBeNull();
+
+        act(() => vi.advanceTimersByTime(2000));
+        // Row 48 (0x300) is in view from scrollTop 48 * 30 + 30 - 300 = 1170.
+        userScrollsTo(1305);
+
+        expect(byteValue(0x300).dataset.write).toBe("latest");
+        expect(byteValue(0x300).className).not.toContain("sim-value-change");
+    });
+
+    it("does not replay the effect when a written row scrolls out and back in", () => {
+        vi.useFakeTimers();
+        // The PC's rows are always rendered, so it sits at the far end (rows 50..63).
+        const { rerender } = render(<MemoryTable {...props({ pcAddress: 0x3F0 })} />);
+        setViewportHeight(300);
+        userScrollsTo(0);
+
+        rerender(<MemoryTable {...props({ pcAddress: 0x3F0, changedAddresses: [0x10], changeRevision: 1 })} />);
+        expect(byteValue(0x10).className).toContain("sim-value-change");
+
+        act(() => vi.advanceTimersByTime(720));
+        expect(byteValue(0x10).className).not.toContain("sim-value-change");
+
+        userScrollsTo(1500);
+        expect(byteCell(0x10)).toBeNull();
+        userScrollsTo(0);
+
+        expect(byteValue(0x10).className).not.toContain("sim-value-change");
+        expect(byteValue(0x10).dataset.write).toBe("latest");
+    });
+
+    it("still plays an effect that has not finished when its byte scrolls into view", () => {
+        vi.useFakeTimers();
+        const { rerender } = render(<MemoryTable {...props({ pcAddress: 0 })} />);
+        setViewportHeight(300);
+
+        rerender(<MemoryTable {...props({ pcAddress: 0, changedAddresses: [0x300], changeRevision: 1 })} />);
+        act(() => vi.advanceTimersByTime(300));
+        userScrollsTo(1305);
+
+        expect(byteValue(0x300).className).toContain("sim-value-change");
+    });
+
     it("keeps the PC marker on the cell, apart from the write effect on its value", () => {
         render(<MemoryTable {...props({ pcAddress: 0x10, changedAddresses: [0x10, 0x11], changeRevision: 1 })} />);
 
@@ -344,5 +397,37 @@ describe("MemoryTable sizing", () => {
         const cells = region().querySelectorAll<HTMLElement>("td[data-address]");
         expect(cells.length).toBeGreaterThan(0);
         for (const cell of cells) expect(cell.className).toMatch(/(^|\s)py-\[5px\](\s|$)/);
+    });
+});
+
+describe("MemoryTable write effect styles", () => {
+    // jsdom evaluates no stylesheet or media query, so these read globals.css
+    // (relative to the frontend directory, where the tests run) to keep the
+    // rules the component's attributes rely on.
+    const css = readFileSync(resolve(process.cwd(), "src/app/globals.css"), "utf8");
+
+    /** Body of the first block opened by `prelude`, braces balanced. */
+    function block(source: string, prelude: string): string {
+        const start = source.indexOf(prelude);
+        if (start < 0) throw new Error(`${prelude} not found`);
+        const open = source.indexOf("{", start);
+        let depth = 0;
+        for (let i = open; i < source.length; i++) {
+            if (source[i] === "{") depth++;
+            if (source[i] === "}" && --depth === 0) return source.slice(open + 1, i);
+        }
+        throw new Error(`${prelude} is not closed`);
+    }
+
+    it("animates a written byte for 720ms, the time its effect class is kept", () => {
+        expect(block(css, ".sim-value-change {")).toMatch(/animation:\s*sim-value-change\s+720ms\b/);
+    });
+
+    it("marks the latest writes statically under reduced motion, without the animation class", () => {
+        const reduced = block(css, "@media (prefers-reduced-motion: reduce)");
+        const rule = block(reduced, '[data-byte-value][data-write="latest"]');
+
+        expect(rule).toMatch(/animation:\s*none/);
+        expect(rule).toMatch(/background-color:/);
     });
 });

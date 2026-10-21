@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import {
     centeredScrollTop,
@@ -33,6 +33,8 @@ export type MemoryTableProps = {
 const DEFAULT_ROW_HEIGHT = 30;
 /** Rows rendered beyond each edge of the viewport. */
 const OVERSCAN = 4;
+/** Length of the .sim-value-change animation in globals.css. */
+const WRITE_EFFECT_MS = 720;
 
 type Layout = {
     /** Height available to the rows, below the sticky column header. */
@@ -78,6 +80,32 @@ export function MemoryTable({
             marks: nextWriteMarks(writes.marks, writes.revision, changedAddresses, changeRevision, addressSpaceSize),
         });
     }
+
+    // Highest revision whose write animation has finished. Rows are mounted
+    // and unmounted as they scroll in and out of the rendered range, and a
+    // remounted value would start the animation again, so the animation class
+    // is only given while the update that wrote the byte is recent. The
+    // write mark (data-write) itself stays for the reduced-motion indicator.
+    const [settledRevision, setSettledRevision] = useState(-Infinity);
+    const settleTimersRef = useRef(new Set<ReturnType<typeof setTimeout>>());
+    useEffect(() => {
+        const revision = writes.revision;
+        const timers = settleTimersRef.current;
+        const timer = setTimeout(() => {
+            timers.delete(timer);
+            setSettledRevision((settled) => Math.max(settled, revision));
+        }, WRITE_EFFECT_MS);
+        // Not cleared when the next update arrives: this update's effects
+        // keep playing alongside the next one's.
+        timers.add(timer);
+    }, [writes.revision]);
+    useEffect(() => {
+        const timers = settleTimersRef.current;
+        return () => {
+            for (const timer of timers) clearTimeout(timer);
+            timers.clear();
+        };
+    }, []);
 
     const consumed = useMemo(() => new Set(consumedAddresses), [consumedAddresses]);
     const totalRows = rowCount(addressSpaceSize, bytesPerRow);
@@ -206,6 +234,7 @@ export function MemoryTable({
                     const writeState = writeRevision === undefined
                         ? undefined
                         : writeRevision === writes.revision ? "latest" : "settling";
+                    const writeAnimates = writeRevision !== undefined && writeRevision > settledRevision;
 
                     return (
                         <td
@@ -231,13 +260,15 @@ export function MemoryTable({
                               * so it never hides the PC marker. Its key changes
                               * with every update that writes the byte, which
                               * remounts it and restarts the animation even when
-                              * the value did not change.
+                              * the value did not change. The animation class
+                              * goes once the effect has had its time (see
+                              * settledRevision).
                               */}
                             <span
                                 key={writeRevision ?? "unwritten"}
                                 data-byte-value=""
                                 data-write={writeState}
-                                className={`inline-block rounded px-1 ${writeState ? "sim-value-change" : ""}`}
+                                className={`inline-block rounded px-1 ${writeAnimates ? "sim-value-change" : ""}`}
                             >
                                 {hex(value, 2)}
                             </span>
