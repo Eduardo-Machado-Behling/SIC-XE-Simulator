@@ -14,6 +14,10 @@ services:
     envVars:
       - key: SIMULATOR_API_URL
         value: https://sic-xe-engine.onrender.com
+      # Read by the browser bundle (inlined by `next build`); without it the
+      # site would call http://localhost:8080.
+      - key: NEXT_PUBLIC_BACKEND_URL
+        value: https://sic-xe-engine.onrender.com
 
 
   - type: web
