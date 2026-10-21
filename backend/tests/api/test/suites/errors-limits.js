@@ -55,6 +55,46 @@ export default function errorsAndLimits(ctx) {
       assert.match(res.headers.get('content-type') ?? '', /^application\/json/);
     });
 
+    function expectRouteNotFound(res) {
+      expectError(res, 404, 'not-found');
+      const { ok, errors } = validateSchema('Error', res.json);
+      assert.ok(ok, `not an Error object: ${res.text} ${JSON.stringify(errors)}`);
+    }
+
+    it('an encoded "/" in a path segment does not reach another operation', async () => {
+      const { sessionId, projectId } = await sessionWithProject(ctx.api);
+      for (const slash of ['%2F', '%2f']) {
+        expectRouteNotFound(await ctx.api.raw('GET', `/sessions/${sessionId}${slash}projects`));
+        expectRouteNotFound(
+          await ctx.api.raw('DELETE', `/sessions/${sessionId}${slash}projects${slash}${projectId}`),
+        );
+      }
+      expectStatus(await ctx.api.op('GET', PATHS.project, { sessionId, projectId }), 200);
+    });
+
+    it('a trailing "/" does not reach the documented operation', async () => {
+      const { sessionId, projectId } = await sessionWithProject(ctx.api);
+      expectRouteNotFound(await ctx.api.raw('GET', `/sessions/${sessionId}/`));
+      expectRouteNotFound(await ctx.api.raw('GET', `/sessions/${sessionId}/projects/`));
+      expectRouteNotFound(await ctx.api.raw('GET', '/health/'));
+
+      const created = uuid();
+      expectRouteNotFound(
+        await ctx.api.raw('PUT', `/sessions/${sessionId}/projects/${created}/`, { json: projectInput() }),
+      );
+      expectError(await ctx.api.op('GET', PATHS.project, { sessionId, projectId: created }), 404, 'project-not-found');
+      expectRouteNotFound(await ctx.api.raw('DELETE', `/sessions/${sessionId}/projects/${projectId}/`));
+      expectStatus(await ctx.api.op('GET', PATHS.project, { sessionId, projectId }), 200);
+    });
+
+    it('an encoded "/" in the query string is still accepted (file paths)', async () => {
+      const { sessionId, projectId } = await sessionWithProject(ctx.api);
+      const put = await ctx.api.op('PUT', PATHS.files, { sessionId, projectId }, { json: { path: 'src/a.asm', content: '' } });
+      expectStatus(put, 204);
+      const del = await ctx.api.raw('DELETE', `/sessions/${sessionId}/projects/${projectId}/files?path=src%2Fa.asm`);
+      expectStatus(del, 204);
+    });
+
     it('CORS preflight is still answered with 204 and the allowed methods', async () => {
       const res = await ctx.api.raw('OPTIONS', '/sessions');
       expectStatus(res, 204);
