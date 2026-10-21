@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <map>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -49,6 +50,15 @@ struct SymbolReference {
   int length = 0;
 };
 
+// One statement of the listing, in the columns of Beck's Fig. 2.6. Blank and
+// comment-only lines are not statements and are not listed.
+struct ListingLine {
+  int line = 0;                         // 1-based source line
+  std::optional<std::size_t> address;   // pass-1 location; empty for END, BASE, NOBASE
+  std::vector<byte_t> bytes;            // pass-2 object code, never abbreviated
+  std::string source;                   // the line as written
+};
+
 // Everything the CodeMemory alone cannot express.
 struct AssemblyInfo {
   std::vector<Diagnostic> diagnostics;      // warnings and errors, ordered by line
@@ -61,6 +71,7 @@ struct AssemblyInfo {
   std::vector<SymbolLocation> symbolDefinitions;
   std::vector<SymbolReference> symbolReferences;
   std::string listing;                      // "ADDR  OBJECT  SOURCE" per statement
+  std::vector<ListingLine> lines;           // the same listing, one entry per statement
 };
 
 struct AssemblyResult {

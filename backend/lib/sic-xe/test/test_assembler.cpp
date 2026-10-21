@@ -362,6 +362,153 @@ TEST(analysis_reports_symbol_definition_and_reference_locations) {
                       [](const SymbolReference& reference) { return reference.name == "LOOP"; }) == 2);
 }
 
+// Beck, Fig. 2.5, with registers written in this assembler's $ syntax.
+// Comment lines are kept, so the source line numbers below count them.
+// "START 0" reads the same in decimal and in hexadecimal.
+static const char* const BECK_COPY =
+    "COPY     START   0\n"            //  1
+    "FIRST    STL     RETADR\n"       //  2
+    "         LDB     #LENGTH\n"      //  3
+    "         BASE    LENGTH\n"       //  4
+    "CLOOP   +JSUB    RDREC\n"        //  5
+    "         LDA     LENGTH\n"       //  6
+    "         COMP    #0\n"           //  7
+    "         JEQ     ENDFIL\n"       //  8
+    "        +JSUB    WRREC\n"        //  9
+    "         J       CLOOP\n"        // 10
+    "ENDFIL   LDA     EOF\n"          // 11
+    "         STA     BUFFER\n"       // 12
+    "         LDA     #3\n"           // 13
+    "         STA     LENGTH\n"       // 14
+    "        +JSUB    WRREC\n"        // 15
+    "         J       @RETADR\n"      // 16
+    "EOF      BYTE    C'EOF'\n"       // 17
+    "RETADR   RESW    1\n"            // 18
+    "LENGTH   RESW    1\n"            // 19
+    "BUFFER   RESB    4096\n"         // 20
+    ".\n"                             // 21
+    ".        SUBROUTINE TO READ RECORD INTO BUFFER\n"
+    ".\n"                             // 23
+    "RDREC    CLEAR   $X\n"            // 24
+    "         CLEAR   $A\n"            // 25
+    "         CLEAR   $S\n"            // 26
+    "        +LDT     #4096\n"        // 27
+    "RLOOP    TD      INPUT\n"        // 28
+    "         JEQ     RLOOP\n"        // 29
+    "         RD      INPUT\n"        // 30
+    "         COMPR   $A,$S\n"          // 31
+    "         JEQ     EXIT\n"         // 32
+    "         STCH    BUFFER,$X\n"     // 33
+    "         TIXR    $T\n"            // 34
+    "         JLT     RLOOP\n"        // 35
+    "EXIT     STX     LENGTH\n"       // 36
+    "         RSUB\n"                 // 37
+    "INPUT    BYTE    X'F1'\n"        // 38
+    ".\n"                             // 39
+    ".        SUBROUTINE TO WRITE RECORD FROM BUFFER\n"
+    ".\n"                             // 41
+    "WRREC    CLEAR   $X\n"            // 42
+    "         LDT     LENGTH\n"       // 43
+    "WLOOP    TD      OUTPUT\n"       // 44
+    "         JEQ     WLOOP\n"        // 45
+    "         LDCH    BUFFER,$X\n"     // 46
+    "         WD      OUTPUT\n"       // 47
+    "         TIXR    $T\n"            // 48
+    "         JLT     WLOOP\n"        // 49
+    "         RSUB\n"                 // 50
+    "OUTPUT   BYTE    X'05'\n"        // 51
+    "         END     FIRST\n";       // 52
+
+static std::string hexBytes(const std::vector<byte_t>& bytes) {
+  std::string s;
+  char buf[3];
+  for (byte_t b : bytes) { std::snprintf(buf, sizeof buf, "%02X", b); s += buf; }
+  return s;
+}
+
+static std::string sourceLine(const char* src, int line) {
+  std::string all(src);
+  std::size_t pos = 0;
+  for (int i = 1; i < line; ++i) pos = all.find('\n', pos) + 1;
+  return all.substr(pos, all.find('\n', pos) - pos);
+}
+
+TEST(structured_listing_matches_beck_fig_2_6) {
+  struct Row { int line; long loc; const char* object; };   // loc -1: no Loc column
+  // Loc and Object code copied from Beck, Fig. 2.6 (book line numbers in comments).
+  const std::vector<Row> expected = {
+      {1, 0x0000, ""},          {2, 0x0000, "17202D"},    {3, 0x0003, "69202D"},     //   5  10  12
+      {4, -1, ""},              {5, 0x0006, "4B101036"},  {6, 0x000A, "032026"},     //  13  15  20
+      {7, 0x000D, "290000"},    {8, 0x0010, "332007"},    {9, 0x0013, "4B10105D"},   //  25  30  35
+      {10, 0x0017, "3F2FEC"},   {11, 0x001A, "032010"},   {12, 0x001D, "0F2016"},    //  40  45  50
+      {13, 0x0020, "010003"},   {14, 0x0023, "0F200D"},   {15, 0x0026, "4B10105D"},  //  55  60  65
+      {16, 0x002A, "3E2003"},   {17, 0x002D, "454F46"},   {18, 0x0030, ""},          //  70  80  95
+      {19, 0x0033, ""},         {20, 0x0036, ""},                                    // 100 105
+      {24, 0x1036, "B410"},     {25, 0x1038, "B400"},     {26, 0x103A, "B440"},      // 125 130 132
+      {27, 0x103C, "75101000"}, {28, 0x1040, "E32019"},   {29, 0x1043, "332FFA"},    // 133 135 140
+      {30, 0x1046, "DB2013"},   {31, 0x1049, "A004"},     {32, 0x104B, "332008"},    // 145 150 155
+      {33, 0x104E, "57C003"},   {34, 0x1051, "B850"},     {35, 0x1053, "3B2FEA"},    // 160 165 170
+      {36, 0x1056, "134000"},   {37, 0x1059, "4F0000"},   {38, 0x105C, "F1"},        // 175 180 185
+      {42, 0x105D, "B410"},     {43, 0x105F, "774000"},   {44, 0x1062, "E32011"},    // 210 212 215
+      {45, 0x1065, "332FFA"},   {46, 0x1068, "53C003"},   {47, 0x106B, "DF2008"},    // 220 225 230
+      {48, 0x106E, "B850"},     {49, 0x1070, "3B2FEF"},   {50, 0x1073, "4F0000"},    // 235 240 245
+      {51, 0x1076, "05"},       {52, -1, ""},                                        // 250 255
+  };
+
+  Assembler a;
+  a.assemble(BECK_COPY);
+  const std::vector<ListingLine>& lines = a.lastInfo().lines;
+  CHECK(lines.size() == expected.size());
+  for (std::size_t i = 0; i < expected.size() && i < lines.size(); ++i) {
+    const Row& want = expected[i];
+    const ListingLine& got = lines[i];
+    const bool ok = got.line == want.line &&
+                    (want.loc < 0 ? !got.address.has_value()
+                                  : got.address == static_cast<std::size_t>(want.loc)) &&
+                    hexBytes(got.bytes) == want.object &&
+                    got.source == sourceLine(BECK_COPY, want.line);
+    if (!ok)
+      std::printf("  line %d: got line %d loc %s object '%s' source '%s'\n", want.line, got.line,
+                  got.address ? std::to_string(*got.address).c_str() : "-", hexBytes(got.bytes).c_str(),
+                  got.source.c_str());
+    CHECK(ok);
+  }
+
+  // Fig. 2.8: one modification record per +JSUB address field, 5 half-bytes each.
+  const auto& relocs = a.lastInfo().relocations;
+  CHECK(relocs.size() == 3);
+  if (relocs.size() == 3) {
+    CHECK(relocs[0].address == 0x07 && relocs[0].halfBytes == 5);
+    CHECK(relocs[1].address == 0x14 && relocs[1].halfBytes == 5);
+    CHECK(relocs[2].address == 0x27 && relocs[2].halfBytes == 5);
+  }
+  CHECK(a.lastInfo().programName == "COPY");
+  CHECK(a.lastInfo().length == 0x1077);
+  CHECK(a.lastInfo().entryPoint == 0);
+}
+
+TEST(structured_listing_keeps_long_object_code_whole) {
+  // The text listing abbreviates more than six bytes with "..": the structured one must not.
+  Assembler a;
+  a.assemble(" BYTE C'ABCDEFGH'\n");
+  CHECK(a.lastInfo().lines.size() == 1);
+  if (!a.lastInfo().lines.empty())
+    CHECK(hexBytes(a.lastInfo().lines[0].bytes) == "4142434445464748");
+}
+
+TEST(structured_listing_leaves_statements_after_end_unlocated) {
+  // They are ignored (with a warning), so a Loc would claim bytes that do not exist.
+  Assembler a;
+  a.assemble(" START 0x10\n RSUB\n END\n RSUB\n");
+  const auto& lines = a.lastInfo().lines;
+  CHECK(lines.size() == 4);
+  if (lines.size() == 4) {
+    CHECK(lines[1].address == std::size_t{0x10});
+    CHECK(!lines[2].address.has_value());
+    CHECK(!lines[3].address.has_value() && lines[3].bytes.empty() && lines[3].line == 4);
+  }
+}
+
 int main(int argc, char** argv) {
   if (argc > 2) {
     std::fprintf(stderr, "Usage: %s [test_case]\n", argv[0]);
