@@ -20,6 +20,7 @@ private:
 class Memory {
 public:
     void resize(size_t size);
+    size_t size() const noexcept;
 
     void write(size_t address, const std::vector<byte_t>& data);
     void read(size_t address, size_t size, std::vector<byte_t>& buffer) const;

@@ -16,6 +16,10 @@ void Memory::resize(size_t size) {
     m_memory.resize(size);
 }
 
+size_t Memory::size() const noexcept {
+    return m_memory.size();
+}
+
 void Memory::write(size_t address, const std::vector<byte_t>& data) {
     if (address + data.size() > m_memory.size()) {
         throw MemoryOutOfBoundsException("Write operation exceeds memory bounds");

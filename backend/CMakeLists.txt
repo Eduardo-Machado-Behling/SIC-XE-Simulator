@@ -179,3 +179,36 @@ set_target_properties(api PROPERTIES
 
     PREFIX ""
 )
+
+# ==================================================
+# Simulator event tests
+# ==================================================
+
+if(BUILD_TESTING)
+    add_executable(events_tests
+        ${CMAKE_SOURCE_DIR}/tests/events/test_events.cpp
+        ${SHARED_SOURCES}
+    )
+
+    target_include_directories(events_tests
+        PRIVATE
+            ${CMAKE_SOURCE_DIR}/include
+    )
+
+    target_link_libraries(events_tests
+        PRIVATE
+            nlohmann_json::nlohmann_json
+    )
+
+    function(add_events_test CASE_NAME DESCRIPTION)
+        add_test(
+            NAME "events.${DESCRIPTION}"
+            COMMAND events_tests "${CASE_NAME}"
+        )
+    endfunction()
+
+    add_events_test(memory_cleared_serializes_without_the_memory_contents "memory-cleared.serialize")
+    add_events_test(memory_cleared_commit_zero_fills_and_restore_puts_the_bytes_back "memory-cleared.commit-and-restore")
+    add_events_test(memory_cleared_on_an_empty_memory_does_nothing "memory-cleared.empty-memory")
+    add_events_test(event_manager_undoes_a_clear_and_the_writes_after_it "memory-cleared.undo-redo")
+endif()
