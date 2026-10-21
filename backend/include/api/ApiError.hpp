@@ -57,6 +57,10 @@ inline ApiError file_not_found() {
     return {404, error_type::FileNotFound, "File not found"};
 }
 
+inline ApiError payload_too_large(std::string detail) {
+    return {413, error_type::PayloadTooLarge, "Payload too large", std::move(detail)};
+}
+
 inline ApiError internal_error() {
     return {500, error_type::InternalError, "Internal server error"};
 }
