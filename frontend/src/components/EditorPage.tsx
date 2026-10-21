@@ -89,7 +89,9 @@ function errorMessage(err: unknown): string {
 }
 
 export default function EditorPage({ projectId, sync: syncProp, simulator: simulatorProp }: PageProps) {
-    const [simulator] = useState<EditorSimulator>(() => simulatorProp ?? Simulator.get());
+    // Created on first use in an effect or handler, never during render: the
+    // server render must not open a /ws connection of its own.
+    const getSimulator = useCallback((): EditorSimulator => simulatorProp ?? Simulator.get(), [simulatorProp]);
     const getSync = useCallback(() => syncProp ?? getProjectSync(), [syncProp]);
 
     const [memory, setMemory] = useState<Map<number, number>>(new Map());
@@ -119,7 +121,7 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
     const consoleHandleRef = useRef<ConsoleHandle | null>(null);
 
     const applyExecutionEvents = useCallback((events: ExecutionEvent[], animateInstruction = true) => {
-        simulator.resolve(events, setMemory, setRegisters);
+        getSimulator().resolve(events, setMemory, setRegisters);
         if (events.some((event) => event.type === "ProgramAssembled" || event.type === "ProgramCleared")) {
             setSymbols(symbolsFromEvents(events));
         }
@@ -174,7 +176,7 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
             setChangedRegisters([]);
             setChangedMemory([]);
         }, 720);
-    }, [simulator]);
+    }, [getSimulator]);
 
     const reportCommandError = useCallback((reason: unknown) => {
         if (reason instanceof SimulatorCommandError) {
@@ -235,7 +237,7 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
             void sync.start();
 
             try {
-                const info = await simulator.bindProject(local);
+                const info = await getSimulator().bindProject(local);
                 if (cancelled) return;
 
                 setArch(info);
@@ -258,7 +260,7 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
             cancelled = true;
             stopStatus();
         };
-    }, [getSync, projectId, simulator]);
+    }, [getSync, projectId, getSimulator]);
 
     // --------------------------------------------------------
     // File tree (derived from files)
@@ -340,7 +342,7 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
     // Simulator actions
     // --------------------------------------------------------
 
-    // Run, Step and Reset need a simulator bound to this project: without
+    // Run, Step, Reset and Clear need a simulator bound to this project: without
     // one, the shared server would act on whatever project it bound last.
     const executionBlocked = archError
         ? `The simulator cannot run this project. ${archError.replace(/\.?$/, ".")} Reload the page to try again.`
@@ -368,7 +370,7 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
             const current = getSync().getProject(projectId);
             if (!current) throw new Error("This project is no longer stored in this browser.");
 
-            const steps = await simulator.runFile(current, activeFile);
+            const steps = await getSimulator().runFile(current, activeFile);
 
             setSymbols(symbolsFromEvents(steps));
             applyExecutionEvents(steps);
@@ -381,7 +383,7 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
             setSymbols(null);
             reportFailure("Run", err);
         }
-    }, [activeFile, applyExecutionEvents, getSync, projectId, refuseExecution, reportFailure, simulator]);
+    }, [activeFile, applyExecutionEvents, getSync, projectId, refuseExecution, reportFailure, getSimulator]);
 
     const stop = useCallback(() => {
         setIsRunning(false);
@@ -391,13 +393,13 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
         if (refuseExecution()) return;
         consoleHandleRef.current?.write("Executing one instruction...\r\n");
         try {
-            const steps = await simulator.step();
+            const steps = await getSimulator().step();
             applyExecutionEvents(steps);
             consoleHandleRef.current?.write(JSON.stringify(steps));
         } catch (err) {
             reportFailure("Step", err);
         }
-    }, [applyExecutionEvents, refuseExecution, reportFailure, simulator]);
+    }, [applyExecutionEvents, refuseExecution, reportFailure, getSimulator]);
 
     const reset = useCallback(async () => {
         if (refuseExecution()) return;
@@ -406,12 +408,12 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
         setConsumedMemory([]);
         consoleHandleRef.current?.clear();
         try {
-            const steps = await simulator.reset();
+            const steps = await getSimulator().reset();
             applyExecutionEvents(steps, false);
         } catch (err) {
             reportFailure("Reset", err);
         }
-    }, [applyExecutionEvents, refuseExecution, reportFailure, simulator]);
+    }, [applyExecutionEvents, refuseExecution, reportFailure, getSimulator]);
 
     const clearMachine = useCallback(async () => {
         if (refuseExecution()) return;
@@ -419,13 +421,13 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
         if (instructionTimerRef.current) clearTimeout(instructionTimerRef.current);
         setConsumedMemory([]);
         try {
-            const events = await simulator.clear();
+            const events = await getSimulator().clear();
             applyExecutionEvents(events, false);
             setSymbols(null);
         } catch (err) {
             reportFailure("Clear", err);
         }
-    }, [applyExecutionEvents, refuseExecution, reportFailure, simulator]);
+    }, [applyExecutionEvents, refuseExecution, reportFailure, getSimulator]);
 
     // --------------------------------------------------------
     // Console command handling
