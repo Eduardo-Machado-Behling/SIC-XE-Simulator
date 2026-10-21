@@ -130,6 +130,31 @@ describe("EditorPage execution", () => {
         expect(fake.runFile).not.toHaveBeenCalled();
     });
 
+    it("blocks Run again while another project is being bound, and forgets the previous project's failure", async () => {
+        let bindOther: (arch: ArchitectureInfo) => void = () => undefined;
+        const other: Project = { id: B, name: "Other", architecture: "SIC-XE", files: { "main.asm": "" } };
+        const { fake, store, show } = setup({
+            bindProject: vi.fn(async (project: Project) => {
+                if (project.id === A) throw new Error("Simulator did not answer");
+                return new Promise<ArchitectureInfo>((resolve) => {
+                    bindOther = resolve;
+                });
+            }),
+        });
+        store.put(other);
+        await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Architecture info unavailable"));
+
+        show(B);
+
+        await waitFor(() => expect(fake.bindProject).toHaveBeenLastCalledWith(other));
+        const runButton = screen.getByRole("button", { name: /Run/ }) as HTMLButtonElement;
+        expect(runButton.title).toMatch(/still loading/);
+        expect(screen.queryByText(/Architecture info unavailable/)).toBeNull();
+
+        bindOther(ARCH);
+        await waitFor(() => expect(runButton.disabled).toBe(false));
+    });
+
     it("binds the project stored in this browser and runs the active file with its current content", async () => {
         const user = userEvent.setup();
         const { fake, store } = setup({});

@@ -214,6 +214,10 @@ export default function EditorPage({ projectId, sync: syncProp, simulator: simul
             const local = sync.getProject(projectId);
             if (cancelled) return;
 
+            // Nothing of a previously shown project's binding applies to this one.
+            setArch(null);
+            setArchError(null);
+
             if (!local) {
                 setError("This project is not stored in this browser.");
                 setLoading(false);
