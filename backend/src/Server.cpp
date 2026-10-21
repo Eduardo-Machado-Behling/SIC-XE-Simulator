@@ -9,14 +9,21 @@
 using json = nlohmann::json;
 
 Server::Server(Simulator& simulator)
-    : m_simulator(simulator) {}
+    : m_simulator(simulator) {
+    set_max_body_bytes(kDefaultMaxBodyBytes);
+}
 
 void Server::setup(int port) {
     setup_cors();
+    setup_errors();
     setup_http();
     setup_ws();
 
     m_port = port;
+}
+
+void Server::set_max_body_bytes(std::size_t bytes) {
+    this->set_payload_max_length(bytes);
 }
 
 void Server::set_host(const std::string& host) {
@@ -48,6 +55,12 @@ void Server::setup_cors() {
 }
 
 void Server::setup_http() {
+    // Documented API: api_spec/openapi.yaml.
+    this->setup_http_api();
+
+    // DEPRECATED legacy routes below: not part of the OpenAPI document. They
+    // are kept only because the current frontend still calls them (until
+    // issue #41 moves it to the documented API). Use GET /health instead.
     this->Get("/heartbeat", [](const httplib::Request&, httplib::Response& res) {
         json response = {{"message", "Hello from C++!"},
                          {"language", "C++"},
