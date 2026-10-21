@@ -1,0 +1,137 @@
+@startuml
+title SIC/XE — Instruction and Operand Relationship
+top to bottom direction
+skinparam classAttributeIconSize 0
+skinparam nodesep 18
+skinparam ranksep 24
+hide empty members
+
+class DecodedInstruction {
+  - m_implementation : const IInstruction*
+  - m_operand : optional<Operands>
+  + execute() : uint8_t
+  - resolve_operand(...) : Operands
+}
+
+class "Operands\nstd::variant<...>" as Operands {
+  ValueOperand
+  AddressOperand
+  FloatOperand
+  NoneOperand
+  RegisterOperand
+  RegistersOperand
+  RegisterValueOperand
+}
+
+class Operand <<base>>
+
+class ValueOperand {
+  + value : Word
+}
+class AddressOperand {
+  + address : Word
+}
+class FloatOperand {
+  + value : Float
+}
+class NoneOperand
+class RegisterOperand {
+  + r1 : RegisterID
+}
+class RegistersOperand {
+  + r1 : RegisterID
+  + r2 : RegisterID
+}
+class RegisterValueOperand {
+  + r1 : RegisterID
+  + v2 : Word
+}
+
+Operand <|-- ValueOperand
+Operand <|-- AddressOperand
+Operand <|-- FloatOperand
+Operand <|-- NoneOperand
+Operand <|-- RegisterOperand
+Operand <|-- RegistersOperand
+Operand <|-- RegisterValueOperand
+
+DecodedInstruction *-- Operands : stores resolved operand
+Operands ..> ValueOperand
+Operands ..> AddressOperand
+Operands ..> FloatOperand
+Operands ..> NoneOperand
+Operands ..> RegisterOperand
+Operands ..> RegistersOperand
+Operands ..> RegisterValueOperand
+
+class IInstruction <<polymorphic base>> {
+  + execute(context, ValueOperand) : bool
+  + execute(context, AddressOperand) : bool
+  + execute(context, FloatOperand) : bool
+  + execute(context, NoneOperand) : bool
+  + execute(context, RegisterOperand) : bool
+  + execute(context, RegistersOperand) : bool
+  + execute(context, RegisterValueOperand) : bool
+}
+
+class "Concrete instructions" as ConcreteInstructions
+
+IInstruction <|-- ConcreteInstructions
+DecodedInstruction --> IInstruction : invokes m_implementation
+
+class InstructionSet {
+  + findByOpcode(opcode) : InstructionData*
+}
+class InstructionData {
+  + description : InstructionDescription
+  + implementation : IInstruction*
+}
+class InstructionDescription {
+  + mnemonic : string
+  + operand_type : OperandType
+}
+
+InstructionSet --> InstructionData : opcode lookup
+InstructionData --> InstructionDescription
+InstructionData --> IInstruction : selected implementation
+DecodedInstruction ..> InstructionSet : resolves opcode and operand type
+
+class ExecutionContext
+IInstruction ..> ExecutionContext : receives during execute()
+
+class "Example concrete instructions" as Examples {
+  AddInstruction
+  JgtInstruction
+  AddFInstruction
+  ClearInstruction
+  CompRInstruction
+  ShiftLInstruction
+  RsubInstruction
+}
+
+Examples ..> ValueOperand : AddInstruction
+Examples ..> AddressOperand : JgtInstruction
+Examples ..> FloatOperand : AddFInstruction
+Examples ..> RegisterOperand : ClearInstruction
+Examples ..> RegistersOperand : CompRInstruction
+Examples ..> RegisterValueOperand : ShiftLInstruction
+Examples ..> NoneOperand : RsubInstruction
+
+note right of DecodedInstruction
+  Construction resolves the operand into one
+  of the variant's concrete types.
+
+  execute() visits that variant and calls
+  m_implementation->execute(context, operand).
+end note
+
+note right of IInstruction
+  These are overloaded virtual methods.
+  Their base implementations throw
+  UnimplementedInstruction.
+
+  Each concrete instruction overrides
+  the overload for its operand type.
+end note
+
+@enduml

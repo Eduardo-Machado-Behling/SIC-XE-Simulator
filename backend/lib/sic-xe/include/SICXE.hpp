@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Assembler.hpp"
+#include "assembler/assembler.hpp"
+
 #include "InstructionSet.hpp"
 #include "architecture/IArchictecture.hpp"
 
@@ -22,7 +23,7 @@ private:
     ArchitectureInfo m_info;
     InstructionSet m_set;
 
-    Assembler m_assembler;
+    sicxe::Assembler m_assembler;
 
     EventQueue m_events;
     std::vector<byte_t> m_buffer;

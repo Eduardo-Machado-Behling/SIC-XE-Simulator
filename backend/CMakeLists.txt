@@ -73,6 +73,8 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(json)
 
+include(CTest)
+
 # ==================================================
 # Architecture DLLs
 # ==================================================

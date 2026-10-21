@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <regex>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -37,8 +38,7 @@ const std::vector<RegisterDescription> REGISTERS = {
 SICXE::SICXE(MemoryAccessor memoryAccessor,
              RegisterAccessor registerAccessor,
              architecture::events::InstructionExecutor& instructionExecutor)
-    : m_assembler(m_set)
-    , IArchitecture(memoryAccessor, registerAccessor, instructionExecutor) {
+    : IArchitecture(memoryAccessor, registerAccessor, instructionExecutor) {
     m_info.name = "SIC/XE";
     m_info.description = "SIC/XE architecture";
 
@@ -107,8 +107,12 @@ std::vector<ExecutionEvent> SICXE::load_file(std::string& content) {
         }
 
         m_memoryAccessor.write(0, buff);
+        m_registerAccessor.write("PC", Word(0).to_bytes());
     } else {
-        m_memoryAccessor.write(0, m_assembler.assemble(content));
+        const CodeMemory image = m_assembler.assemble(content);
+        const auto entry_point = m_assembler.lastInfo().entryPoint;
+        m_memoryAccessor.write(0, image);
+        m_registerAccessor.write("PC", Word(static_cast<std::uint32_t>(entry_point)).to_bytes());
     }
     m_halted = false;
     return consume_events();
