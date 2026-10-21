@@ -1,7 +1,15 @@
 "use client";
 
 import Editor, { type OnMount } from "@monaco-editor/react";
+import { useEffect, useState } from "react";
+import type { editor } from "monaco-editor";
 import { File, X } from "lucide-react";
+
+import type {
+    AssemblerLanguageClient,
+} from "@/lib/language/LanguageClient";
+import { toMonacoMarker } from "@/lib/language/monacoDiagnostics";
+import { registerSicxeLanguage } from "@/lib/language/sicxeLanguage";
 
 // ============================================================
 // Types
@@ -14,6 +22,10 @@ export type CodeEditorProps = {
     value: string;
     /** Monaco language id to use for syntax highlighting. */
     language: string;
+    /** Stable Monaco URI for the active source document. */
+    documentUri?: string;
+    /** Optional language service client for SIC/XE source files. */
+    languageClient?: AssemblerLanguageClient | null;
     /** Called with the new content on every edit. */
     onChange: (value: string) => void;
     /** Called when the user closes the tab. Omit to hide the close button. */
@@ -32,11 +44,46 @@ export function CodeEditor({
     path,
     value,
     language,
+    documentUri,
+    languageClient,
     onChange,
     onCloseTab,
     onMount,
     theme = "vs-dark",
 }: CodeEditorProps) {
+    const [editorInstance, setEditorInstance] = useState<editor.IStandaloneCodeEditor | null>(null);
+    const [monacoInstance, setMonacoInstance] = useState<Parameters<OnMount>[1] | null>(null);
+
+    useEffect(() => {
+        if (language !== "sicxe" || !documentUri || !languageClient || !editorInstance || !monacoInstance)
+            return;
+        const model = editorInstance.getModel();
+        if (!model) return;
+
+        const markerOwner = "sicxe-language-server";
+        const publish = languageClient.onDiagnostics(documentUri, (diagnostics) => {
+            if (model.isDisposed()) return;
+            monacoInstance.editor.setModelMarkers(
+                model,
+                markerOwner,
+                diagnostics.map((item) => toMonacoMarker(monacoInstance, item)),
+            );
+        });
+        const changes = model.onDidChangeContent(() => {
+            languageClient.changeDocument(documentUri, model.getValue());
+        });
+        void languageClient.openDocument(documentUri, model.getValue()).catch((error: unknown) => {
+            console.warn("Could not open source in the assembler language service:", error);
+        });
+
+        return () => {
+            publish();
+            changes.dispose();
+            void languageClient.closeDocument(documentUri);
+            monacoInstance.editor.setModelMarkers(model, markerOwner, []);
+        };
+    }, [documentUri, editorInstance, language, languageClient, monacoInstance]);
+
     return (
         <section
             className="
@@ -96,10 +143,23 @@ export function CodeEditor({
             <div className="flex-1 min-h-0">
                 <Editor
                     height="100%"
+                    path={documentUri ?? path}
                     language={language}
                     value={value}
-                    theme={theme}
-                    onMount={onMount}
+                    theme={language === "sicxe" ? "sicxe-dark" : theme}
+                    beforeMount={(monaco) => {
+                        if (language === "sicxe") registerSicxeLanguage(monaco);
+                    }}
+                    onMount={(editor, monaco) => {
+                        if (language === "sicxe") {
+                            const model = editor.getModel();
+                            if (model && model.getLanguageId() !== "sicxe")
+                                monaco.editor.setModelLanguage(model, "sicxe");
+                        }
+                        setEditorInstance(editor);
+                        setMonacoInstance(monaco);
+                        onMount?.(editor, monaco);
+                    }}
                     onChange={(next) => onChange(next ?? "")}
                     options={{
                         fontSize: 14,
@@ -116,6 +176,8 @@ export function CodeEditor({
                         lineNumbers: "on",
                         folding: true,
                         bracketPairColorization: { enabled: true },
+                        quickSuggestions: { other: true, comments: false, strings: false },
+                        suggestOnTriggerCharacters: true,
                     }}
                 />
             </div>

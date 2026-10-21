@@ -8,6 +8,22 @@ file(GLOB_RECURSE SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 
+set(ASSEMBLER_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/assembler.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/expression.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/isa.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/parser.cpp"
+)
+
+list(FILTER SOURCES EXCLUDE REGEX "/src/Assembler/.*\\.cpp$")
+
+add_library(sicxe_assembler STATIC ${ASSEMBLER_SOURCES})
+set_target_properties(sicxe_assembler PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(sicxe_assembler PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
 add_library(${LIB_NAME} SHARED
     ${SOURCES}
     ${SHARED_SOURCES}
@@ -32,6 +48,7 @@ endif()
 
 target_link_libraries(${LIB_NAME}
     PRIVATE
+        sicxe_assembler
         nlohmann_json::nlohmann_json
 )
 
@@ -47,13 +64,6 @@ if(BUILD_TESTING)
 
     list(FILTER TEST_SOURCES EXCLUDE REGEX "/demo\\.cpp$")
 
-    set(ASSEMBLER_SOURCES
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/assembler.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/expression.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/isa.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/parser.cpp"
-    )
-
     message(STATUS
         "${LIB_NAME}: found ${TEST_SOURCES}"
     )
@@ -65,11 +75,10 @@ if(BUILD_TESTING)
         # part of the architecture DLL too, but it is not exported as DLL API.
         add_executable(${TEST_TARGET}
             ${TEST_SOURCES}
-            ${ASSEMBLER_SOURCES}
         )
 
         target_link_libraries(${TEST_TARGET}
-            PRIVATE ${LIB_NAME}
+            PRIVATE ${LIB_NAME} sicxe_assembler
         )
 
         function(add_sicxe_test CASE_NAME DESCRIPTION)

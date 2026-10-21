@@ -23,8 +23,23 @@ apostrophes do not have an escape syntax.
 
 Operand count and register/expression parsing follow the instruction schema.
 For a memory operand the parser accepts an optional `#` or `@` prefix and an
-optional second field `X`; the assembler later rejects `X` with immediate or
-indirect mode. Only register `X` can be used for indexing.
+optional second field `$X`; the assembler later rejects `$X` with immediate or
+indirect mode. Register operands require the `$` prefix. In `ADD`, `SUB`,
+`MUL`, `DIV`, and `COMP`, a register as the first operand selects the matching
+format-2 register opcode (`ADDR`, `SUBR`, `MULR`, `DIVR`, or `COMPR`).
+`TIX $r` selects the `TIXR` opcode. The explicit suffixed spellings remain
+accepted as aliases.
+
+A format-3 memory instruction can optionally specify its relative mode on the
+operation token, before the whitespace-separated operand: `LDA,p TARGET`
+forces PC-relative encoding and `LDA,b TARGET` forces base-relative encoding.
+Without a selector, the assembler keeps its automatic mode selection. The
+selector is case-insensitive. Forced PC-relative targets must have a
+displacement in -2048..2047; forced base-relative targets require an active
+`BASE` and a displacement in 0..4095. The assembler reports an error when the
+requested mode cannot encode the target instead of selecting another mode.
+These selectors are not valid for SIC mode, format 4, format-2 register forms,
+or absolute immediate constants such as `LDA,p #5`.
 
 ## 2. Expressions and relocation degree
 
@@ -87,12 +102,13 @@ text.
 ### XE memory instruction encoding
 
 For format 3, an absolute immediate constant must fit in 12 bits and is encoded
-directly. Other targets are encoded in this order: PC-relative when the
-displacement from the following instruction is -2048..2047; base-relative when
-`BASE` is active and the displacement is 0..4095; otherwise direct addressing
-when the target is 0..4095. Direct encoding of a relocatable target reports a
-warning because the assembler cannot relocate that direct field. If no format-3
-form fits, assembly reports an error and suggests using `+` for format 4.
+directly. Other targets are encoded in this order unless the source forces a
+relative mode: PC-relative when the displacement from the following
+instruction is -2048..2047; base-relative when `BASE` is active and the
+displacement is 0..4095; otherwise direct addressing when the target is
+0..4095. Direct encoding of a relocatable target reports a warning because
+the assembler cannot relocate that direct field. If no format-3 form fits,
+assembly reports an error and suggests using `+` for format 4.
 
 Format 4 stores a 20-bit target and emits a relocation entry with five
 half-bytes when the expression is relocatable. Its target must be in

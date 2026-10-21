@@ -38,6 +38,7 @@ private:
     void setup_http_arch();    // deprecated legacy routes
 
     void setup_ws();
+    void setup_language_ws();
 
     Simulator& m_simulator;
     session::SessionStore m_sessions;

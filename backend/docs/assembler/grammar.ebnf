@@ -23,12 +23,14 @@ label-only-line    = identifier ;
    label-only line. Thus labels cannot occupy the operation position when the
    label spells a known instruction/directive. *)
 
-operation          = [ "+" ], ( instruction | directive ) ;
+operation          = [ "+" ], instruction, [ relative-selector ]
+                   | directive ;
+relative-selector  = ",p" | ",b" ;
 operand-text       = operand, { ",", operand } ;
-operand            = memory-operand | register | expression | data-item ;
+operand            = memory-operand | indexed-operand | register | expression | data-item ;
 
 memory-operand     = [ "#" | "@" ], expression ;
-indexed-operand    = expression, ",", "X" ;
+indexed-operand    = expression, ",", "$X" ;
 
 instruction        = format-1-instruction
                    | format-2-instruction
@@ -53,17 +55,28 @@ directive          = "START" | "END" | "BYTE" | "WORD" | "RESB" | "RESW"
 
 (* Operand arity and form depend on the selected instruction/directive:
    no-operand: FIX, RSUB, ...
-   one register: CLEAR r, TIXR r
-   two registers: ADDR r1,r2, COMPR r1,r2, ...
-   register and count: SHIFTL r,n, SHIFTR r,n
+   one register: CLEAR $r, TIX $r (TIXR $r is also accepted)
+   two registers: ADD $r1,$r2, COMP $r1,$r2, ...
+   register and count: SHIFTL $r,n, SHIFTR $r,n
    one service number: SVC n
    memory operand: the format-3/4 memory-reference instructions other than RSUB
+   Register operands and the index register must include the '$' prefix.
+   A format-3 memory instruction may end in ',p' or ',b' before its
+   whitespace-separated operand to force PC-relative or base-relative encoding.
+   The selector is optional; without one, the assembler chooses automatically.
+   These selectors are not operands and do not apply to format 4 or SIC mode.
+   For ADD, SUB, MUL, DIV, and COMP, a leading register operand selects the
+   corresponding format-2 opcode (ADDR, SUBR, MULR, DIVR, COMPR). The old
+   suffixed mnemonics remain accepted when their registers are prefixed.
 *)
 
 format-2-operands  = register
                    | register, ",", register
                    | register, ",", expression
                    | expression ;
+register-form-alias = ( "ADD" | "SUB" | "MUL" | "DIV" | "COMP" ),
+                       register, ",", register
+                     | "TIX", register ;
 
 directive-operands = "START", expression
                    | "END", [ expression ]
@@ -87,7 +100,8 @@ number             = decimal-number | hex-number ;
 decimal-number     = digit, { digit } ;
 hex-number         = ( "0x" | "0X" ), hex-digit, { hex-digit } ;
 
-register           = "A" | "X" | "L" | "B" | "S" | "T" | "F" | "PC" | "SW" ;
+register           = "$", register-name ;
+register-name      = "A" | "X" | "L" | "B" | "S" | "T" | "F" | "PC" | "SW" ;
 identifier         = identifier-start, { identifier-character } ;
 identifier-start   = letter | "_" ;
 identifier-character = letter | digit | "_" ;

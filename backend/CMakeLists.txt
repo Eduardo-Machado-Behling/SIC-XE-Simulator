@@ -124,6 +124,16 @@ foreach(LIB_DIR ${LIB_DIRS})
     endif()
 endforeach()
 
+add_library(sicxe_language_server STATIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/language/LanguageServer.cpp"
+)
+target_include_directories(sicxe_language_server PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+target_link_libraries(sicxe_language_server
+    PUBLIC sicxe_assembler nlohmann_json::nlohmann_json
+)
+
 option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
 
 # ==================================================
@@ -134,6 +144,8 @@ file(GLOB_RECURSE API_SOURCES
     CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
+
+list(FILTER API_SOURCES EXCLUDE REGEX "/src/language/LanguageServer\\.cpp$")
 
 add_executable(
     api
@@ -164,7 +176,18 @@ target_link_libraries(
     PRIVATE
         httplib::httplib
         nlohmann_json::nlohmann_json
+        sicxe_language_server
 )
+
+if(BUILD_TESTING)
+    add_executable(sicxe_language_server_tests
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/language_server_tests.cpp"
+    )
+    target_link_libraries(sicxe_language_server_tests
+        PRIVATE sicxe_language_server
+    )
+    add_test(NAME language-server.protocol-and-features COMMAND sicxe_language_server_tests)
+endif()
 
 
 set_target_properties(api PROPERTIES

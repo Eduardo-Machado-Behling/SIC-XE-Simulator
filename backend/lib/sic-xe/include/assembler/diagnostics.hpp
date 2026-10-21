@@ -13,6 +13,7 @@ struct Diagnostic {
   int line = 0;    // 1-based
   int column = 0;  // 1-based, 0 = unknown
   std::string message;
+  int length = 1;  // source span length; 1 is also the fallback for point diagnostics
 
   std::string toString() const {
     std::string s = std::to_string(line);
@@ -24,12 +25,12 @@ struct Diagnostic {
 
 class Diagnostics {
  public:
-  void error(int line, int column, std::string msg) {
-    items_.push_back({Severity::Error, line, column, std::move(msg)});
+  void error(int line, int column, std::string msg, int length = 1) {
+    items_.push_back({Severity::Error, line, column, std::move(msg), length});
     ++errors_;
   }
-  void warning(int line, int column, std::string msg) {
-    items_.push_back({Severity::Warning, line, column, std::move(msg)});
+  void warning(int line, int column, std::string msg, int length = 1) {
+    items_.push_back({Severity::Warning, line, column, std::move(msg), length});
   }
   bool hasErrors() const { return errors_ > 0; }
 

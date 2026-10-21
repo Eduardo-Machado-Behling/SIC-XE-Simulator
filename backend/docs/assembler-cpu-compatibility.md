@@ -49,9 +49,9 @@ I loaded assembled source through the running backend's WebSocket `load` / `step
 |---|---|---|
 | Arithmetic and store | `LDA #5`, `ADD #3`, `SUB #1`, `MUL #2`, `DIV #3`, `STA`, `HALT`; A reached 4 and memory received `00 00 04` | Pass |
 | Nonzero start and entry | `START 0x100`, `END ENTRY`; load initialized PC to `0x103`, and the first step executed the entry instruction there | Pass |
-| Indexed, indirect, and store | `LDX`, `LDA VALUE-1,X`, `STA RESULT`, `LDA @PTR`; both loads produced `0x010203` and the store wrote to `RESULT` | Pass |
+| Indexed, indirect, and store | `LDX`, `LDA VALUE-1,$X`, `STA RESULT`, `LDA @PTR`; both loads produced `0x010203` and the store wrote to `RESULT` | Pass |
 | Format 4 and base-relative | `+LDB #4096`, `BASE FAR`, `LDA FAR`; B became `0x1000` and A became `0xABCDEF` | Pass |
-| Format-2 register operations | `CLEAR`, `ADDR`, `RMO`, `SHIFTL`; X became 7 and S became 14 | Pass |
+| Format-2 register operations | `CLEAR $X`, `ADD $X,$A`, `RMO $A,$S`, `SHIFTL $T,1`; X became 7 and S became 14 | Pass |
 | Conditional branch | `COMP #5` followed by `JEQ`; control reached the expected label and A became 9 | Pass |
 | Subroutine control flow | `JSUB`, `LDA`, `RSUB`, `HALT`; L received the return address and RSUB restored PC | Pass |
 
@@ -69,7 +69,7 @@ The integration checks used the existing `bin/api.exe` and architecture DLLs. A 
 | Immediate addressing | Small constants, format-4 constant, 12-bit and 20-bit range rejection | Encoding and range checks pass; small and format-4 values executed |
 | PC-relative addressing | Forward and backward displacement limits, branches, data references | Encoding boundaries pass; branch and data references executed |
 | Base-relative addressing | `BASE`, a target outside PC-relative range, displacement from B | Encoding and one execution case pass |
-| Indexed addressing | `target,X`, including index addition to the resolved address | Encoding and one execution case pass |
+| Indexed addressing | `target,$X`, including index addition to the resolved address | Encoding and one execution case pass |
 | Indirect addressing | `@pointer` reads an address then loads through it | Encoding and one execution case pass |
 | Data directives | `BYTE`, `WORD`, character/hex literals, signed values, expressions | Assembler output checks pass; indirect pointer/data load was executed |
 | Control flow | `J`, conditions, `JSUB`/`RSUB`, `HALT` | Conditional branch and subroutine path pass; not every branch condition has an execution test |
@@ -106,7 +106,7 @@ These are follow-up cases, not tests claimed as passing in this review. Each row
 | End-of-memory execution | One-byte `HALT` at `0xFFFFF`; three- and four-byte instructions at the highest valid starts | Each instruction that fits memory can be fetched and executed |
 | Assembler/runtime capability parity | One executable test per accepted mnemonic, including `SVC` and all currently unimplemented bodies | Every accepted mnemonic either executes or is rejected by assembly with a clear diagnostic |
 | SIC-mode isolation | SIC `LDA` at addresses below and above `0x0FFF`, with and without indexing | SIC bytes are rejected by SIC/XE mode or decoded by a dedicated SIC mode |
-| F-register validation | `CLEAR F`, `RMO F,A`, `COMPR F,A`, arithmetic and shifts involving F | Accepted combinations execute with 48-bit semantics; unsupported combinations fail during assembly |
+| F-register validation | `CLEAR $F`, `RMO $F,$A`, `COMP $F,$A`, arithmetic and shifts involving F | Accepted combinations execute with 48-bit semantics; unsupported combinations fail during assembly |
 
 ## Concrete incompatibilities
 
@@ -127,7 +127,7 @@ Thus a successful assembly is not a guarantee that the resulting program can run
 
 ### 3. The assembler accepts F-register combinations that CPU word helpers reject
 
-The parser maps `F` to register number 6 for format-2 operands. Several CPU implementations then call `Word::from_bytes`, which requires exactly three bytes, while F is allocated as six bytes. For example, `COMPR F,A`, `ADDR F,A`, or `SHIFTL F,1` can be assembled but fail at execution when the CPU reads F as a `Word`. Either the assembler must reject unsupported register combinations or the execution code must implement the correct register width and operation semantics.
+The parser maps `$F` to register number 6 for format-2 operands. Several CPU implementations then call `Word::from_bytes`, which requires exactly three bytes, while F is allocated as six bytes. For example, `COMP $F,$A`, `ADD $F,$A`, or `SHIFTL $F,1` can be assembled but fail at execution when the CPU reads F as a `Word`. Either the assembler must reject unsupported register combinations or the execution code must implement the correct register width and operation semantics.
 
 ### 4. The last memory byte can be assembled but not fetched
 

@@ -29,7 +29,18 @@ struct Symbol {
   std::string name;
   Value value;
   int line;
+  int column;
 };
+
+void collectReferences(const ExprPtr& expr, std::vector<SymbolReference>& out, int line) {
+  if (!expr) return;
+  if (expr->kind == ExprNode::Kind::Symbol) {
+    out.push_back({expr->name, line, expr->column, static_cast<int>(expr->name.size())});
+    return;
+  }
+  collectReferences(expr->lhs, out, line);
+  collectReferences(expr->rhs, out, line);
+}
 
 // One Engine = one assembly run. All state is local, so Assembler is reentrant.
 class Engine {
@@ -63,7 +74,24 @@ class Engine {
     r.info.length = static_cast<std::size_t>(std::max<i64>(0, highWater_ - startAddr_));
     r.info.entryPoint = static_cast<std::size_t>(entry_);
     r.info.relocations = std::move(relocs_);
-    for (const auto& [_, s] : symbols_) r.info.symbols[s.name] = s.value.value;
+    for (const auto& [_, s] : symbols_) {
+      r.info.symbols[s.name] = s.value.value;
+      r.info.symbolDefinitions.push_back(
+          {s.name, s.value.value, s.line, s.column, static_cast<int>(s.name.size())});
+    }
+    for (const Statement& st : stmts_) {
+      collectReferences(st.expr, r.info.symbolReferences, st.line);
+      for (const DataItem& item : st.items)
+        collectReferences(item.expr, r.info.symbolReferences, st.line);
+    }
+    std::stable_sort(r.info.symbolDefinitions.begin(), r.info.symbolDefinitions.end(),
+                     [](const SymbolLocation& a, const SymbolLocation& b) {
+                       return a.line == b.line ? a.column < b.column : a.line < b.line;
+                     });
+    std::stable_sort(r.info.symbolReferences.begin(), r.info.symbolReferences.end(),
+                     [](const SymbolReference& a, const SymbolReference& b) {
+                       return a.line == b.line ? a.column < b.column : a.line < b.line;
+                     });
     r.info.listing = std::move(listing_);
     return r;
   }
@@ -86,7 +114,7 @@ class Engine {
 
   void defineLabel(const Statement& st, Value v) {
     if (st.label.empty()) return;
-    auto [it, inserted] = symbols_.emplace(upper(st.label), Symbol{st.label, v, st.line});
+    auto [it, inserted] = symbols_.emplace(upper(st.label), Symbol{st.label, v, st.line, st.labelCol});
     if (!inserted)
       err(st, st.labelCol, "Duplicate symbol '" + st.label + "' (first defined on line " +
                                std::to_string(it->second.line) + ")");
@@ -138,6 +166,16 @@ class Engine {
 
   void pass1Instruction(Statement& st) {
     const InstructionDef& d = *st.inst;
+    if (st.relativeMode != RelativeMode::Automatic) {
+      if (st.extended) {
+        err(st, st.mnemonicCol, "',p' and ',b' cannot be used with format 4");
+        st.valid = false;
+      }
+      if (opt_.mode == ArchMode::Sic) {
+        err(st, st.mnemonicCol, "',p' and ',b' are not available in SIC mode");
+        st.valid = false;
+      }
+    }
     if (st.extended && !d.allowsExtended()) {
       err(st, st.mnemonicCol, st.mnemonic + " cannot use format 4");
       st.valid = false;
@@ -362,6 +400,11 @@ class Engine {
     // ---- format 3: pick b/p/direct --------------------------------------------
     unsigned b = 0, p = 0;
     i64 disp = 0;
+    if (st.relativeMode != RelativeMode::Automatic && absImmediate) {
+      err(st, st.mnemonicCol,
+          "Forced relative addressing cannot be used with an absolute immediate constant");
+      return;
+    }
     if (absImmediate) {
       if (v->value < 0 || v->value > 4095) {
         err(st, st.operandCol, "Immediate constant " + std::to_string(v->value) +
@@ -372,7 +415,28 @@ class Engine {
     } else {
       const i64 ta = v->value;
       const i64 pcDisp = ta - (st.address + 3);
-      if (pcDisp >= -2048 && pcDisp <= 2047) {
+      if (st.relativeMode == RelativeMode::PcRelative) {
+        if (pcDisp < -2048 || pcDisp > 2047) {
+          err(st, st.operandCol, "Forced PC-relative displacement " + std::to_string(pcDisp) +
+                                  " is out of range (-2048..2047)");
+          return;
+        }
+        p = 1;
+        disp = pcDisp;
+      } else if (st.relativeMode == RelativeMode::BaseRelative) {
+        if (!base_) {
+          err(st, st.mnemonicCol, "Base-relative addressing (,b) requires an active BASE directive");
+          return;
+        }
+        const i64 baseDisp = ta - *base_;
+        if (baseDisp < 0 || baseDisp > 4095) {
+          err(st, st.operandCol, "Forced base-relative displacement " + std::to_string(baseDisp) +
+                                  " is out of range (0..4095)");
+          return;
+        }
+        b = 1;
+        disp = baseDisp;
+      } else if (pcDisp >= -2048 && pcDisp <= 2047) {
         p = 1; disp = pcDisp;
       } else if (base_ && ta - *base_ >= 0 && ta - *base_ <= 4095) {
         b = 1; disp = ta - *base_;
