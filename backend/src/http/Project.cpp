@@ -36,7 +36,7 @@ void Server::setup_http_project() {
             return;
         }
 
-        json response = {{"message", "loaded project " + req.get_param_value("project")}};
+        json response = {{"message", "created project " + req.get_param_value("name")}};
         res.set_content(response.dump(), "application/json");
     });
 

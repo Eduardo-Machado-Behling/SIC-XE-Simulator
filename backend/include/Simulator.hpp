@@ -45,8 +45,12 @@ public:
     void run();
     void stop();
     EventBatch reset();
+    EventBatch clear();
 
     EventBatch step();
+
+    std::size_t event_count() const noexcept;
+    EventBatch event_batch(std::size_t from) const;
 
     // TODO:
     //  Delta unstep();

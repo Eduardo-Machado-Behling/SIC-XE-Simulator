@@ -14,6 +14,7 @@ public:
     const ArchitectureInfo& info() const noexcept override;
 
     void reset() override;
+    void clear() override;
     void step() override;
 
     std::vector<ExecutionEvent> consume_events() override;
@@ -28,4 +29,5 @@ private:
     EventQueue m_events;
     std::vector<byte_t> m_buffer;
     bool m_halted = false;
+    std::uint32_t m_programStart = 0;
 };

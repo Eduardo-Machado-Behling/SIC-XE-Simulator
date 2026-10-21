@@ -76,6 +76,9 @@ class Assembler final : public IAssembler {
   // Non-throwing, side-effect-free variant with full metadata.
   AssemblyResult assembleDetailed(std::string_view code) const;
 
+  // Discard metadata from the previously assembled source.
+  void clear() noexcept;
+
   // Metadata of the most recent assemble() call (also populated on failure).
   const AssemblyInfo& lastInfo() const { return last_; }
 

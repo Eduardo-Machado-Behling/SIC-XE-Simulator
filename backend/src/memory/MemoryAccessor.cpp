@@ -10,6 +10,12 @@
 #include "architecture/events/InstructionFetched.hpp"
 #include "architecture/events/MemoryRead.hpp"
 #include "architecture/events/MemoryWrite.hpp"
+#include "architecture/events/MemoryCleared.hpp"
+
+void MemoryAccessor::clear() {
+    m_eventManager.commit(std::make_unique<architecture::events::MemoryCleared>(
+        m_parent.snapshot()));
+}
 
 void MemoryAccessor::write(size_t address, const std::vector<byte_t>& data) {
     std::vector<byte_t> old_value;

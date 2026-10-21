@@ -27,6 +27,7 @@ public:
 	using Iterator = std::vector<byte_t>::iterator;
     void read(size_t address, Iterator begin, Iterator end) const;
     void clear();
+    std::vector<byte_t> snapshot() const;
 
     MemoryAccessor getAccessor(architecture::events::EventManager& eventManager);
 

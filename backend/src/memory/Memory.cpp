@@ -12,6 +12,10 @@ void Memory::clear() {
     std::fill(m_memory.begin(), m_memory.end(), 0);
 }
 
+std::vector<byte_t> Memory::snapshot() const {
+    return m_memory;
+}
+
 void Memory::resize(size_t size) {
     m_memory.resize(size);
 }

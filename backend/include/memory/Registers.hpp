@@ -42,6 +42,7 @@ public:
 
     void allocate(std::uint8_t id, const char* name, std::size_t width);
     void deallocate(const char* name);
+    void deallocate_all() noexcept;
 
     RegisterAccessor getAccessor(architecture::events::EventManager& eventManager);
 

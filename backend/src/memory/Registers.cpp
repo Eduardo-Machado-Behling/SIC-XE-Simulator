@@ -78,3 +78,9 @@ void Registers::deallocate(const char* name) {
         m_name_to_reg.erase(it);
     }
 }
+
+void Registers::deallocate_all() noexcept {
+    m_registers.clear();
+    m_id_to_reg.clear();
+    m_name_to_reg.clear();
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+    Eraser,
     Play,
     RotateCcw,
     Search,
@@ -19,6 +20,7 @@ export type TopBarProps = {
     onStop: () => void;
     onStep: () => void;
     onReset: () => void;
+    onClear: () => void;
     onOpenCommandPalette: () => void;
 };
 
@@ -33,6 +35,7 @@ export function TopBar({
     onStop,
     onStep,
     onReset,
+    onClear,
     onOpenCommandPalette,
 }: TopBarProps) {
     return (
@@ -109,6 +112,15 @@ export function TopBar({
             >
                 <RotateCcw size={14} />
                 Reset
+            </button>
+
+            <button
+                onClick={onClear}
+                title="Clear memory, assembly data, and registers"
+                className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs text-zinc-400 transition hover:bg-red-950/40 hover:text-red-200"
+            >
+                <Eraser size={14} />
+                Clear
             </button>
 
             <div className="flex-1" />

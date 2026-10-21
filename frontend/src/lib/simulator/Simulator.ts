@@ -26,6 +26,9 @@ export class Simulator {
     public async reset(): Promise<ExecutionEvent[]> {
         return this.transport!.reset();
     }
+    public async clear(): Promise<ExecutionEvent[]> {
+        return this.transport!.clear();
+    }
 
     resolve(
         steps: ExecutionEvent[],
@@ -36,6 +39,10 @@ export class Simulator {
             const next = new Map(memory);
 
             for (const step of steps) {
+                if (step.type === "MemoryCleared") {
+                    next.clear();
+                    continue;
+                }
                 if (step.type !== "MemoryWrite")
                     continue;
 
@@ -76,6 +83,10 @@ export class Simulator {
 
     public async projects(): Promise<Project[]> {
         return this.transport!.projects();
+    }
+
+    public async architectures(): Promise<string[]> {
+        return this.transport!.architectures();
     }
 
     public async createProject(newProject: Project): Promise<unknown> {

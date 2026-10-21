@@ -1,4 +1,9 @@
-import { LoadProjectResponse, SimulatorTransport } from "@/lib/transport/SimulatorTransport";
+import {
+    LoadProjectResponse,
+    SimulatorCommandError,
+    SimulatorProblem,
+    SimulatorTransport,
+} from "@/lib/transport/SimulatorTransport";
 import { Project } from "@/lib/simulator/Project";
 import { ExecutionEvent, normalizeExecutionEvents } from "@/lib/simulator/ExecutionEvent";
 
@@ -11,7 +16,7 @@ type Request = {
 type Response<T = unknown> = {
     id: string;
     result?: T;
-    error?: string;
+    error?: string | (SimulatorProblem & { events?: unknown });
 };
 
 type EventBatchResponse = {
@@ -152,11 +157,22 @@ export class WebTransport implements SimulatorTransport {
 
         this.pending.delete(response.id);
 
-        if (response.error) {
-            pending.reject(
-                new Error(response.error),
-            );
+        if (typeof response.error === "string") {
+            pending.reject(new Error(response.error));
+            return;
+        }
 
+        if (response.error) {
+            const { events: rawEvents, ...problem } = response.error;
+            let events: ExecutionEvent[] | null = null;
+            if (Array.isArray(rawEvents)) {
+                try {
+                    events = normalizeExecutionEvents(rawEvents);
+                } catch (error) {
+                    console.error("Invalid events attached to simulator error:", error);
+                }
+            }
+            pending.reject(new SimulatorCommandError(problem, events));
             return;
         }
 
@@ -239,12 +255,21 @@ export class WebTransport implements SimulatorTransport {
         return this.request<Project[]>("/projects");
     }
 
+    async architectures(): Promise<string[]> {
+        const response = await this.request<{ archs: string[] }>("/simulator/archs");
+        return response.archs;
+    }
+
     async createProject(
         newProject: Project,
     ): Promise<unknown> {
-        return this.request("/project", {
+        const query = new URLSearchParams({
+            id: newProject.id,
+            name: newProject.name,
+            arch: newProject.architecture,
+        });
+        return this.request(`/project?${query.toString()}`, {
             method: "PUT",
-            body: JSON.stringify(newProject),
         });
     }
 
@@ -254,6 +279,10 @@ export class WebTransport implements SimulatorTransport {
 
     async reset(): Promise<ExecutionEvent[]> {
         return this.normalizeEventBatch(await this.send<unknown>("reset"));
+    }
+
+    async clear(): Promise<ExecutionEvent[]> {
+        return this.normalizeEventBatch(await this.send<unknown>("clear"));
     }
 
     async loadProject(

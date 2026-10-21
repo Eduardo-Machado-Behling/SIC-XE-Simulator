@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
-import { Play, RotateCcw, Square, StepForward } from "lucide-react";
+import { Eraser, Play, RotateCcw, Square, StepForward } from "lucide-react";
 
 import { FileExplorer, type FileNode } from "@/components/FileExplorer";
 import { CodeEditor } from "@/components/CodeEditor";
@@ -11,8 +11,10 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { TopBar } from "@/components/TopBar";
 import { StatusBar } from "@/components/StatusBar";
 import { ExecutionView } from "@/components/ExecutionView";
+import { ErrorModal } from "@/components/ErrorModal";
 
 import { Simulator } from "@/lib/simulator/Simulator";
+import { SimulatorCommandError } from "@/lib/transport/SimulatorTransport";
 import { Project } from "@/lib/simulator/Project";
 import { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
 import { RegisterState } from "./RegisterTable";
@@ -93,11 +95,15 @@ export default function EditorPage({ projectId }: PageProps) {
 
     const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
     const [isRunning, setIsRunning] = useState(false);
+    const [actionError, setActionError] = useState<{ title: string; detail: string } | null>(null);
 
     const consoleHandleRef = useRef<ConsoleHandle | null>(null);
 
     const applyExecutionEvents = useCallback((events: ExecutionEvent[], animateInstruction = true) => {
         simulator.resolve(events, setMemory, setRegisters);
+        if (events.some((event) => event.type === "ProgramAssembled" || event.type === "ProgramCleared")) {
+            setSymbols(symbolsFromEvents(events));
+        }
         setChangedRegisters([...new Set(events
             .filter((event) => event.type === "RegisterWrite")
             .map((event) => event.name))]);
@@ -151,6 +157,21 @@ export default function EditorPage({ projectId }: PageProps) {
         }, 720);
     }, [simulator]);
 
+    const reportCommandError = useCallback((reason: unknown) => {
+        if (reason instanceof SimulatorCommandError) {
+            if (reason.events?.length) applyExecutionEvents(reason.events, false);
+            setActionError({
+                title: reason.problem.title,
+                detail: reason.problem.detail || reason.message,
+            });
+            return;
+        }
+        setActionError({
+            title: "Simulator request failed",
+            detail: reason instanceof Error ? reason.message : "The simulator could not complete the request.",
+        });
+    }, [applyExecutionEvents]);
+
     useEffect(() => () => {
         if (changeTimerRef.current) clearTimeout(changeTimerRef.current);
         if (instructionTimerRef.current) clearTimeout(instructionTimerRef.current);
@@ -174,6 +195,8 @@ export default function EditorPage({ projectId }: PageProps) {
 
                 setProject(data.project);
                 setFiles(data.project.files);
+                setMemory(new Map());
+                setPc(0);
                 setSymbols(null);
 
                 const firstPath =
@@ -262,34 +285,52 @@ export default function EditorPage({ projectId }: PageProps) {
 
             setIsRunning(true);
         } catch (error) {
-            // The previous program's symbols no longer describe the source.
-            setSymbols(null);
+            setIsRunning(false);
+            reportCommandError(error);
             console.error("Run failed:", error);
         }
-    }, [activeFile, activeContent, applyExecutionEvents, simulator]);
+    }, [activeFile, activeContent, applyExecutionEvents, reportCommandError, simulator]);
 
     const stop = useCallback(() => {
         setIsRunning(false);
     }, []);
 
-    const step = useCallback(() => {
+    const step = useCallback(async () => {
         consoleHandleRef.current?.write("Executing one instruction...\r\n");
-        simulator.step().then((steps) => {
-            applyExecutionEvents(steps)
+        try {
+            const steps = await simulator.step();
+            applyExecutionEvents(steps);
             consoleHandleRef.current?.write(JSON.stringify(steps));
-        })
+        } catch (error) {
+            reportCommandError(error);
+        }
+    }, [applyExecutionEvents, reportCommandError, simulator]);
 
-    }, [applyExecutionEvents, simulator]);
-
-    const reset = useCallback(() => {
+    const reset = useCallback(async () => {
         setIsRunning(false);
         if (instructionTimerRef.current) clearTimeout(instructionTimerRef.current);
         setConsumedMemory([]);
         consoleHandleRef.current?.clear();
-        simulator.reset().then((steps) => {
-            applyExecutionEvents(steps, false)
-        })
-    }, [applyExecutionEvents, simulator]);
+        try {
+            const steps = await simulator.reset();
+            applyExecutionEvents(steps, false);
+        } catch (error) {
+            reportCommandError(error);
+        }
+    }, [applyExecutionEvents, reportCommandError, simulator]);
+
+    const clearMachine = useCallback(async () => {
+        setIsRunning(false);
+        if (instructionTimerRef.current) clearTimeout(instructionTimerRef.current);
+        setConsumedMemory([]);
+        try {
+            const events = await simulator.clear();
+            applyExecutionEvents(events, false);
+            setSymbols(null);
+        } catch (error) {
+            reportCommandError(error);
+        }
+    }, [applyExecutionEvents, reportCommandError, simulator]);
 
     // --------------------------------------------------------
     // Console command handling
@@ -305,6 +346,7 @@ export default function EditorPage({ projectId }: PageProps) {
                         "  run      Run the program\r\n" +
                         "  step     Execute one instruction\r\n" +
                         "  reset    Reset the simulator\r\n" +
+                        "  clear machine  Clear memory and registers\r\n" +
                         "  clear    Clear the terminal\r\n",
                     );
                     break;
@@ -325,12 +367,16 @@ export default function EditorPage({ projectId }: PageProps) {
                     reset();
                     break;
 
+                case "clear machine":
+                    clearMachine();
+                    break;
+
                 default:
                     handle.write(`Unknown command: ${command}\r\n`);
                     break;
             }
         },
-        [run, step, reset],
+        [run, step, reset, clearMachine],
     );
 
     // --------------------------------------------------------
@@ -382,19 +428,12 @@ export default function EditorPage({ projectId }: PageProps) {
 
     if (error || !project) {
         return (
-            <div
-                className="
-                    h-screen
-                    w-screen
-                    bg-zinc-950
-                    text-red-400
-                    flex
-                    items-center
-                    justify-center
-                    text-sm
-                "
-            >
-                {error ?? "Project not found."}
+            <div className="flex h-screen w-screen items-center justify-center bg-zinc-950 px-6 text-sm text-zinc-400">
+                <div className="text-center">
+                    <p>{error ?? "Project not found."}</p>
+                    <a href="/" className="mt-3 inline-block text-blue-300 hover:text-blue-200">Back to projects</a>
+                </div>
+                {error && <ErrorModal title="Could not open project" detail={error} onClose={() => setError(null)} />}
             </div>
         );
     }
@@ -418,6 +457,7 @@ export default function EditorPage({ projectId }: PageProps) {
                 onStop={stop}
                 onStep={step}
                 onReset={reset}
+                onClear={clearMachine}
                 onOpenCommandPalette={() => setCommandPaletteOpen(true)}
             />
 
@@ -507,9 +547,16 @@ export default function EditorPage({ projectId }: PageProps) {
                         icon: RotateCcw,
                         onSelect: reset,
                     },
+                    {
+                        id: "clear",
+                        label: "Clear Memory and Registers",
+                        icon: Eraser,
+                        onSelect: clearMachine,
+                    },
                     { id: "stop", label: "Stop Program", icon: Square, onSelect: stop },
                 ]}
             />
+            {actionError && <ErrorModal title={actionError.title} detail={actionError.detail} onClose={() => setActionError(null)} />}
         </div>
     );
 }

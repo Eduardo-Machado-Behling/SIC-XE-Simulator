@@ -26,6 +26,9 @@ public:
 
     virtual void reset() = 0;
 
+    // Clears loaded memory/program metadata and resets the architecture state.
+    virtual void clear() = 0;
+
     virtual void step() = 0;
 
     virtual std::vector<ExecutionEvent> consume_events() = 0;

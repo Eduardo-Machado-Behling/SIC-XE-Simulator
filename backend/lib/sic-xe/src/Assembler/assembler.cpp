@@ -427,6 +427,10 @@ AssemblyResult Assembler::assembleDetailed(std::string_view code) const {
   return Engine(options_, code).run();
 }
 
+void Assembler::clear() noexcept {
+  last_ = {};
+}
+
 CodeMemory Assembler::assemble(std::string code) {
   AssemblyResult r = assembleDetailed(code);
   const bool ok = r.ok();  // must be evaluated before r.info is moved from

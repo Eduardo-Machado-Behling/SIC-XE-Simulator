@@ -15,6 +15,7 @@ struct MemoryAccessor : public LinkQueue {
 
     void write(size_t address, const std::vector<byte_t>& data);
     void write(size_t address, const CodeMemory& data);
+    void clear();
     void read(size_t address, size_t size, std::vector<byte_t>& buffer);
     void read(size_t address, Iterator begin, Iterator end);
     void fetch(size_t address, size_t size, std::vector<byte_t>& buffer);

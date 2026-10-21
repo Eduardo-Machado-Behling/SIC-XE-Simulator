@@ -1,0 +1,103 @@
+(* SIC/XE assembler source grammar — descriptive, not parser-generator input.
+   The parser is handwritten and uses the disambiguation rules below. *)
+
+source             = { line } ;
+line               = blank-line | dot-comment | statement-line ;
+blank-line         = { whitespace } [ semicolon-comment ] ;
+dot-comment        = ".", { any-character } ;
+statement-line     = statement, [ whitespace ], [ semicolon-comment ] ;
+
+(* A dot-comment is recognized only when '.' is the first character of the
+   source line. A semicolon starts a comment outside a single-quoted literal. *)
+
+statement          = operation-line | labeled-line | label-only-line ;
+operation-line     = operation, [ whitespace, operand-text ] ;
+labeled-line       = identifier, whitespace, operation,
+                     [ whitespace, operand-text ] ;
+label-only-line    = identifier ;
+
+(* First-field disambiguation: the parser treats the first whitespace-delimited
+   field as an operation if it names a known instruction or directive,
+   optionally prefixed with '+'. Otherwise it treats that field as a label and
+   reads the next field as the operation. A lone unrecognized field is a
+   label-only line. Thus labels cannot occupy the operation position when the
+   label spells a known instruction/directive. *)
+
+operation          = [ "+" ], ( instruction | directive ) ;
+operand-text       = operand, { ",", operand } ;
+operand            = memory-operand | register | expression | data-item ;
+
+memory-operand     = [ "#" | "@" ], expression ;
+indexed-operand    = expression, ",", "X" ;
+
+instruction        = format-1-instruction
+                   | format-2-instruction
+                   | format-3/4-instruction ;
+
+format-1-instruction = "FIX" | "FLOAT" | "HALT" | "HIO" | "NORM"
+                     | "SIO" | "TIO" ;
+format-2-instruction = "ADDR" | "CLEAR" | "COMPR" | "DIVR" | "MULR"
+                     | "RMO" | "SHIFTL" | "SHIFTR" | "SUBR" | "SVC"
+                     | "TIXR" ;
+format-3/4-instruction = "ADD" | "ADDF" | "AND" | "COMP" | "COMPF"
+                       | "DIV" | "DIVF" | "J" | "JEQ" | "JGT" | "JLT"
+                       | "JSUB" | "LDA" | "LDB" | "LDCH" | "LDF" | "LDL"
+                       | "LDS" | "LDT" | "LDX" | "LPS" | "MUL" | "MULF"
+                       | "OR" | "RD" | "RSUB" | "SSK" | "STA" | "STB"
+                       | "STCH" | "STF" | "STI" | "STL" | "STS" | "STSW"
+                       | "STT" | "STX" | "SUB" | "SUBF" | "TD" | "TIX"
+                       | "WD" ;
+
+directive          = "START" | "END" | "BYTE" | "WORD" | "RESB" | "RESW"
+                   | "BASE" | "NOBASE" | "EQU" | "ORG" ;
+
+(* Operand arity and form depend on the selected instruction/directive:
+   no-operand: FIX, RSUB, ...
+   one register: CLEAR r, TIXR r
+   two registers: ADDR r1,r2, COMPR r1,r2, ...
+   register and count: SHIFTL r,n, SHIFTR r,n
+   one service number: SVC n
+   memory operand: the format-3/4 memory-reference instructions other than RSUB
+*)
+
+format-2-operands  = register
+                   | register, ",", register
+                   | register, ",", expression
+                   | expression ;
+
+directive-operands = "START", expression
+                   | "END", [ expression ]
+                   | "BYTE", data-item, { ",", data-item }
+                   | "WORD", expression, { ",", expression }
+                   | ( "RESB" | "RESW" | "BASE" | "EQU" ), expression
+                   | "NOBASE"
+                   | "ORG", [ expression ] ;
+
+data-item          = expression | character-literal | hexadecimal-literal ;
+character-literal  = ( "C" | "c" ), "'", character, { character }, "'" ;
+hexadecimal-literal = ( "X" | "x" ), "'", hex-digit, hex-digit,
+                       { hex-digit, hex-digit }, "'" ;
+
+expression         = sum ;
+sum                = product, { ( "+" | "-" ), product } ;
+product            = unary, { ( "*" | "/" ), unary } ;
+unary              = [ "+" | "-" ], unary | primary ;
+primary            = number | identifier | "*" | "(", expression, ")" ;
+number             = decimal-number | hex-number ;
+decimal-number     = digit, { digit } ;
+hex-number         = ( "0x" | "0X" ), hex-digit, { hex-digit } ;
+
+register           = "A" | "X" | "L" | "B" | "S" | "T" | "F" | "PC" | "SW" ;
+identifier         = identifier-start, { identifier-character } ;
+identifier-start   = letter | "_" ;
+identifier-character = letter | digit | "_" ;
+
+whitespace         = ? one or more characters accepted by C++ isspace ? ;
+letter             = ? one character accepted by C++ isalpha ? ;
+digit              = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+hex-digit          = digit | "A" | "B" | "C" | "D" | "E" | "F"
+                         | "a" | "b" | "c" | "d" | "e" | "f" ;
+character          = ? any source character except the literal's terminating
+                       apostrophe; apostrophe escaping is not implemented ? ;
+any-character      = ? any source character ? ;
+semicolon-comment  = ";", { any-character } ;

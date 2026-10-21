@@ -13,6 +13,7 @@
 #include "architecture/ExecutionEvent.hpp"
 #include "architecture/RegisterDescription.hpp"
 #include "architecture/events/ProgramAssembled.hpp"
+#include "architecture/events/ProgramCleared.hpp"
 #include "common/Byte.hpp"
 #include "essentials/Word.hpp"
 
@@ -63,15 +64,29 @@ const ArchitectureInfo& SICXE::info() const noexcept {
 
 void SICXE::reset() {
     m_halted = false;
-    const auto entry_point = m_assembler.lastInfo().entryPoint;
 
     for (auto& r : m_info.registers) {
         if (r.name == "PC")
             m_registerAccessor.write("PC",
-                                     Word(static_cast<std::uint32_t>(entry_point)).to_bytes());
+                                     Word(m_programStart).to_bytes());
         else
             m_registerAccessor.clear(r.name);
     }
+}
+
+void SICXE::clear() {
+    m_memoryAccessor.clear();
+    m_assembler.clear();
+    m_halted = false;
+
+    for (auto& r : m_info.registers) {
+        if (r.name == "PC")
+            m_registerAccessor.write("PC", Word(m_programStart).to_bytes());
+        else
+            m_registerAccessor.clear(r.name);
+    }
+
+    m_instructionExecutor.execute(std::make_unique<architecture::events::ProgramCleared>());
 }
 
 void SICXE::step() {
@@ -93,6 +108,12 @@ void SICXE::step() {
 }
 
 std::vector<ExecutionEvent> SICXE::load_file(std::string& content) {
+    // Loading establishes a fresh memory/register/assembler state. These
+    // mutations are recorded before parsing so a failed load still reports
+    // the cleared state to the client through the websocket error response.
+    m_programStart = 0;
+    clear();
+
     if (!content.empty() && content[0] == ';') {
         static const std::regex hex_run(R"(([0-9a-fA-F]{2})+)");
 
@@ -116,10 +137,17 @@ std::vector<ExecutionEvent> SICXE::load_file(std::string& content) {
         m_memoryAccessor.write(0, buff);
         m_registerAccessor.write("PC", Word(0).to_bytes());
     } else {
-        const CodeMemory image = m_assembler.assemble(content);
+        CodeMemory image;
+        try {
+            image = m_assembler.assemble(content);
+        } catch (...) {
+            m_assembler.clear();
+            throw;
+        }
         const auto entry_point = m_assembler.lastInfo().entryPoint;
+        m_programStart = static_cast<std::uint32_t>(entry_point);
         m_memoryAccessor.write(0, image);
-        m_registerAccessor.write("PC", Word(static_cast<std::uint32_t>(entry_point)).to_bytes());
+        m_registerAccessor.write("PC", Word(m_programStart).to_bytes());
 
         // Report the symbol table to the editor's Assembler tab.
         nlohmann::json symbols = nlohmann::json::array();

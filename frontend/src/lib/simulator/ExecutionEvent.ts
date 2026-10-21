@@ -6,6 +6,8 @@ export type ExecutionEvent =
     | RegisterReadEvent
     | MemoryReadEvent
     | MemoryWriteEvent
+    | MemoryClearedEvent
+    | ProgramClearedEvent
     | ProgramAssembledEvent;
 
 export type InstructionFormat =
@@ -134,6 +136,14 @@ export interface ProgramAssembledEvent {
     };
 }
 
+export interface MemoryClearedEvent {
+    type: "MemoryCleared";
+}
+
+export interface ProgramClearedEvent {
+    type: "ProgramCleared";
+}
+
 function byteArray(value: unknown, field: string): number[] {
     if (!Array.isArray(value) || value.some((byte) =>
         typeof byte !== "number" || !Number.isInteger(byte) || byte < 0 || byte > 255
@@ -245,6 +255,10 @@ export function normalizeExecutionEvent(raw: unknown): ExecutionEvent {
                 details: { symbols: symbolArray(details.symbols) },
             };
         }
+        case "MemoryCleared":
+            return { type: "MemoryCleared" };
+        case "ProgramCleared":
+            return { type: "ProgramCleared" };
         default:
             throw new TypeError(`Unknown execution event type '${String(event.type)}'`);
     }
@@ -260,6 +274,8 @@ export function normalizeExecutionEvents(raw: unknown): ExecutionEvent[] {
 // The symbol table of the last assembly in a batch of events, or null when the
 // batch assembled nothing (for example, a hex dump was loaded).
 export function symbolsFromEvents(events: ExecutionEvent[]): AssemblySymbol[] | null {
-    const assembled = events.findLast((event) => event.type === "ProgramAssembled");
+    const assembled = events.findLast((event) =>
+        event.type === "ProgramAssembled" || event.type === "ProgramCleared",
+    );
     return assembled?.type === "ProgramAssembled" ? assembled.details.symbols : null;
 }
