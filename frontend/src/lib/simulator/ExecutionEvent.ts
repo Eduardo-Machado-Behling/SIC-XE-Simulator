@@ -124,9 +124,8 @@ export interface AssemblySymbol {
     value: number;
 }
 
-// Proposed contract (#44), not emitted by the backend yet: to be sent when it
-// assembles a source file, as
-// {"type":"ProgramAssembled","details":{"symbols":[{"name":string,"value":integer}]}}.
+// Emitted by SICXE::load_file when it assembles a source file (not for hex
+// dumps), as {"type":"ProgramAssembled","details":{"symbols":[{"name":string,"value":integer}]}}.
 // Extra detail fields are ignored.
 export interface ProgramAssembledEvent {
     type: "ProgramAssembled";
