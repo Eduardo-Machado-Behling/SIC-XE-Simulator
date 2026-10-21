@@ -92,6 +92,8 @@ export function Tabs({ tabs, label, defaultTabId, selectedId: controlledId, onSe
                     border-zinc-800
                     bg-zinc-900
                     px-2
+                    overflow-x-auto
+                    overflow-y-hidden
                 "
             >
                 {tabs.map((tab) => {
@@ -112,6 +114,8 @@ export function Tabs({ tabs, label, defaultTabId, selectedId: controlledId, onSe
                             tabIndex={selected ? 0 : -1}
                             onClick={() => select(tab.id, false)}
                             className={`
+                                shrink-0
+                                whitespace-nowrap
                                 -mb-px
                                 border-b-2
                                 px-3

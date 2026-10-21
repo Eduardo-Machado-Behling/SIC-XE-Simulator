@@ -45,7 +45,7 @@ describe("AssemblyView", () => {
 
         const tabs = within(screen.getByRole("tablist", { name: "Assembly" })).getAllByRole("tab");
         expect(tabs.map((tab) => tab.textContent))
-            .toEqual(["Listing", "Symbols", "Relocation", "Object program", "Warnings (1)"]);
+            .toEqual(["Listing", "Symbols", "Relocation", "Object", "Warnings (1)"]);
         expect(within(screen.getByRole("tabpanel")).getByRole("table", { name: "Listing" })).toBeTruthy();
 
         await user.click(screen.getByRole("tab", { name: "Symbols" }));
@@ -54,7 +54,7 @@ describe("AssemblyView", () => {
         await user.click(screen.getByRole("tab", { name: "Relocation" }));
         expect(within(screen.getByRole("tabpanel")).getByText("M00100705")).toBeTruthy();
 
-        await user.click(screen.getByRole("tab", { name: "Object program" }));
+        await user.click(screen.getByRole("tab", { name: "Object" }));
         expect(within(screen.getByRole("tabpanel")).getByRole("list", { name: "Object program" })).toBeTruthy();
 
         await user.click(screen.getByRole("tab", { name: "Warnings (1)" }));

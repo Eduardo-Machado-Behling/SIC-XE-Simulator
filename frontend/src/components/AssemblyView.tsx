@@ -65,7 +65,7 @@ export function AssemblyView({ assembly, pc }: AssemblyViewProps) {
         { id: "listing", label: "Listing", content: <ListingTable listing={assembly.listing} pc={pc} /> },
         { id: "symbols", label: "Symbols", content: <SymbolTable symbols={assembly.symbols} /> },
         { id: "relocation", label: "Relocation", content: <RelocationTable relocations={assembly.relocations} /> },
-        { id: "object", label: "Object program", content: <ObjectProgramView report={assembly} /> },
+        { id: "object", label: "Object", content: <ObjectProgramView report={assembly} /> },
         {
             id: "warnings",
             label: warnings > 0 ? `Warnings (${warnings})` : "Warnings",
