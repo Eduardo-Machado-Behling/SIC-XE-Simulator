@@ -96,8 +96,9 @@ memory instructions occupy three bytes.
 The second walk evaluates forward references and emits instruction and data
 bytes into `CodeMemory` at absolute addresses. Reserved space is not filled
 with zero bytes. If two emitted regions overlap, an error is reported. The
-listing includes each statement's address, up to six object bytes, and source
-text.
+text listing includes each statement's address, up to six object bytes, and
+source text; the structured listing (`AssemblyInfo::lines`, below) keeps every
+object byte.
 
 ### XE memory instruction encoding
 
@@ -122,8 +123,19 @@ SIC mode does not use XE `n/i`, `b/p/e` fields.
 `Assembler::assembleDetailed(source)` returns an `AssemblyResult`, including a
 `CodeMemory` image and `AssemblyInfo`. The metadata contains diagnostics,
 program name, start address, assembled length, entry point, relocation entries,
-symbols, and listing. The detailed result can contain partial output when
-errors occur; inspect `AssemblyResult::ok()` before loading it.
+symbols, the text listing, and the structured listing. The detailed result can
+contain partial output when errors occur; inspect `AssemblyResult::ok()` before
+loading it.
+
+`AssemblyInfo::lines` is the listing as data, one `ListingLine` per statement
+in the columns of Beck's Fig. 2.6: the 1-based source `line`, the pass-1
+`address` (empty for `END`, `BASE`, `NOBASE`, and every statement after `END`,
+which takes no location), the pass-2 object `bytes` in full, and the `source`
+line as written. Blank and comment-only lines are not statements and are not
+listed. Relocation entries hold the absolute address of the field's first
+half-byte and its length in half-bytes. The simulator sends all of this to the
+editor in the `ProgramAssembled` event (see
+[`../websocket-protocol.md`](../websocket-protocol.md)).
 
 `Assembler::assemble(source)` returns the memory image when there are no
 errors. Otherwise it throws `AssemblyError`, which retains the diagnostics.
