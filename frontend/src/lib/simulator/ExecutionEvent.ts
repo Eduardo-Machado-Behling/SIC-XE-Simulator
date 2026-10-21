@@ -126,14 +126,56 @@ export interface AssemblySymbol {
     value: number;
 }
 
+// A warning or error of the assembler, at a 1-based line and column (0 when
+// the column is unknown).
+export interface AssemblyDiagnostic {
+    severity: "error" | "warning";
+    line: number;
+    column: number;
+    message: string;
+}
+
+export interface AssembledProgram {
+    name: string;
+    start: number;
+    length: number;
+    entry: number;
+}
+
+// One statement as Beck's Fig. 2.6 lists it: its pass-1 location (null for
+// statements that take none, such as END and BASE) and its pass-2 object code.
+export interface AssemblyListingLine {
+    line: number;
+    address: number | null;
+    bytes: number[];
+    source: string;
+}
+
+// A modification record: `halfBytes` hex digits from the high nibble of
+// `address` hold an address the loader must relocate.
+export interface AssemblyRelocation {
+    address: number;
+    halfBytes: number;
+}
+
+// What the assembler reports about a program. Only the symbol table is always
+// there: a backend that predates the full report sends nothing else.
+export interface AssemblyReport {
+    symbols: AssemblySymbol[];
+    program?: AssembledProgram;
+    listing?: AssemblyListingLine[];
+    relocations?: AssemblyRelocation[];
+    diagnostics?: AssemblyDiagnostic[];
+}
+
 // Emitted by SICXE::load_file when it assembles a source file (not for hex
-// dumps), as {"type":"ProgramAssembled","details":{"symbols":[{"name":string,"value":integer}]}}.
+// dumps), as {"type":"ProgramAssembled","details":{"symbols":[{"name","value"}],
+// "program":{"name","start","length","entry"},"listing":[{"line","address","bytes","source"}],
+// "relocations":[{"address","halfBytes"}],"diagnostics":[warnings]}}.
 // Extra detail fields are ignored.
 export interface ProgramAssembledEvent {
     type: "ProgramAssembled";
-    details: {
-        symbols: AssemblySymbol[];
-    };
+    details: AssemblyReport;
 }
 
 export interface MemoryClearedEvent {
@@ -166,6 +208,82 @@ function symbolArray(value: unknown): AssemblySymbol[] {
     }
 
     return value.map((symbol) => ({ name: symbol.name, value: symbol.value }));
+}
+
+const isInteger = (value: unknown): value is number =>
+    typeof value === "number" && Number.isInteger(value);
+
+const isAddress = (value: unknown): value is number => isInteger(value) && value >= 0;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === "object";
+}
+
+function invalidReport(field: string): never {
+    throw new TypeError(`Invalid ${field} in ProgramAssembled event`);
+}
+
+function programOf(value: unknown): AssembledProgram {
+    if (!isRecord(value) || typeof value.name !== "string" ||
+        !isAddress(value.start) || !isAddress(value.length) || !isAddress(value.entry)) {
+        invalidReport("program");
+    }
+    return { name: value.name, start: value.start, length: value.length, entry: value.entry };
+}
+
+function listingOf(value: unknown): AssemblyListingLine[] {
+    if (!Array.isArray(value)) invalidReport("listing");
+    return value.map((line: unknown) => {
+        if (!isRecord(line) || !isInteger(line.line) || typeof line.source !== "string" ||
+            !(line.address === null || isAddress(line.address))) {
+            invalidReport("listing");
+        }
+        return {
+            line: line.line,
+            address: line.address,
+            bytes: byteArray(line.bytes, "listing.bytes"),
+            source: line.source,
+        };
+    });
+}
+
+function relocationsOf(value: unknown): AssemblyRelocation[] {
+    if (!Array.isArray(value)) invalidReport("relocations");
+    return value.map((relocation: unknown) => {
+        if (!isRecord(relocation) || !isAddress(relocation.address) || !isAddress(relocation.halfBytes)) {
+            invalidReport("relocations");
+        }
+        return { address: relocation.address, halfBytes: relocation.halfBytes };
+    });
+}
+
+function diagnosticsOf(value: unknown): AssemblyDiagnostic[] {
+    if (!Array.isArray(value)) invalidReport("diagnostics");
+    return value.map((diagnostic: unknown) => {
+        if (!isRecord(diagnostic) ||
+            (diagnostic.severity !== "error" && diagnostic.severity !== "warning") ||
+            !isInteger(diagnostic.line) || !isInteger(diagnostic.column) ||
+            typeof diagnostic.message !== "string") {
+            invalidReport("diagnostics");
+        }
+        return {
+            severity: diagnostic.severity,
+            line: diagnostic.line,
+            column: diagnostic.column,
+            message: diagnostic.message,
+        };
+    });
+}
+
+// Each optional part is validated when present and left out when absent.
+function assemblyReport(details: Record<string, unknown>): AssemblyReport {
+    return {
+        symbols: symbolArray(details.symbols),
+        ...(details.program !== undefined && { program: programOf(details.program) }),
+        ...(details.listing !== undefined && { listing: listingOf(details.listing) }),
+        ...(details.relocations !== undefined && { relocations: relocationsOf(details.relocations) }),
+        ...(details.diagnostics !== undefined && { diagnostics: diagnosticsOf(details.diagnostics) }),
+    };
 }
 
 export function bytesToNumber(bytes: number[]): number {
@@ -250,10 +368,7 @@ export function normalizeExecutionEvent(raw: unknown): ExecutionEvent {
             return event as unknown as InstructionExecutedEvent;
         case "ProgramAssembled": {
             const details = (event.details ?? {}) as Record<string, unknown>;
-            return {
-                type: "ProgramAssembled",
-                details: { symbols: symbolArray(details.symbols) },
-            };
+            return { type: "ProgramAssembled", details: assemblyReport(details) };
         }
         case "MemoryCleared":
             return { type: "MemoryCleared" };
@@ -271,11 +386,18 @@ export function normalizeExecutionEvents(raw: unknown): ExecutionEvent[] {
     return raw.map(normalizeExecutionEvent);
 }
 
-// The symbol table of the last assembly in a batch of events, or null when the
-// batch assembled nothing (for example, a hex dump was loaded).
-export function symbolsFromEvents(events: ExecutionEvent[]): AssemblySymbol[] | null {
+// The report of the last assembly in a batch of events, or null when the batch
+// assembled nothing (for example, a hex dump was loaded) or discarded the
+// assembly after it (ProgramCleared, as `clear` and every load send it).
+export function assemblyFromEvents(events: ExecutionEvent[]): AssemblyReport | null {
     const assembled = events.findLast((event) =>
         event.type === "ProgramAssembled" || event.type === "ProgramCleared",
     );
-    return assembled?.type === "ProgramAssembled" ? assembled.details.symbols : null;
+    return assembled?.type === "ProgramAssembled" ? assembled.details : null;
+}
+
+// The symbol table of the last assembly in a batch of events, or null when the
+// batch assembled nothing.
+export function symbolsFromEvents(events: ExecutionEvent[]): AssemblySymbol[] | null {
+    return assemblyFromEvents(events)?.symbols ?? null;
 }
