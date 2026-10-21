@@ -185,7 +185,7 @@ void Server::setup_ws() {
                             const EventBatch batch = m_simulator.load_file(match[1]);
 
                             response = json{{"id", j.at("id")},
-                                            {"result", batch.events}}
+                                            {"result", batch.serialize()}}
                                            .dump();
 
                             break;
@@ -194,7 +194,7 @@ void Server::setup_ws() {
                         case Command::RESET: {
                             const EventBatch batch = m_simulator.reset();
                             response = json{{"id", j.at("id")},
-                                            {"result", batch.events}}
+                                            {"result", batch.serialize()}}
                                            .dump();
 
                             break;

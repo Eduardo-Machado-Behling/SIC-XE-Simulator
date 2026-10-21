@@ -3,6 +3,10 @@
   "private": true,
   "scripts": {
     "frontend": "npm --prefix frontend install && npm --prefix frontend run dev",
-    "backend": "docker build -f backend/Dockerfilel -t cpu-simulator-backend backend && docker run --rm -p 8080:8080 cpu-simulator-backend"
+    "backend": "docker build -f backend/Dockerfile -t cpu-simulator-backend backend && docker run --rm -p 8080:8080 cpu-simulator-backend",
+    "dev": "concurrently -k -n FRONTEND,BACKEND \"npm run frontend\" \"npm run backend\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.5"
   }
 }

@@ -5,7 +5,7 @@ import { defineConfig } from "orval";
 export default defineConfig({
 	api: {
 		input: {
-			target: "./api_spec/openapi.yaml",
+			target: "../api_spec/openapi.yaml",
 		},
 
 		output: {

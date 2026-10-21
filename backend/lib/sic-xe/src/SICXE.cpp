@@ -11,8 +11,8 @@
 #include "DecodedInstruction.hpp"
 #include "InstructionSet.hpp"
 #include "architecture/ExecutionEvent.hpp"
-#include "architecture/events/ProgramAssembled.hpp"
 #include "architecture/RegisterDescription.hpp"
+#include "architecture/events/ProgramAssembled.hpp"
 #include "common/Byte.hpp"
 #include "essentials/Word.hpp"
 
@@ -37,8 +37,8 @@ const std::vector<RegisterDescription> REGISTERS = {
      "Status word; contains a variety of information, including a Condition Code (CC)",
      3}};
 
-SICXE::SICXE(MemoryAccessor memoryAccessor,
-             RegisterAccessor registerAccessor,
+SICXE::SICXE(MemoryAccessor& memoryAccessor,
+             RegisterAccessor& registerAccessor,
              architecture::events::InstructionExecutor& instructionExecutor)
     : IArchitecture(memoryAccessor, registerAccessor, instructionExecutor) {
     m_info.name = "SIC/XE";
@@ -63,8 +63,14 @@ const ArchitectureInfo& SICXE::info() const noexcept {
 
 void SICXE::reset() {
     m_halted = false;
+    const auto entry_point = m_assembler.lastInfo().entryPoint;
+
     for (auto& r : m_info.registers) {
-        m_registerAccessor.clear(r.name);
+        if (r.name == "PC")
+            m_registerAccessor.write("PC",
+                                     Word(static_cast<std::uint32_t>(entry_point)).to_bytes());
+        else
+            m_registerAccessor.clear(r.name);
     }
 }
 
@@ -83,8 +89,7 @@ void SICXE::step() {
                                          pc);
 
     instruction.execute();
-    m_halted = instruction.description != nullptr &&
-               instruction.description->mnemonic == "HALT";
+    m_halted = instruction.description != nullptr && instruction.description->mnemonic == "HALT";
 }
 
 std::vector<ExecutionEvent> SICXE::load_file(std::string& content) {
@@ -100,7 +105,7 @@ std::vector<ExecutionEvent> SICXE::load_file(std::string& content) {
         while (std::getline(stream, line)) {
             std::smatch match;
             if (!std::regex_search(line, match, hex_run))
-                continue; 
+                continue;
 
             const std::string hex = match.str();
             for (size_t i = 0; i < hex.size(); i += 2) {

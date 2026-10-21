@@ -1,7 +1,6 @@
 import { LoadProjectResponse, SimulatorTransport } from "@/lib/transport/SimulatorTransport";
 import { Project } from "@/lib/simulator/Project";
 import { ExecutionEvent, normalizeExecutionEvents } from "@/lib/simulator/ExecutionEvent";
-import { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
 
 type Request = {
     id: string;
@@ -13,6 +12,12 @@ type Response<T = unknown> = {
     id: string;
     result?: T;
     error?: string;
+};
+
+type EventBatchResponse = {
+    events: unknown;
+    from: number;
+    to: number;
 };
 
 type PendingRequest = {
@@ -28,6 +33,20 @@ export class WebTransport implements SimulatorTransport {
     private readonly wsUrl: string;
 
     private pending = new Map<string, PendingRequest>();
+
+    private normalizeEventBatch(batch: unknown): ExecutionEvent[] {
+        if (
+            !batch ||
+            typeof batch !== "object" ||
+            !Array.isArray((batch as EventBatchResponse).events) ||
+            !Number.isInteger((batch as EventBatchResponse).from) ||
+            !Number.isInteger((batch as EventBatchResponse).to)
+        ) {
+            throw new TypeError("Invalid execution event batch response");
+        }
+
+        return normalizeExecutionEvents((batch as EventBatchResponse).events);
+    }
 
     constructor(readonly baseUrl: string) {
         this.httpUrl = `http://${baseUrl}`;
@@ -234,7 +253,7 @@ export class WebTransport implements SimulatorTransport {
     }
 
     async reset(): Promise<ExecutionEvent[]> {
-        return normalizeExecutionEvents(await this.send<unknown>("reset"));
+        return this.normalizeEventBatch(await this.send<unknown>("reset"));
     }
 
     async loadProject(
@@ -246,10 +265,10 @@ export class WebTransport implements SimulatorTransport {
     }
 
     async loadFile(file: string): Promise<ExecutionEvent[]> {
-        const events = await this.send<unknown>(
+        const batch = await this.send<unknown>(
             `load %${file}`,
         );
-        return normalizeExecutionEvents(events);
+        return this.normalizeEventBatch(batch);
     }
 
     async setFile(

@@ -4,8 +4,8 @@
 
 extern "C" {
     ARCH_API IArchitecture* create_arch(
-        MemoryAccessor memoryAccessor,
-        RegisterAccessor registerAccessor,
+        MemoryAccessor& memoryAccessor,
+        RegisterAccessor& registerAccessor,
         architecture::events::InstructionExecutor& instructionExecutor) {
         return new SICXE(memoryAccessor, registerAccessor, instructionExecutor);
     }

@@ -24,7 +24,9 @@ class Simulator {
 public:
     Simulator()
         : m_architectureManager("archs")
-        , m_eventManager(m_memory, m_registers) {}
+        , m_eventManager(m_memory, m_registers)
+        , m_memoryAccessor(m_memory.getAccessor(m_eventManager))
+        , m_registerAccessor(m_registers.getAccessor(m_eventManager)) {}
 
     ProjectManager::ProjectView list_projects();
 
@@ -60,4 +62,6 @@ private:
     Memory m_memory;
     Registers m_registers;
     architecture::events::EventManager m_eventManager;
+    MemoryAccessor m_memoryAccessor;
+    RegisterAccessor m_registerAccessor;
 };

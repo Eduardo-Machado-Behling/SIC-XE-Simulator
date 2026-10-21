@@ -26,8 +26,8 @@ extern "C" {
 #endif
 
 ARCH_API IArchitecture* create_arch(
-    MemoryAccessor memoryAccessor,
-    RegisterAccessor registerAccessor,
+    MemoryAccessor& memoryAccessor,
+    RegisterAccessor& registerAccessor,
     architecture::events::InstructionExecutor& instructionExecutor);
 ARCH_API void destroy_arch(IArchitecture*);
 

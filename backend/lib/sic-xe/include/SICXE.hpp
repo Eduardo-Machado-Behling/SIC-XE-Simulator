@@ -7,8 +7,8 @@
 
 class SICXE final : public IArchitecture {
 public:
-    SICXE(MemoryAccessor memoryAccessor,
-          RegisterAccessor registerAccessor,
+    SICXE(MemoryAccessor& memoryAccessor,
+          RegisterAccessor& registerAccessor,
           architecture::events::InstructionExecutor& instructionExecutor);
 
     const ArchitectureInfo& info() const noexcept override;

@@ -110,6 +110,10 @@ export default function EditorPage({ projectId }: PageProps) {
         if (instructionTimerRef.current) clearTimeout(instructionTimerRef.current);
         setConsumedMemory([]);
 
+        const pcWrite = events.findLast((event) =>
+            event.type === "RegisterWrite" && event.name === "PC",
+        );
+
         if (animateInstruction) {
             const fetched = events.findLast((event) => event.type === "InstructionFetched");
             if (fetched?.type === "InstructionFetched") {
@@ -120,9 +124,8 @@ export default function EditorPage({ projectId }: PageProps) {
                     ? decoded.details.length
                     : fetched.bytes.length;
                 const consumed = Array.from({ length: consumedLength }, (_, index) => fetched.address + index);
-                const writtenPc = events.findLast((event) => event.type === "RegisterWrite" && event.name === "PC");
-                const nextPc = writtenPc?.type === "RegisterWrite"
-                    ? writtenPc.value
+                const nextPc = pcWrite?.type === "RegisterWrite"
+                    ? pcWrite.value
                     : fetched.address + consumedLength;
 
                 setPc(fetched.address);
@@ -132,9 +135,12 @@ export default function EditorPage({ projectId }: PageProps) {
                     setConsumedMemory([]);
                     instructionTimerRef.current = null;
                 }, 720);
+            } else if (pcWrite?.type === "RegisterWrite") {
+                // Loading/assembling a file can set the entry PC without fetching an instruction.
+                setPc(pcWrite.value);
             }
         } else {
-            setPc(0);
+            setPc(pcWrite?.type === "RegisterWrite" ? pcWrite.value : 0);
         }
 
         setChangeRevision((revision) => revision + 1);
@@ -279,7 +285,6 @@ export default function EditorPage({ projectId }: PageProps) {
         setIsRunning(false);
         if (instructionTimerRef.current) clearTimeout(instructionTimerRef.current);
         setConsumedMemory([]);
-        setPc(0);
         consoleHandleRef.current?.clear();
         simulator.reset().then((steps) => {
             applyExecutionEvents(steps, false)

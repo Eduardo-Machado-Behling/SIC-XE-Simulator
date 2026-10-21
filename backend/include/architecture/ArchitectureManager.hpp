@@ -14,8 +14,8 @@ public:
 
     const std::unordered_set<std::string>& ListAvailableArchitectures();
     void LoadArchitecture(const std::string& architectureId,
-                          MemoryAccessor memory,
-                          RegisterAccessor registerAccessor,
+                          MemoryAccessor& memory,
+                          RegisterAccessor& registerAccessor,
                           architecture::events::InstructionExecutor& instructionExecutor);
     IArchitecture* get() const;
 

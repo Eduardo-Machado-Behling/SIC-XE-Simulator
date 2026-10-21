@@ -7,8 +7,8 @@
 
 class IArchitecture;
 
-using CreateArch = IArchitecture* (*)(MemoryAccessor,
-                                      RegisterAccessor,
+using CreateArch = IArchitecture* (*)(MemoryAccessor&,
+                                      RegisterAccessor&,
                                       architecture::events::InstructionExecutor&);
 using DestroyArch = void (*)(IArchitecture*);
 

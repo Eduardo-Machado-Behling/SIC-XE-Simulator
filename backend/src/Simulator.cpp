@@ -17,8 +17,8 @@ const Project& Simulator::load_project(const std::string& project) {
     m_eventManager.clear();
 
     m_architectureManager.LoadArchitecture(m_currentProject->architecture,
-                                           m_memory.getAccessor(m_eventManager),
-                                           m_registers.getAccessor(m_eventManager),
+                                           m_memoryAccessor,
+                                           m_registerAccessor,
                                            m_eventManager);
     m_memory.resize(m_architectureManager.get()->info().memory.address_space_size);
 

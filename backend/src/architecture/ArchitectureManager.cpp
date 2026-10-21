@@ -29,8 +29,8 @@ const std::unordered_set<std::string>& ArchitectureManager::ListAvailableArchite
 
 void ArchitectureManager::LoadArchitecture(
     const std::string& architectureId,
-    MemoryAccessor memory,
-    RegisterAccessor registerAccessor,
+    MemoryAccessor& memory,
+    RegisterAccessor& registerAccessor,
     architecture::events::InstructionExecutor& instructionExecutor) {
     if (m_availableArchitectures.find(architectureId) == m_availableArchitectures.end())
         throw std::runtime_error("Architecture not found: " + architectureId);

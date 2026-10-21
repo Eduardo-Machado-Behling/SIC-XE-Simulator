@@ -1,6 +1,7 @@
 #include "memory/RegisterAccessor.hpp"
 
 #include <memory>
+#include <utility>
 
 #include "architecture/events/EventManager.hpp"
 #include "architecture/events/RegisterRead.hpp"
@@ -22,13 +23,12 @@ void RegisterAccessor::write(std::uint8_t id, const std::vector<byte_t>& value) 
 void RegisterAccessor::clear(const char* name, std::uint8_t fill) {
     const std::vector<byte_t> old_value = m_parent.read(name);
     const std::string register_name(name);
-
-    m_parent.clear(name, fill);
-    m_eventManager.commit(
-        std::make_unique<architecture::events::RegisterWrite>(register_name, m_parent.read(name), old_value));
+    std::vector<byte_t> value(old_value.size(), fill);
+    m_eventManager.commit(std::make_unique<architecture::events::RegisterWrite>(
+        register_name, std::move(value), old_value));
 }
 void RegisterAccessor::clear(std::uint8_t id, std::uint8_t fill){
-    m_parent.clear(m_parent.getName(id).c_str(), fill);
+	clear(m_parent.getName(id).c_str(), fill);
 }
 
 const std::vector<byte_t>& RegisterAccessor::read(const char* name) {

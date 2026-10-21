@@ -52,7 +52,9 @@ void Registers::clear(std::uint8_t fill) {
 }
 
 void Registers::clear(const char* name, std::uint8_t fill){
-    for (auto& [name, value] : m_registers) std::fill(value.begin(), value.end(), fill);
+    auto it = m_registers.find(name);
+    if (it == m_registers.end()) throw UnkownRegister(name);
+    std::fill(it->second.begin(), it->second.end(), fill);
 }
 
 RegisterAccessor Registers::getAccessor(architecture::events::EventManager& eventManager) {
