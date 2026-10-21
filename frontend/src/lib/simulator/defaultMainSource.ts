@@ -17,16 +17,9 @@ ENTRY   lda #5              ; mnemonics are case-insensitive; # means immediate
         +LDA #0x12345           ; leading + selects format 4 (no ,p or ,b)
         HALT                    ; stop before the data definitions below
 
-COUNT   EQU 3
-TWICE   EQU (COUNT + 1) * 2   ; expressions support parentheses and precedence
-TABLE   WORD 1, 2, TWICE      ; WORD emits 3-byte values
+TABLE   WORD 1, 2,             ; WORD emits 3-byte values
 PTR     WORD TABLE             ; a relocatable symbol can be stored as a WORD
 RESULT  RESW 1                 ; reservations occupy addresses but emit no bytes
 BUFFER  RESB 8
 TEXT    BYTE C'XE', X'F1', 255 ; character, hex, and numeric BYTE forms
-
-        ORG 0x2000             ; ORG can place a sparse segment at another address
-FAR     WORD ENTRY
-        ORG                    ; bare ORG restores the previous location
-        END ENTRY              ; END can select the program entry point
 `;
