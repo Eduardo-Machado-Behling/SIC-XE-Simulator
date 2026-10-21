@@ -124,7 +124,10 @@ export interface AssemblySymbol {
     value: number;
 }
 
-// Emitted by the backend when it assembles a source file.
+// Proposed contract (#44), not emitted by the backend yet: to be sent when it
+// assembles a source file, as
+// {"type":"ProgramAssembled","details":{"symbols":[{"name":string,"value":integer}]}}.
+// Extra detail fields are ignored.
 export interface ProgramAssembledEvent {
     type: "ProgramAssembled";
     details: {
