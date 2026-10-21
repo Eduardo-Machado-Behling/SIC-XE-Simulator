@@ -7,7 +7,8 @@ import type { AssemblySymbol } from "@/lib/simulator/ExecutionEvent";
 // ============================================================
 
 export type SymbolTableProps = {
-    // null until the assembler has produced a symbol table.
+    // null when no symbol table is available: before the first run, or after
+    // a run whose events carried none.
     symbols: AssemblySymbol[] | null;
 };
 
@@ -15,8 +16,13 @@ export type SymbolTableProps = {
 // SymbolTable
 // ============================================================
 
-function address(value: number): string {
-    return value.toString(16).toUpperCase().padStart(6, "0");
+const WORD = 0x1000000; // a SIC/XE word is 24 bits
+
+// Six hex digits, the width of a SIC/XE word. A negative EQU value is shown as
+// the 24-bit two's complement the assembler would store.
+function hexValue(value: number): string {
+    const word = value < 0 ? ((value % WORD) + WORD) % WORD : value;
+    return word.toString(16).toUpperCase().padStart(6, "0");
 }
 
 export function SymbolTable({ symbols }: SymbolTableProps) {
@@ -42,7 +48,7 @@ export function SymbolTable({ symbols }: SymbolTableProps) {
             {symbols === null || symbols.length === 0 ? (
                 <p role="status" className="px-3 text-xs text-zinc-500">
                     {symbols === null
-                        ? "Nothing assembled yet. Run an assembly program to see its symbols."
+                        ? "No symbol table available. Symbols appear here after the assembler reports them."
                         : "The assembled program defines no symbols."}
                 </p>
             ) : (
@@ -51,14 +57,14 @@ export function SymbolTable({ symbols }: SymbolTableProps) {
                         <thead className="sticky top-0 bg-zinc-900 text-left text-zinc-400">
                             <tr>
                                 <th scope="col" className="py-1 font-medium">Symbol</th>
-                                <th scope="col" className="py-1 font-medium">Address</th>
+                                <th scope="col" className="py-1 font-medium">Value</th>
                             </tr>
                         </thead>
                         <tbody className="font-mono">
                             {symbols.map((symbol) => (
                                 <tr key={symbol.name} className="border-t border-zinc-800">
                                     <td className="py-1 text-zinc-300">{symbol.name}</td>
-                                    <td className="py-1 text-zinc-400">{address(symbol.value)}</td>
+                                    <td className="py-1 text-zinc-400">{hexValue(symbol.value)}</td>
                                 </tr>
                             ))}
                         </tbody>
