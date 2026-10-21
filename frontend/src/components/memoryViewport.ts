@@ -4,8 +4,10 @@
 //
 // Positions are in "row space": 0 is the top of address 0's row and
 // rowCount * rowHeight is the bottom of the last row. The scroll container's
-// scrollTop maps onto it directly, because the column header is sticky and
-// covers the top of the container instead of pushing the rows down.
+// scrollTop maps onto it directly when the viewport is measured below the
+// column header: the sticky header takes headerHeight in flow, pushing row 0
+// down by that much, and also covers the top headerHeight of the scrollport,
+// so the two offsets cancel.
 
 /** Half-open range of row indexes, [start, end). */
 export type RowRange = { start: number; end: number };
