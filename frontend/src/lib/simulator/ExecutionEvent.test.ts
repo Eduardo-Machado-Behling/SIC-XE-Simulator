@@ -42,3 +42,22 @@ describe("symbolsFromEvents", () => {
         expect(symbolsFromEvents(events)).toBeNull();
     });
 });
+
+describe("MemoryCleared events", () => {
+    it("are accepted without a payload", () => {
+        expect(normalizeExecutionEvent({ type: "MemoryCleared" })).toEqual({ type: "MemoryCleared" });
+    });
+
+    it("drop any extra field, so no memory contents travel with them", () => {
+        expect(normalizeExecutionEvent({ type: "MemoryCleared", value: [1, 2, 3] })).toEqual({ type: "MemoryCleared" });
+    });
+
+    it("keep their place in the batch", () => {
+        const events = normalizeExecutionEvents([
+            { type: "MemoryCleared" },
+            { type: "MemoryWrite", address: 4096, value: [1, 0, 5], old_value: [0, 0, 0] },
+        ]);
+
+        expect(events.map((event) => event.type)).toEqual(["MemoryCleared", "MemoryWrite"]);
+    });
+});

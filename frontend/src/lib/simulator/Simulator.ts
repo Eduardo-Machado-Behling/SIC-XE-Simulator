@@ -26,16 +26,26 @@ export class Simulator {
     public async reset(): Promise<ExecutionEvent[]> {
         return this.transport!.reset();
     }
+    public async clearMemory(): Promise<ExecutionEvent[]> {
+        return this.transport!.clearMemory();
+    }
 
     resolve(
         steps: ExecutionEvent[],
         setMemory: Dispatch<SetStateAction<Map<number, number>>>,
         setRegisters: Dispatch<SetStateAction<RegisterState[]>>
     ) {
+        // In order: a MemoryCleared (first in every load batch) drops the
+        // bytes before it, and the MemoryWrite events after it stay.
         setMemory((memory) => {
             const next = new Map(memory);
 
             for (const step of steps) {
+                if (step.type === "MemoryCleared") {
+                    next.clear();
+                    continue;
+                }
+
                 if (step.type !== "MemoryWrite")
                     continue;
 

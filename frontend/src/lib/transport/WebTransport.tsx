@@ -237,6 +237,10 @@ export class WebTransport implements SimulatorTransport {
         return normalizeExecutionEvents(await this.send<unknown>("reset"));
     }
 
+    async clearMemory(): Promise<ExecutionEvent[]> {
+        return normalizeExecutionEvents(await this.send<unknown>("clear"));
+    }
+
     async loadProject(
         projectId: string,
     ): Promise<LoadProjectResponse> {

@@ -6,6 +6,7 @@ export type ExecutionEvent =
     | RegisterReadEvent
     | MemoryReadEvent
     | MemoryWriteEvent
+    | MemoryClearedEvent
     | ProgramAssembledEvent;
 
 export type InstructionFormat =
@@ -118,6 +119,13 @@ export interface MemoryReadEvent {
     value: number;
 }
 
+// The whole memory was zero-filled: by the Clear button ('clear') and at the
+// start of every program load. It carries no payload; registers are not
+// touched. Apply a batch in order, so later MemoryWrite events survive it.
+export interface MemoryClearedEvent {
+    type: "MemoryCleared";
+}
+
 // A label and its assembled address (or EQU value).
 export interface AssemblySymbol {
     name: string;
@@ -221,6 +229,8 @@ export function normalizeExecutionEvent(raw: unknown): ExecutionEvent {
                 value: bytesToNumber(bytes),
             };
         }
+        case "MemoryCleared":
+            return { type: "MemoryCleared" };
         case "InstructionDecoded": {
             const details = event.details as Record<string, unknown>;
             const instruction_bytes = byteArray(details.instruction_bytes, "instruction_bytes");

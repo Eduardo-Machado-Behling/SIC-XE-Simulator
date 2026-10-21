@@ -13,6 +13,8 @@ export interface SimulatorTransport {
 
     step(): Promise<ExecutionEvent[]>;
     reset(): Promise<ExecutionEvent[]>;
+    /** Zero-fills the simulator memory; registers stay. Resolves with [MemoryCleared]. */
+    clearMemory(): Promise<ExecutionEvent[]>;
 
     setFile(filePath: string, content: string): Promise<void>;
     projects(): Promise<Project[]>;
