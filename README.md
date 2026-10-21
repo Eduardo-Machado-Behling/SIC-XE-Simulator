@@ -178,11 +178,22 @@ ws://localhost:8080/ws
 
 Environment variables read by `bin/api`:
 
-| Variable         | Default   | Purpose                                             |
-| ---------------- | --------- | --------------------------------------------------- |
-| `PORT`           | `8080`    | Listening port                                      |
-| `HOST`           | `0.0.0.0` | Listening address                                   |
-| `MAX_BODY_BYTES` | `8388608` | Request body limit; larger bodies get `413`         |
+| Variable              | Default     | Purpose                                                                 |
+| --------------------- | ----------- | ----------------------------------------------------------------------- |
+| `PORT`                | `8080`      | Listening port                                                          |
+| `HOST`                | `0.0.0.0`   | Listening address                                                       |
+| `MAX_BODY_BYTES`      | `8388608`   | Request body limit; larger bodies get `413`                             |
+| `MAX_SESSION_BYTES`   | `16777216`  | Storage budget of one session; writes that would exceed it get `413`    |
+| `MAX_TOTAL_BYTES`     | `268435456` | Storage budget of all sessions; least recently used ones are evicted    |
+| `MAX_SESSIONS`        | `10000`     | Number of sessions; creating one more evicts the least recently used    |
+| `SESSION_TTL_SECONDS` | `86400`     | Idle time after which a session expires (`0` = never)                   |
+
+Session storage sizes are estimates: the stored text plus a fixed overhead
+per session (256 bytes), project (256 bytes) and file (64 bytes), so many
+empty projects or files count too. An evicted or expired session answers
+`404 session-not-found`, and clients recover as after a restart: create a new
+session and re-sync. These limits keep memory bounded on a small instance,
+since `POST /sessions` needs no authentication.
 
 ## HTTP API
 

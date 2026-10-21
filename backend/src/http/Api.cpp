@@ -64,6 +64,9 @@ httplib::Server::Handler api_route(Handler handler) {
             send_error(res, api::project_not_found());
         } catch (const session::FileNotFound&) {
             send_error(res, api::file_not_found());
+        } catch (const session::StorageLimitExceeded& e) {
+            send_error(res, api::payload_too_large("session storage limit exceeded: a session may hold at most " +
+                                                   std::to_string(e.limit) + " bytes"));
         } catch (const std::exception& e) {
             std::cerr << "[API] " << req.method << ' ' << req.path << " failed: " << e.what() << '\n';
             send_error(res, api::internal_error());
@@ -119,10 +122,7 @@ void Server::setup_errors() {
         switch (res.status) {
             case 400: error = api::invalid_request("malformed HTTP request"); break;
             case 404: error = {404, api::error_type::NotFound, "Not found", "no such route"}; break;
-            case 413:
-                error = {413, api::error_type::PayloadTooLarge, "Payload too large",
-                         "request body exceeds the server's size limit"};
-                break;
+            case 413: error = api::payload_too_large("request body exceeds the server's size limit"); break;
             case 500: error = api::internal_error(); break;
             default: error.type = "http-" + std::to_string(res.status); break;
         }

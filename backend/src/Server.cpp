@@ -26,6 +26,14 @@ void Server::set_max_body_bytes(std::size_t bytes) {
     this->set_payload_max_length(bytes);
 }
 
+void Server::set_session_limits(const session::StoreLimits& limits) {
+    m_sessions.set_limits(limits);
+}
+
+session::StoreLimits Server::session_limits() const {
+    return m_sessions.limits();
+}
+
 void Server::set_host(const std::string& host) {
     m_host = host;
 }
