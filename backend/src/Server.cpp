@@ -8,6 +8,7 @@
 
 #include "api/ApiError.hpp"
 #include "architecture/InfoSerializer.hpp"
+#include "language/LanguageServer.hpp"
 
 using json = nlohmann::json;
 
@@ -56,6 +57,7 @@ void Server::setup(int port) {
     setup_errors();
     setup_http();
     setup_ws();
+    setup_language_ws();
 
     m_port = port;
 }
@@ -252,5 +254,24 @@ void Server::setup_ws() {
             std::cout << "[SENT]: " << serialized << "\n\n\n";
         }
         std::cout << "WebSocket client disconnected :)" << std::endl;
+    });
+}
+
+void Server::setup_language_ws() {
+    this->WebSocket("/language", [](const httplib::Request&, httplib::ws::WebSocket& ws) {
+        language::AssemblerLanguageSession session;
+        std::string wireMessage;
+        while (ws.read(wireMessage)) {
+            std::vector<nlohmann::json> responses;
+            try {
+                const nlohmann::json message = nlohmann::json::parse(wireMessage);
+                responses = session.handle(message);
+            } catch (const nlohmann::json::parse_error&) {
+                responses.push_back({{"jsonrpc", "2.0"}, {"id", nullptr},
+                                     {"error", {{"code", -32700}, {"message", "Parse error"}}}});
+            }
+            for (const nlohmann::json& response : responses)
+                ws.send(response.dump());
+        }
     });
 }

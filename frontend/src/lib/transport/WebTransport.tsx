@@ -54,8 +54,11 @@ export class WebTransport implements SimulatorTransport {
     }
 
     constructor(readonly baseUrl: string) {
-        this.httpUrl = `http://${baseUrl}`;
-        this.wsUrl = `ws://${baseUrl}/ws`;
+        const normalized = baseUrl.includes("://") ? baseUrl : `http://${baseUrl}`;
+        const base = new URL(normalized);
+        this.httpUrl = `${base.protocol}//${base.host}`;
+        const socketProtocol = base.protocol === "https:" ? "wss:" : "ws:";
+        this.wsUrl = `${socketProtocol}//${base.host}/ws`;
     }
 
     async connect(): Promise<void> {

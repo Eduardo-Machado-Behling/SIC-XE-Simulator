@@ -1,6 +1,7 @@
 // Dependency-free test runner (swap for GoogleTest/Catch2 in a real project).
 // Expected bytes below were derived by hand from Beck's encoding rules.
 #include <cstdio>
+#include <algorithm>
 #include <functional>
 #include <string>
 #include <vector>
@@ -62,7 +63,7 @@ TEST(spec_example_style_program) {
       "      START 0\n"
       "      LDA   #5\n"        // 0000: 01 00 05
       "      LDA   VAL\n"       // 0003: 03 20 0A   (16 - 6)
-      "      STA   VAL,X\n"     // 0006: 0F A0 07   (16 - 9)
+      "      STA   VAL,$X\n"    // 0006: 0F A0 07   (16 - 9)
       "      +JSUB SUBRTN\n"    // 0009: 4B 10 00 13
       "      RSUB\n"            // 000D: 4F 00 00
       "VAL   WORD  42\n"        // 0010: 00 00 2A
@@ -84,7 +85,7 @@ TEST(spec_example_style_program) {
 
 TEST(formats_1_and_2) {
   CodeMemory m = Assembler().assemble(
-      " CLEAR X\n COMPR A,S\n SHIFTL A,4\n SHIFTR T,16\n SVC 3\n TIXR T\n FIX\n");
+      " CLEAR $X\n COMP $A,$S\n SHIFTL $A,4\n SHIFTR $T,16\n SVC 3\n TIX $T\n FIX\n");
   CHECK(bytesAt(m, 0, 2) == (Bytes{0xB4, 0x10}));
   CHECK(bytesAt(m, 2, 2) == (Bytes{0xA0, 0x04}));
   CHECK(bytesAt(m, 4, 2) == (Bytes{0xA4, 0x03}));
@@ -108,17 +109,17 @@ TEST(all_format1_opcodes_match_the_sicxe_instruction_table) {
 
 TEST(all_format2_operand_schemas_encode_registers_and_counts) {
   const CodeMemory image = Assembler().assemble(
-      " ADDR A,S\n"
-      " CLEAR F\n"
-      " COMPR T,PC\n"
-      " DIVR S,T\n"
-      " MULR L,F\n"
-      " RMO SW,A\n"
-      " SHIFTL A,1\n"
-      " SHIFTR F,16\n"
-      " SUBR X,B\n"
+      " ADD $A,$S\n"
+      " CLEAR $F\n"
+      " COMP $T,$PC\n"
+      " DIV $S,$T\n"
+      " MUL $L,$F\n"
+      " RMO $SW,$A\n"
+      " SHIFTL $A,1\n"
+      " SHIFTR $F,16\n"
+      " SUB $X,$B\n"
       " SVC 15\n"
-      " TIXR L\n");
+      " TIX $L\n");
 
   CHECK(bytesAt(image, 0, 22) == (Bytes{
       0x90, 0x04, 0xB4, 0x60, 0xA0, 0x58, 0x9C, 0x45,
@@ -204,7 +205,7 @@ TEST(pc_relative_boundaries) {
 }
 
 TEST(format4_and_immediate) {
-  CodeMemory m = Assembler().assemble(" +LDA #4096\n +LDA BIG,X\nBIG EQU 0x12345\n");
+  CodeMemory m = Assembler().assemble(" +LDA #4096\n +LDA BIG,$X\nBIG EQU 0x12345\n");
   CHECK(bytesAt(m, 0, 4) == (Bytes{0x01, 0x10, 0x10, 0x00}));
   CHECK(bytesAt(m, 4, 4) == (Bytes{0x03, 0x91, 0x23, 0x45}));
   CHECK(hasError(" LDA #4096\n", "12 bits"));
@@ -212,12 +213,12 @@ TEST(format4_and_immediate) {
 }
 
 TEST(indirect_and_indexed_rules) {
-  CodeMemory m = Assembler().assemble(" STCH BUF,X\n J @PTR\nBUF RESB 1\nPTR RESB 3\n");
+  CodeMemory m = Assembler().assemble(" STCH BUF,$X\n J @PTR\nBUF RESB 1\nPTR RESB 3\n");
   CHECK(bytesAt(m, 0, 3) == (Bytes{0x57, 0xA0, 0x03}));   // n=i=1, x=1, p=1, disp 6-3
   CHECK(bytesAt(m, 3, 3) == (Bytes{0x3E, 0x20, 0x01}));   // n=1 i=0, p=1, disp 1
-  CHECK(hasError(" LDA #5,X\n", "Indexed addressing is only valid"));
-  CHECK(hasError(" LDA @5,X\n", "Indexed addressing is only valid"));
-  CHECK(hasError(" LDA 5,Y\n", "Only register X"));
+  CHECK(hasError(" LDA #5,$X\n", "Indexed addressing is only valid"));
+  CHECK(hasError(" LDA @5,$X\n", "Indexed addressing is only valid"));
+  CHECK(hasError(" LDA 5,$A\n", "Only $X"));
 }
 
 TEST(data_directives_and_expressions) {
@@ -268,28 +269,28 @@ TEST(start_end_and_reservations_produce_loadable_sparse_image) {
 
 TEST(sic_mode) {
   AssemblerOptions o; o.mode = ArchMode::Sic;
-  CodeMemory m = Assembler(o).assemble(" START 0\n LDA VAL,X\n RSUB\nVAL WORD 1\n");
+  CodeMemory m = Assembler(o).assemble(" START 0\n LDA VAL,$X\n RSUB\nVAL WORD 1\n");
   CHECK(bytesAt(m, 0, 3) == (Bytes{0x00, 0x80, 0x06}));
   CHECK(bytesAt(m, 3, 3) == (Bytes{0x4C, 0x00, 0x00}));
   CHECK(hasError(" LDA #5\n", "not available in SIC mode", o));
   CHECK(hasError(" +LDA 5\n", "Format 4", o));
   CHECK(hasError(" LDB 5\n", "not available in SIC mode", o));
-  CHECK(hasError(" CLEAR X\n", "not available in SIC mode", o));
+  CHECK(hasError(" CLEAR $X\n", "not available in SIC mode", o));
 }
 
 TEST(diagnostics_reject_invalid_mnemonics_and_operands) {
   CHECK(hasError(" FIX A\n", "takes no operands"));
   CHECK(hasError("LBL FOO 1\n", "Unknown mnemonic"));
   CHECK(hasError(" LDA\n", "Missing operand"));
-  CHECK(hasError(" LDA 1,X,Y\n", "Too many operands"));
+  CHECK(hasError(" LDA 1,$X,Y\n", "Too many operands"));
   CHECK(hasError(" LDA 1+\n", "Expected an operand"));
 }
 
 TEST(diagnostics_validate_registers_and_format_rules) {
-  CHECK(hasError(" SHIFTL A,17\n", "Shift count"));
-  CHECK(hasError(" SHIFTL A,0\n", "Shift count"));
+  CHECK(hasError(" SHIFTL $A,17\n", "Shift count"));
+  CHECK(hasError(" SHIFTL $A,0\n", "Shift count"));
   CHECK(hasError(" SVC 16\n", "Service number"));
-  CHECK(hasError(" CLEAR Q\n", "Unknown register"));
+  CHECK(hasError(" CLEAR X\n", "must start with '$'"));
   CHECK(hasError("X RSUB\n", "register name"));
   CHECK(hasError(" +RSUB\n", "cannot use format 4"));
   CHECK(hasError(" +BYTE 1\n", "only be applied to instructions"));
@@ -328,6 +329,37 @@ TEST(entry_listing_and_warnings) {
   CHECK(a.lastInfo().listing.find("0013") != std::string::npos);
   auto r = Assembler().assembleDetailed(" RSUB\n");
   CHECK(r.ok() && r.info.diagnostics.size() == 1);               // "Missing END" warning
+}
+
+TEST(analysis_reports_symbol_definition_and_reference_locations) {
+  const auto result = Assembler().assembleDetailed(
+      "MAIN START 0\n"
+      "LOOP LDA VALUE\n"
+      "VALUE WORD LOOP\n"
+      " END LOOP\n");
+
+  const auto loop = std::find_if(result.info.symbolDefinitions.begin(), result.info.symbolDefinitions.end(),
+                                 [](const SymbolLocation& symbol) { return symbol.name == "LOOP"; });
+  const auto value = std::find_if(result.info.symbolDefinitions.begin(), result.info.symbolDefinitions.end(),
+                                  [](const SymbolLocation& symbol) { return symbol.name == "VALUE"; });
+  CHECK(loop != result.info.symbolDefinitions.end());
+  CHECK(value != result.info.symbolDefinitions.end());
+  if (loop != result.info.symbolDefinitions.end()) {
+    CHECK(loop->line == 2 && loop->column == 1 && loop->length == 4);
+    CHECK(loop->value == 0);
+  }
+  if (value != result.info.symbolDefinitions.end()) {
+    CHECK(value->line == 3 && value->column == 1 && value->length == 5);
+    CHECK(value->value == 3);
+  }
+
+  const auto valueReference = std::find_if(result.info.symbolReferences.begin(), result.info.symbolReferences.end(),
+                                           [](const SymbolReference& reference) { return reference.name == "VALUE"; });
+  CHECK(valueReference != result.info.symbolReferences.end());
+  if (valueReference != result.info.symbolReferences.end())
+    CHECK(valueReference->line == 2 && valueReference->column == 10 && valueReference->length == 5);
+  CHECK(std::count_if(result.info.symbolReferences.begin(), result.info.symbolReferences.end(),
+                      [](const SymbolReference& reference) { return reference.name == "LOOP"; }) == 2);
 }
 
 int main(int argc, char** argv) {

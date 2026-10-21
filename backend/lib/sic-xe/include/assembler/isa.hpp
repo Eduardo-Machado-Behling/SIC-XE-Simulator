@@ -3,6 +3,7 @@
 // mnemonic describes opcode, format, operand schema and SIC availability.
 
 #include <optional>
+#include <span>
 #include <string_view>
 
 #include "memory/CodeMemory.hpp"
@@ -11,10 +12,10 @@ namespace sicxe {
 
 enum class OperandSchema {
   None,      // FIX, RSUB, ...
-  Memory,    // LDA m, LDA #m, LDA @m, LDA m,X
-  Reg,       // CLEAR r, TIXR r
-  RegReg,    // ADDR r1,r2
-  RegCount,  // SHIFTL r,n   (n in 1..16)
+  Memory,    // LDA m, LDA #m, LDA @m, LDA m,$X
+  Reg,       // CLEAR $r, TIX $r
+  RegReg,    // ADD $r1,$r2
+  RegCount,  // SHIFTL $r,n   (n in 1..16)
   Number     // SVC n        (n in 0..15)
 };
 
@@ -31,6 +32,7 @@ enum class DirectiveKind { Start, End, Byte, Word, Resb, Resw, Base, Nobase, Equ
 
 // Lookups take UPPER-CASE names.
 const InstructionDef* findInstruction(std::string_view upper);
+std::span<const InstructionDef> instructionSet();
 std::optional<DirectiveKind> findDirective(std::string_view upper);
 std::optional<int> registerNumber(std::string_view upper);
 

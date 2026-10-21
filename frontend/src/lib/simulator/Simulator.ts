@@ -7,6 +7,7 @@ import { RegisterState } from "@/components/RegisterTable";
 import { Dispatch, SetStateAction } from "react";
 import { stripIsPartialByte } from "next/dist/client/components/segment-cache/cache";
 import { ExecutionView } from "@/components/ExecutionView";
+import { simulatorBaseUrl } from "@/lib/transport/urls";
 
 
 
@@ -114,7 +115,7 @@ export class Simulator {
     }
 
     private get_url() {
-        return "localhost:8080";
+        return simulatorBaseUrl();
     }
 
 

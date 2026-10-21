@@ -14,6 +14,7 @@
 namespace sicxe {
 
 enum class AddrMode { Simple, Immediate, Indirect };
+enum class RelativeMode { Automatic, PcRelative, BaseRelative };
 
 struct DataItem {            // one operand of BYTE / WORD
   bool isLiteral = false;    // C'..' / X'..'
@@ -34,6 +35,7 @@ struct Statement {
 
   // ---- parsed operands ----------------------------------------------------
   AddrMode mode = AddrMode::Simple;            // Memory schema
+  RelativeMode relativeMode = RelativeMode::Automatic; // Optional ,p / ,b suffix; absent means automatic
   bool indexed = false;
   ExprPtr expr;                                // memory operand / count / SVC / directive arg
   int reg1 = -1, reg2 = -1;

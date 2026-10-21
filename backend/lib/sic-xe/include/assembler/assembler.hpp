@@ -34,6 +34,21 @@ struct Relocation {
   unsigned halfBytes;
 };
 
+struct SymbolLocation {
+  std::string name;
+  std::int64_t value = 0;
+  int line = 0;    // 1-based
+  int column = 0;  // 1-based
+  int length = 0;
+};
+
+struct SymbolReference {
+  std::string name;
+  int line = 0;    // 1-based
+  int column = 0;  // 1-based
+  int length = 0;
+};
+
 // Everything the CodeMemory alone cannot express.
 struct AssemblyInfo {
   std::vector<Diagnostic> diagnostics;      // warnings and errors, ordered by line
@@ -43,6 +58,8 @@ struct AssemblyInfo {
   std::size_t entryPoint = 0;               // END operand, else start address
   std::vector<Relocation> relocations;
   std::map<std::string, std::int64_t> symbols;
+  std::vector<SymbolLocation> symbolDefinitions;
+  std::vector<SymbolReference> symbolReferences;
   std::string listing;                      // "ADDR  OBJECT  SOURCE" per statement
 };
 

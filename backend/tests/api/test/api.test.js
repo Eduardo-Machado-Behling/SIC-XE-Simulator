@@ -19,6 +19,7 @@ import contract from './suites/contract.js';
 import errorsAndLimits from './suites/errors-limits.js';
 import fileOperations from './suites/files.js';
 import healthAndArchitectures from './suites/health-architectures.js';
+import languageServer from './suites/language-server.js';
 import isolationAndConcurrency from './suites/isolation-concurrency.js';
 import legacy from './suites/legacy.js';
 import projects from './suites/projects.js';
@@ -58,6 +59,7 @@ describe('OpenAPI document', () => {
 });
 
 healthAndArchitectures(ctx);
+languageServer(ctx);
 sessions(ctx);
 projects(ctx);
 fileOperations(ctx);

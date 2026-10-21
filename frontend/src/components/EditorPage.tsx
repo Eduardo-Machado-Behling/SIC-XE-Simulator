@@ -15,6 +15,9 @@ import { ErrorModal } from "@/components/ErrorModal";
 
 import { Simulator } from "@/lib/simulator/Simulator";
 import { SimulatorCommandError } from "@/lib/transport/SimulatorTransport";
+import { AssemblerLanguageClient } from "@/lib/language/LanguageClient";
+import { setAssemblerLanguageClient } from "@/lib/language/sicxeLanguage";
+import { simulatorWebSocketUrl } from "@/lib/transport/urls";
 import { Project } from "@/lib/simulator/Project";
 import { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
 import { RegisterState } from "./RegisterTable";
@@ -24,11 +27,24 @@ import { symbolsFromEvents, type AssemblySymbol, type ExecutionEvent } from "@/l
 // Helpers
 // ============================================================
 
-function getLanguage(path: string): string {
-    if (path.endsWith(".asm")) return "sicxe";
-    if (path.endsWith(".md")) return "markdown";
-    if (path.endsWith(".json")) return "json";
+function getLanguage(path: string, architecture?: string): string {
+    const extensionPath = path.toLowerCase();
+    if (extensionPath.endsWith(".md")) return "markdown";
+    if (extensionPath.endsWith(".json")) return "json";
+    if ([".asm", ".sic", ".sicxe", ".sxe", ".s"].some((extension) => extensionPath.endsWith(extension)))
+        return "sicxe";
+
+    // Projects identify their source language independently of the filename.
+    // Use that metadata for source files with a custom or missing extension.
+    const architectureId = architecture?.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (architectureId === "sicxe") return "sicxe";
+
     return "plaintext";
+}
+
+function languageDocumentUri(projectId: string, path: string): string {
+    const segments = path.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+    return `sicxe://project/${encodeURIComponent(projectId)}/${segments}`;
 }
 
 /**
@@ -96,8 +112,19 @@ export default function EditorPage({ projectId }: PageProps) {
     const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
     const [isRunning, setIsRunning] = useState(false);
     const [actionError, setActionError] = useState<{ title: string; detail: string } | null>(null);
+    const [languageClient, setLanguageClient] = useState<AssemblerLanguageClient | null>(null);
 
     const consoleHandleRef = useRef<ConsoleHandle | null>(null);
+
+    useEffect(() => {
+        const client = new AssemblerLanguageClient(simulatorWebSocketUrl("/language"));
+        setAssemblerLanguageClient(client);
+        setLanguageClient(client);
+        return () => {
+            setAssemblerLanguageClient(null);
+            client.dispose();
+        };
+    }, [projectId]);
 
     const applyExecutionEvents = useCallback((events: ExecutionEvent[], animateInstruction = true) => {
         simulator.resolve(events, setMemory, setRegisters);
@@ -245,6 +272,10 @@ export default function EditorPage({ projectId }: PageProps) {
     // --------------------------------------------------------
 
     const activeContent = files[activeFile] ?? "";
+    const activeLanguage = getLanguage(activeFile, project?.architecture);
+    const activeDocumentUri = project && activeFile
+        ? languageDocumentUri(project.id, activeFile)
+        : undefined;
 
     const updateFile = useCallback(
         (content: string) => {
@@ -275,6 +306,13 @@ export default function EditorPage({ projectId }: PageProps) {
 
         try {
             await simulator.setFile(activeFile, activeContent);
+            if (languageClient && activeDocumentUri) {
+                try {
+                    await languageClient.saveDocument(activeDocumentUri, activeContent);
+                } catch (languageError) {
+                    console.warn("Assembler language service save sync failed:", languageError);
+                }
+            }
 
             const steps = await simulator.loadFile(activeFile);
 
@@ -289,7 +327,7 @@ export default function EditorPage({ projectId }: PageProps) {
             reportCommandError(error);
             console.error("Run failed:", error);
         }
-    }, [activeFile, activeContent, applyExecutionEvents, reportCommandError, simulator]);
+    }, [activeDocumentUri, activeFile, activeContent, applyExecutionEvents, languageClient, reportCommandError, simulator]);
 
     const stop = useCallback(() => {
         setIsRunning(false);
@@ -484,9 +522,12 @@ export default function EditorPage({ projectId }: PageProps) {
                         <Group orientation="vertical" className="h-full">
                             <Panel defaultSize="75%" minSize="30%">
                                 <CodeEditor
+                                    key={activeDocumentUri ?? activeFile}
                                     path={activeFile}
                                     value={activeContent}
-                                    language={getLanguage(activeFile)}
+                                    language={activeLanguage}
+                                    documentUri={activeLanguage === "sicxe" ? activeDocumentUri : undefined}
+                                    languageClient={activeLanguage === "sicxe" ? languageClient : null}
                                     onChange={updateFile}
                                 />
                             </Panel>

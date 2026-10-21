@@ -119,6 +119,7 @@ export async function startServer({ env = {}, timeoutMs = 15000, port: fixedPort
     port,
     baseUrl: `http://${host}:${port}`,
     wsUrl: `ws://${host}:${port}/ws`,
+    languageUrl: `ws://${host}:${port}/language`,
     output,
     isRunning: () => exitInfo() === null,
     async stop() {

@@ -21,6 +21,13 @@ bool isIdentifier(std::string_view s) {
 
 bool isSpace(char c) { return std::isspace(static_cast<unsigned char>(c)) != 0; }
 
+std::string_view operationMnemonic(std::string_view operation) {
+  if (!operation.empty() && operation.front() == '+') operation.remove_prefix(1);
+  const std::size_t modifier = operation.find(',');
+  if (modifier != std::string_view::npos) operation = operation.substr(0, modifier);
+  return operation;
+}
+
 std::string_view stripComment(std::string_view line) {
   bool inQuote = false;
   for (std::size_t i = 0; i < line.size(); ++i) {
@@ -70,9 +77,29 @@ bool arity(Ctx& c, std::size_t lo, std::size_t hi) {
 }
 
 int parseRegister(Ctx& c, const Field& f) {
-  if (auto r = registerNumber(toUpper(f.text))) return *r;
+  if (f.text.empty() || f.text.front() != '$') {
+    fail(c, f.col, "Register operands must start with '$' (for example, $A)");
+    return -1;
+  }
+  const std::string name = toUpper(std::string_view(f.text).substr(1));
+  if (auto r = registerNumber(name)) return *r;
   fail(c, f.col, "Unknown register '" + f.text + "'");
   return -1;
+}
+
+bool looksLikeRegisterOperand(const Field& f) {
+  return (!f.text.empty() && f.text.front() == '$') ||
+         registerNumber(toUpper(f.text)).has_value();
+}
+
+const char* registerFormAlias(std::string_view mnemonic) {
+  if (mnemonic == "ADD") return "ADDR";
+  if (mnemonic == "SUB") return "SUBR";
+  if (mnemonic == "MUL") return "MULR";
+  if (mnemonic == "DIV") return "DIVR";
+  if (mnemonic == "COMP") return "COMPR";
+  if (mnemonic == "TIX") return "TIXR";
+  return nullptr;
 }
 
 ExprPtr parseExprField(Ctx& c, const Field& f) {
@@ -93,7 +120,12 @@ void parseMemoryOperand(Ctx& c) {
   c.st.expr = parseExpression(t, c.st.line, col, c.d);
   if (!c.st.expr) c.st.valid = false;
   if (c.f.size() == 2) {
-    if (toUpper(c.f[1].text) != "X") { fail(c, c.f[1].col, "Only register X may be used for indexing"); return; }
+    const int indexRegister = parseRegister(c, c.f[1]);
+    if (indexRegister < 0) return;
+    if (toUpper(std::string_view(c.f[1].text).substr(1)) != "X") {
+      fail(c, c.f[1].col, "Only $X may be used for indexing");
+      return;
+    }
     c.st.indexed = true;
     if (c.st.mode != AddrMode::Simple)
       fail(c, c.f[1].col, "Indexed addressing is only valid with simple addressing (not # or @)");
@@ -191,8 +223,7 @@ std::optional<Statement> parseLine(std::string_view line, int lineNo, Diagnostic
     return code.substr(start, pos - start);
   };
   auto isOpcodeName = [](std::string_view f) {
-    if (!f.empty() && f[0] == '+') f.remove_prefix(1);
-    const std::string up = toUpper(f);
+    const std::string up = toUpper(operationMnemonic(f));
     return findInstruction(up) != nullptr || findDirective(up).has_value();
   };
 
@@ -224,6 +255,22 @@ std::optional<Statement> parseLine(std::string_view line, int lineNo, Diagnostic
 
   st.mnemonicCol = static_cast<int>(mnemStart) + 1;
   if (mnem[0] == '+') { st.extended = true; mnem.remove_prefix(1); }
+  if (const std::size_t modifier = mnem.find(','); modifier != std::string_view::npos) {
+    const std::string_view selector = mnem.substr(modifier + 1);
+    const int selectorCol = static_cast<int>(mnemStart) + (st.extended ? 3 : 2) +
+                            static_cast<int>(modifier);
+    if (selector.size() == 1 &&
+        std::tolower(static_cast<unsigned char>(selector.front())) == 'p') {
+      st.relativeMode = RelativeMode::PcRelative;
+    } else if (selector.size() == 1 &&
+               std::tolower(static_cast<unsigned char>(selector.front())) == 'b') {
+      st.relativeMode = RelativeMode::BaseRelative;
+    } else {
+      diags.error(lineNo, selectorCol, "Addressing suffix must be ',p' or ',b'");
+      st.valid = false;
+    }
+    mnem = mnem.substr(0, modifier);
+  }
   st.mnemonic = toUpper(mnem);
   st.directive = findDirective(st.mnemonic);
   if (!st.directive) st.inst = findInstruction(st.mnemonic);
@@ -243,6 +290,16 @@ std::optional<Statement> parseLine(std::string_view line, int lineNo, Diagnostic
   st.operandCol = static_cast<int>(pos) + 1;
 
   const std::vector<Field> fields = splitOperands(operandText, st.operandCol);
+  if (st.inst && !st.extended && !fields.empty() && looksLikeRegisterOperand(fields[0])) {
+    if (const char* alias = registerFormAlias(st.mnemonic))
+      st.inst = findInstruction(alias);
+  }
+  if (st.relativeMode != RelativeMode::Automatic &&
+      (!st.inst || st.inst->schema != OperandSchema::Memory)) {
+    diags.error(lineNo, st.mnemonicCol,
+                "',p' and ',b' are only valid on format-3 memory instructions");
+    st.valid = false;
+  }
   Ctx ctx{st, fields, diags};
   if (st.inst) parseInstructionOperands(ctx);
   else if (st.directive) parseDirectiveOperands(ctx);

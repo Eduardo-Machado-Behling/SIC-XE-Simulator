@@ -58,6 +58,10 @@ const InstructionDef* findInstruction(std::string_view name) {
   return it == table.end() ? nullptr : it->second;
 }
 
+std::span<const InstructionDef> instructionSet() {
+  return kDefs;
+}
+
 std::optional<DirectiveKind> findDirective(std::string_view n) {
   static const std::unordered_map<std::string_view, DirectiveKind> table = {
       {"START", DirectiveKind::Start}, {"END", DirectiveKind::End},
