@@ -57,6 +57,11 @@ inline ApiError file_not_found() {
     return {404, error_type::FileNotFound, "File not found"};
 }
 
+// No route matches the request (not one of the documented paths).
+inline ApiError route_not_found() {
+    return {404, error_type::NotFound, "Not found", "no such route"};
+}
+
 inline ApiError payload_too_large(std::string detail) {
     return {413, error_type::PayloadTooLarge, "Payload too large", std::move(detail)};
 }
