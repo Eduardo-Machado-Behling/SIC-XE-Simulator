@@ -68,7 +68,5 @@ int main() {
     std::cout << "WebSocket endpoint: "
               << "ws://localhost:" << port << "/ws" << std::endl;
 
-    server.listen();
-
-    return 0;
+    return server.listen() ? 0 : 1;
 }

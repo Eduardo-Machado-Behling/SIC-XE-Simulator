@@ -36,6 +36,18 @@ bool is_unroutable_path(const httplib::Request& req) {
 Server::Server(Simulator& simulator)
     : m_simulator(simulator) {
     set_max_body_bytes(kDefaultMaxBodyBytes);
+
+    // httplib's default sets SO_REUSEPORT, which lets a second process bind
+    // the same port and take part of the connections; with sessions held in
+    // memory that makes them randomly "not found". Bind exclusively instead,
+    // so a second server fails to start.
+    this->set_socket_options([](socket_t sock) {
+#ifdef _WIN32
+        httplib::set_socket_opt(sock, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, 1);
+#else
+        httplib::set_socket_opt(sock, SOL_SOCKET, SO_REUSEADDR, 1);
+#endif
+    });
 }
 
 void Server::setup(int port) {
@@ -65,8 +77,14 @@ void Server::set_host(const std::string& host) {
 void Server::set_socket_flags(int socket_flags) {
     m_socket_flags = socket_flags;
 }
-void Server::listen() {
-    this->listen(m_host, m_port, m_socket_flags);
+bool Server::listen() {
+    if (!this->bind_to_port(m_host, m_port, m_socket_flags)) {
+        std::cerr << "Failed to bind " << m_host << ':' << m_port << " (is another server using it?)" << std::endl;
+        return false;
+    }
+    // Printed only once the port is ours; the API tests wait for this line.
+    std::cout << "Listening on " << m_host << ':' << m_port << std::endl;
+    return this->listen_after_bind();
 }
 
 void Server::setup_cors() {

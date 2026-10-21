@@ -34,26 +34,8 @@ function isPortFree(port, host) {
   });
 }
 
-async function findFreePort(host) {
-  const [from, to] = portRange();
-  for (let port = from; port <= to; port += 1) {
-    if (await isPortFree(port, host)) return port;
-  }
-  throw new Error(`no free port in ${from}-${to}`);
-}
-
-function canConnect(port, host) {
-  return new Promise((resolve) => {
-    const socket = net.connect({ port, host });
-    socket.once('connect', () => {
-      socket.destroy();
-      resolve(true);
-    });
-    socket.once('error', () => resolve(false));
-  });
-}
-
-export async function startServer({ env = {}, timeoutMs = 15000 } = {}) {
+/** Spawns the api on `port` (no readiness wait). */
+export function spawnApi({ port, env = {}, host = '127.0.0.1' }) {
   const bin = process.env.API_BIN ?? DEFAULT_API_BIN;
   if (!existsSync(bin)) {
     throw new Error(
@@ -61,10 +43,6 @@ export async function startServer({ env = {}, timeoutMs = 15000 } = {}) {
         '(cmake -S backend -B backend/build && cmake --build backend/build) or set API_BIN.',
     );
   }
-
-  const host = '127.0.0.1';
-  const port = await findFreePort(host);
-
   let output = '';
   const child = spawn(bin, [], {
     env: { ...process.env, ...env, PORT: String(port), HOST: host },
@@ -76,37 +54,75 @@ export async function startServer({ env = {}, timeoutMs = 15000 } = {}) {
   };
   child.stdout.on('data', keep);
   child.stderr.on('data', keep);
-
-  let exited = null;
-  const exitPromise = new Promise((resolve) => {
+  let exitInfo = null;
+  const exited = new Promise((resolve) => {
     child.once('exit', (code, signal) => {
-      exited = { code, signal };
-      resolve(exited);
+      exitInfo = { code, signal };
+      resolve(exitInfo);
     });
   });
+  return { child, exited, output: () => output, exitInfo: () => exitInfo };
+}
 
+// The api prints this once it owns the port (it binds exclusively), so seeing
+// it from our own child proves we are not talking to another server.
+const LISTENING = /^Listening on \S+:(\d+)$/m;
+const BIND_FAILED = /Failed to bind/;
+
+async function waitUntilListening({ port, exited, output, exitInfo }, deadline) {
+  for (;;) {
+    const match = LISTENING.exec(output());
+    if (match && Number(match[1]) === port) return 'listening';
+    if (exitInfo()) return BIND_FAILED.test(output()) ? 'bind-failed' : 'exited';
+    if (Date.now() > deadline) return 'timeout';
+    await Promise.race([exited, new Promise((r) => setTimeout(r, 25))]);
+  }
+}
+
+/**
+ * Starts the api on a free port of the test range (or exactly on `port`).
+ * Another process can take a port between the free-port probe and the api's
+ * bind; the api then fails to bind and the next port is tried.
+ */
+export async function startServer({ env = {}, timeoutMs = 15000, port: fixedPort } = {}) {
+  const host = '127.0.0.1';
   const deadline = Date.now() + timeoutMs;
-  while (!(await canConnect(port, host))) {
-    if (exited) {
+  const [from, to] = fixedPort ? [fixedPort, fixedPort] : portRange();
+
+  let port;
+  let api;
+  for (let candidate = from; candidate <= to && !api; candidate += 1) {
+    if (!fixedPort && !(await isPortFree(candidate, host))) continue;
+
+    const spawned = spawnApi({ port: candidate, env, host });
+    const state = await waitUntilListening({ port: candidate, ...spawned }, deadline);
+    if (state === 'listening') {
+      port = candidate;
+      api = spawned;
+    } else if (state === 'bind-failed' && !fixedPort) {
+      continue;
+    } else {
+      if (state === 'timeout') spawned.child.kill('SIGKILL');
+      const why = state === 'timeout' ? `did not listen within ${timeoutMs}ms` : 'exited before listening';
+      const info = spawned.exitInfo();
       throw new Error(
-        `api exited before listening (code=${exited.code}, signal=${exited.signal}):\n${output}`,
+        `api on ${host}:${candidate} ${why}` +
+          (info ? ` (code=${info.code}, signal=${info.signal})` : '') +
+          `:\n${spawned.output()}`,
       );
     }
-    if (Date.now() > deadline) {
-      child.kill('SIGKILL');
-      throw new Error(`api did not listen on ${host}:${port} within ${timeoutMs}ms:\n${output}`);
-    }
-    await new Promise((r) => setTimeout(r, 50));
   }
+  if (!api) throw new Error(`no port in ${from}-${to} could be bound`);
 
+  const { child, exited: exitPromise, output, exitInfo } = api;
   return {
     port,
     baseUrl: `http://${host}:${port}`,
     wsUrl: `ws://${host}:${port}/ws`,
-    output: () => output,
-    isRunning: () => exited === null,
+    output,
+    isRunning: () => exitInfo() === null,
     async stop() {
-      if (exited) return exited;
+      if (exitInfo()) return exitInfo();
       child.kill('SIGTERM');
       const timer = setTimeout(() => child.kill('SIGKILL'), 3000);
       const result = await exitPromise;
