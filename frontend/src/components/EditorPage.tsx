@@ -256,6 +256,8 @@ export default function EditorPage({ projectId }: PageProps) {
 
             setIsRunning(true);
         } catch (error) {
+            // The previous program's symbols no longer describe the source.
+            setSymbols(null);
             console.error("Run failed:", error);
         }
     }, [activeFile, activeContent, applyExecutionEvents, simulator]);
