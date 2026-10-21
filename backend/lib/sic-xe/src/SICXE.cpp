@@ -1,6 +1,7 @@
 #include "SICXE.hpp"
 
 #include <cstdint>
+#include <memory>
 #include <regex>
 #include <sstream>
 #include <stdexcept>
@@ -10,6 +11,7 @@
 #include "DecodedInstruction.hpp"
 #include "InstructionSet.hpp"
 #include "architecture/ExecutionEvent.hpp"
+#include "architecture/events/ProgramAssembled.hpp"
 #include "architecture/RegisterDescription.hpp"
 #include "common/Byte.hpp"
 #include "essentials/Word.hpp"
@@ -113,6 +115,14 @@ std::vector<ExecutionEvent> SICXE::load_file(std::string& content) {
         const auto entry_point = m_assembler.lastInfo().entryPoint;
         m_memoryAccessor.write(0, image);
         m_registerAccessor.write("PC", Word(static_cast<std::uint32_t>(entry_point)).to_bytes());
+
+        // Report the symbol table to the editor's Assembler tab.
+        nlohmann::json symbols = nlohmann::json::array();
+        for (const auto& [name, value] : m_assembler.lastInfo().symbols) {
+            symbols.push_back({{"name", name}, {"value", value}});
+        }
+        m_instructionExecutor.execute(std::make_unique<architecture::events::ProgramAssembled>(
+            nlohmann::json{{"symbols", symbols}}));
     }
     m_halted = false;
     return consume_events();
