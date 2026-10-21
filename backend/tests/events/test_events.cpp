@@ -34,7 +34,8 @@ static Bytes bytesAt(const Memory& memory, std::size_t address, std::size_t size
 }
 
 // A 1 MB memory (the SIC/XE address space) holding a few bytes far apart:
-// at the start, inside a program at 0x1000 and in the very last byte.
+// at the start, a program at 0x1000, a byte 0x40 past it, two bytes across
+// the 4 KiB boundary at 0x3000, and the very last byte.
 struct Fixture {
   static constexpr std::size_t kSize = 1 << 20;
   Memory memory;
@@ -43,6 +44,8 @@ struct Fixture {
     memory.resize(kSize);
     memory.write(0x0000, {0x11, 0x22});
     memory.write(0x1000, {0x01, 0x00, 0x05, 0x00, 0x00, 0x00, 0x01, 0x00, 0x07});
+    memory.write(0x1049, {0x99});
+    memory.write(0x2FFF, {0xAA, 0xBB});
     memory.write(kSize - 1, {0xFF});
     registers.allocate(1, "A", 3);
     registers.write("A", Bytes{0x00, 0x00, 0x05});
@@ -55,6 +58,8 @@ struct Fixture {
   bool original() const {
     return bytesAt(memory, 0x0000, 3) == Bytes{0x11, 0x22, 0x00} &&
            bytesAt(memory, 0x1000, 9) == Bytes{0x01, 0x00, 0x05, 0x00, 0x00, 0x00, 0x01, 0x00, 0x07} &&
+           bytesAt(memory, 0x1048, 3) == Bytes{0x00, 0x99, 0x00} &&
+           bytesAt(memory, 0x2FFE, 4) == Bytes{0x00, 0xAA, 0xBB, 0x00} &&
            bytesAt(memory, kSize - 2, 2) == Bytes{0x00, 0xFF};
   }
 };

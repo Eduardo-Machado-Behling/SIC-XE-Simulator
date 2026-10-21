@@ -1,5 +1,7 @@
 #include "architecture/events/MemoryCleared.hpp"
 
+#include <cstring>
+
 #include "memory/Memory.hpp"
 
 namespace architecture::events {
@@ -10,6 +12,9 @@ namespace {
 // as much as this many bytes of vector and address bookkeeping.
 constexpr std::size_t kMaxZeroGapInRun = 32;
 
+constexpr std::size_t kZeroChunk = 4096;
+const byte_t kZeros[kZeroChunk] = {};
+
 } // namespace
 
 bool MemoryCleared::mutates() const noexcept { return true; }
@@ -17,12 +22,20 @@ bool MemoryCleared::mutates() const noexcept { return true; }
 void MemoryCleared::commit(EventState& state) {
     auto& memory = dynamic_cast<MemoryEventState&>(state).memory;
 
-    std::vector<byte_t> bytes;
-    memory.read(0, memory.size(), bytes);
+    const std::vector<byte_t>& bytes = memory.bytes();
 
     previous.clear();
     std::size_t i = 0;
     while (i < bytes.size()) {
+        // Most of the memory is zero: skip it a chunk at a time with memcmp,
+        // which stays fast in the Debug build the Dockerfile makes (there a
+        // byte loop over 1 MB alone took about 2 ms per load).
+        if (i % kZeroChunk == 0 && i + kZeroChunk <= bytes.size() &&
+            std::memcmp(bytes.data() + i, kZeros, kZeroChunk) == 0) {
+            i += kZeroChunk;
+            continue;
+        }
+
         if (bytes[i] == 0) {
             ++i;
             continue;
