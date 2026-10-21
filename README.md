@@ -176,6 +176,49 @@ The WebSocket endpoint is:
 ws://localhost:8080/ws
 ```
 
+Environment variables read by `bin/api`:
+
+| Variable         | Default   | Purpose                                             |
+| ---------------- | --------- | --------------------------------------------------- |
+| `PORT`           | `8080`    | Listening port                                      |
+| `HOST`           | `0.0.0.0` | Listening address                                   |
+| `MAX_BODY_BYTES` | `8388608` | Request body limit; larger bodies get `413`         |
+
+## HTTP API
+
+The HTTP contract is [`api_spec/openapi.yaml`](api_spec/openapi.yaml)
+(OpenAPI 3.1). It is the source of truth: health check, architectures,
+anonymous sessions, and session-scoped projects and files. Sessions and
+their projects live in memory and are lost when the server restarts; clients
+recover by creating a new session and re-syncing (see the spec).
+
+The older routes (`/heartbeat`, `/simulator/archs`, `/projects`, `/project`,
+`/project/load`, `/simulator/project/file`, ...) are deprecated and kept only
+until the frontend moves to the documented API. The `/ws` WebSocket protocol
+is not part of the OpenAPI document.
+
+## API tests
+
+`backend/tests/api` holds API-level tests (Node's built-in test runner plus
+Ajv and a YAML parser, isolated in their own `package.json`). They start the
+real `bin/api` on a free port in `18440-18449`, call every operation in
+`api_spec/openapi.yaml`, validate each response against the documented
+schemas, and fail if any documented status code (other than `500`) is never
+exercised. The legacy routes and `/ws` are smoke-tested too.
+
+Requires Node.js 22 or newer and a built backend. From the repository root:
+
+```bash
+npm --prefix backend/tests/api install-ci-test
+```
+
+(`install-ci-test` is `npm ci` followed by `npm test`; once the packages are
+installed, `npm --prefix backend/tests/api test` is enough.)
+
+Optional overrides: `API_BIN` (path to the executable, default
+`backend/bin/api`), `API_TEST_PORTS` (port range, default `18440-18449`) and
+`OPENAPI_SPEC` (path to the spec).
+
 ---
 
 # Frontend
