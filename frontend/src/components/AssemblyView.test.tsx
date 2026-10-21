@@ -1,9 +1,22 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AssemblyView } from "@/components/AssemblyView";
 import type { AssemblyReport } from "@/lib/simulator/ExecutionEvent";
+import { hex, hexBytes } from "@/lib/simulator/hex";
+
+// The real formatters, spied on: every listing row and Text record formats its
+// object code with hexBytes, so its calls show which of them rendered.
+vi.mock("@/lib/simulator/hex", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@/lib/simulator/hex")>();
+    return { hex: vi.fn(actual.hex), hexBytes: vi.fn(actual.hexBytes) };
+});
+
+beforeEach(() => {
+    vi.mocked(hex).mockClear();
+    vi.mocked(hexBytes).mockClear();
+});
 
 const REPORT: AssemblyReport = {
     symbols: [{ name: "FIRST", value: 0x1000 }],
@@ -78,5 +91,42 @@ describe("AssemblyView", () => {
 
         await user.click(screen.getByRole("tab", { name: "Symbols" }));
         expect(within(screen.getByRole("tabpanel")).getByText("FIRST")).toBeTruthy();
+    });
+
+    describe("rendering cost", () => {
+        // Three RSUBs at 1000, 1003 and 1006, all in one Text record.
+        const PROGRAM: AssemblyReport = {
+            symbols: [{ name: "A", value: 0x1000 }],
+            program: { name: "P", start: 0x1000, length: 9, entry: 0x1000 },
+            listing: [
+                { line: 1, address: 0x1000, bytes: [0x4F, 0x00, 0x00], source: "A        RSUB" },
+                { line: 2, address: 0x1003, bytes: [0x4F, 0x00, 0x01], source: "B        RSUB" },
+                { line: 3, address: 0x1006, bytes: [0x4F, 0x00, 0x02], source: "C        RSUB" },
+            ],
+            relocations: [{ address: 0x1001, halfBytes: 5 }],
+            diagnostics: [],
+        };
+
+        it("does nothing when re-rendered with the same report and PC, as on an editor keystroke", () => {
+            const { rerender } = render(<AssemblyView assembly={PROGRAM} pc={0x1000} />);
+            vi.mocked(hex).mockClear();
+            vi.mocked(hexBytes).mockClear();
+
+            rerender(<AssemblyView assembly={PROGRAM} pc={0x1000} />);
+
+            expect(hex).not.toHaveBeenCalled();
+            expect(hexBytes).not.toHaveBeenCalled();
+        });
+
+        it("re-renders only the listing rows whose highlight moves when the PC changes", () => {
+            const { rerender } = render(<AssemblyView assembly={PROGRAM} pc={0x1000} />);
+            vi.mocked(hexBytes).mockClear();
+
+            rerender(<AssemblyView assembly={PROGRAM} pc={0x1003} />);
+
+            expect(vi.mocked(hexBytes).mock.calls).toEqual([[[0x4F, 0x00, 0x00]], [[0x4F, 0x00, 0x01]]]);
+            const current = screen.getAllByRole("row").filter((row) => row.getAttribute("aria-current") === "true");
+            expect(current.map((row) => within(row).getAllByRole("cell")[0].textContent)).toEqual(["2"]);
+        });
     });
 });
