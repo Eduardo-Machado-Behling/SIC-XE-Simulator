@@ -1,0 +1,63 @@
+
+@startuml
+title SIC/XE Assembler - Implementation Overview
+
+top to bottom direction
+skinparam linetype ortho
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam defaultFontName Arial
+skinparam ArrowColor #858585
+skinparam ArrowThickness 1.5
+
+skinparam package {
+  BackgroundColor #F4F7FB
+  BorderColor #526579
+  FontColor #17212B
+}
+skinparam rectangle {
+  BackgroundColor #F4F7FB
+  BorderColor #526579
+  FontColor #17212B
+}
+
+rectangle "Assembly Source" as Source #DDF0D8
+
+package "Assembler" as Assembler {
+  rectangle "Parser" as Parser
+  rectangle "Pass 1\nAnalysis" as Pass1
+  rectangle "Pass 2\nSynthesis" as Pass2
+  rectangle "Assembly Result" as Result
+
+  Parser -right-> Pass1
+  Pass1 -right-> Pass2
+  Pass2 -right-> Result
+
+  Parser -[hidden]right- Pass1
+  Pass1 -[hidden]right- Pass2
+  Pass2 -[hidden]right- Result
+}
+
+package "Supporting Tables" as Tables {
+  rectangle "Symbol Table" as Symbols
+  rectangle "Opcode Table" as Opcodes
+
+  Symbols -[hidden]right- Opcodes
+}
+
+rectangle "CodeMemory\n(Sparse Object Code)" as Memory #DDF0D8
+
+Source -down-> Assembler
+Result -down-> Memory
+
+Symbols .. Pass1 : definitions
+Symbols .. Pass2 : resolution
+Opcodes .. Pass1 : instruction sizes
+Opcodes .. Pass2 : instruction encoding
+
+' Preserve the vertical hierarchy
+Source -[hidden]down- Assembler
+Assembler -[hidden]down- Tables
+Tables -[hidden]down- Memory
+
+@enduml

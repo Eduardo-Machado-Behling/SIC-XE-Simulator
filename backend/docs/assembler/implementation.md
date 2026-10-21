@@ -131,9 +131,9 @@ in [instruction-set.md](instruction-set.md). The operand forms are:
     service number      := expression
 
 # selects immediate addressing and @ selects indirect addressing. The
-optional second memory operand is the index register and must be $X; indexed
+optional second memory operand is the index register and must be $\$X$; indexed
 immediate and indexed indirect operands are rejected. Register operands must
-include $, for example ADDR $A, $S.
+include \$, for example ADDR \$A, \$S.
 
 For ADD, SUB, MUL, DIV, and COMP, a register as the first operand selects the
 corresponding format-2 register operation (ADDR, SUBR, MULR, DIVR, or COMPR).

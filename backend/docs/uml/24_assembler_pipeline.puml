@@ -1,0 +1,45 @@
+@startuml
+skinparam linetype ortho
+skinparam componentStyle rectangle
+title Assembler pipeline and consumers
+
+top to bottom direction
+
+component "Source text" as Source
+component "Line parser" as Parser
+component "ISA catalog" as ISA
+component "Statements" as Statements
+component "Pass 1\nLayout and symbols" as Pass1
+component "Pass 2\nByte emission" as Pass2
+component "Value evaluator\n(opaque service)" as Values
+component "CodeMemory\nSparse bytes" as Memory
+component "AssemblyInfo\nDiagnostics, symbols,\nrelocations, source map" as Info
+component "SIC/XE loader" as Runtime
+component "Language service" as Language
+
+Source --> Parser
+ISA --> Parser
+Parser --> Statements
+Statements --> Pass1
+Pass1 --> Pass2
+Values --> Pass1
+Values --> Pass2
+Pass1 --> Info
+Pass2 --> Memory
+Pass2 --> Info
+Memory --> Runtime
+Info --> Runtime
+Info --> Language
+
+note right of Values
+  Expression parsing and
+  evaluation internals are
+  outside this diagram's scope.
+end note
+
+note bottom of Info
+  Runtime consumes image and
+  execution metadata. The language
+  service uses analysis metadata.
+end note
+@enduml

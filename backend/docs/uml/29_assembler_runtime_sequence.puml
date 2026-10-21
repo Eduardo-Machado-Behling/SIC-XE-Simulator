@@ -1,0 +1,27 @@
+@startuml
+skinparam linetype ortho
+title Runtime consumes assembled image and metadata
+participant "Simulator" as Sim
+participant "SICXE::load_file" as Arch
+participant "Assembler" as Asm
+participant "MemoryAccessor" as MA
+participant "Event manager / UI" as UI
+Sim -> Arch : load_file(source)
+Arch -> Arch : clear program state
+Arch -> Asm : assemble(source)
+alt assembly diagnostics contain errors
+  Asm --> Arch : throw AssemblyError
+  Arch -> Asm : clear last metadata
+  Arch --> Sim : propagate failure
+else valid assembly
+  Asm --> Arch : CodeMemory
+  Arch -> Asm : lastInfo()
+  Asm --> Arch : entryPoint, source map, symbols
+  Arch -> MA : write(base 0, sparse CodeMemory)
+  MA -> MA : validate and stage all segments
+  MA -> UI : commit memory-write events
+  Arch -> Arch : set PC to entryPoint
+  Arch -> UI : ProgramAssembled(symbols)
+  Arch --> Sim : return execution events
+end
+@enduml

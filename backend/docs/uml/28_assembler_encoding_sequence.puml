@@ -1,0 +1,41 @@
+@startuml
+skinparam linetype ortho
+title SIC/XE format-3/format-4 memory encoding
+participant "Engine::pass2Instruction" as P2
+participant "encodeXe" as XE
+participant "expression service\n(black box)" as Expr
+participant "CodeMemory / emit" as Mem
+P2 -> XE : Statement + InstructionDef
+XE -> Expr : evaluate operand at statement address
+Expr --> XE : value + relocatable flag
+XE -> XE : compose opcode with n/i bits
+alt extended format 4
+  XE -> XE : require 0 <= target <= 0xFFFFF
+  opt relocatable target
+    XE -> XE : record {address + 1, 5 half-bytes}
+  end
+  XE -> Mem : emit opcode, x/e/address[19:0]
+else format 3 absolute immediate
+  XE -> XE : require 0 <= value <= 4095
+  XE -> Mem : emit opcode, x + direct 12-bit value
+else format 3 relocatable or address target
+  XE -> XE : pcDisp = target - (address + 3)
+  alt forced ,p
+    XE -> XE : require -2048 <= pcDisp <= 2047; p=1
+  else forced ,b
+    XE -> XE : require BASE and 0 <= target-BASE <= 4095; b=1
+  else automatic
+    alt PC displacement fits
+      XE -> XE : choose PC-relative
+    else BASE active and offset fits
+      XE -> XE : choose BASE-relative
+    else target fits direct 12-bit
+      XE -> XE : choose direct; warn if relocatable
+    else
+      XE -> XE : diagnostic: use format 4
+    end
+  end
+  XE -> Mem : emit opcode, x/b/p + 12-bit field
+end
+Mem -> Mem : reject overlap, write sparse byte sequence
+@enduml

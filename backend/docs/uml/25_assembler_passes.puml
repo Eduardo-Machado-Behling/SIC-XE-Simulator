@@ -1,0 +1,27 @@
+@startuml
+skinparam linetype ortho
+title Source parsing and two-pass assembly activity
+start
+:Create fresh Engine with options and source;
+:Split source at newline boundaries;
+while (another physical line?) is (yes)
+  :parseLine(line, lineNo);
+  if (blank or comment only?) then (yes)
+  else (no)
+    :Append Statement to source-ordered vector;
+  endif
+endwhile (no)
+:Pass 1: assign addresses, sizes,\ndefine symbols, apply layout directives;
+:Pass 2: process valid statements,\nevaluate operands, emit bytes and metadata;
+:Finalize diagnostics, symbols,\nentry point, source map and listing;
+if (detailed API?) then (yes)
+  :Return AssemblyResult;
+else (throwing API)
+  if (AssemblyResult.ok()?) then (yes)
+    :Store lastInfo and return CodeMemory;
+  else (no)
+    :Store lastInfo and throw AssemblyError;
+  endif
+endif
+stop
+@enduml

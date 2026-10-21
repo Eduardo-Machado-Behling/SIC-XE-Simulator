@@ -1,0 +1,48 @@
+@startuml
+skinparam linetype ortho
+title Pass 1: source layout, symbols, and directives
+start
+:Initialize LC, start address,\nhigh-water mark and flags;
+while (next Statement?) is (yes)
+  if (already after END?) then (yes)
+    :Warn once;
+    :Mark statement invalid / ignored;
+  else (no)
+    :Set statement.address = LC;
+    if (directive?) then (yes)
+      switch (directive)
+      case (START)
+        :Validate first-statement constraint;
+        :Set startAddr, LC, highWater;
+        :Define optional program label;
+      case (END)
+        :Mark ended and sawEnd;
+        :Define label at current LC;
+      case (BYTE / WORD)
+        :Compute reserved size from item count;
+        :Define label at current LC;
+      case (RESB / RESW)
+        :Evaluate absolute count;
+        :Set size to count or 3 * count;
+        :Define label at current LC;
+      case (EQU)
+        :Evaluate pass-1-known value;
+        :Define label to that value;
+      case (ORG)
+        :Set LC to operand, or restore saved LC;
+        :Update statement address and label;
+      case (BASE / NOBASE)
+        :Define label at current LC;
+      endswitch
+    else (instruction)
+      :Define label at current LC;
+      :Validate architecture mode and extension;
+      :Set fixed size (1, 2, 3 or 4);
+    endif
+    :LC = LC + Statement.size;
+    :highWater = max(highWater, LC);
+    :Diagnose address-space overflow;
+  endif
+endwhile (no)
+stop
+@enduml
