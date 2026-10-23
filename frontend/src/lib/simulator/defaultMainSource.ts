@@ -17,7 +17,7 @@ ENTRY   lda #5              ; mnemonics are case-insensitive; # means immediate
         +LDA #0x12345           ; leading + selects format 4 (no ,p or ,b)
         HALT                    ; stop before the data definitions below
 
-TABLE   WORD 1, 2,             ; WORD emits 3-byte values
+TABLE   WORD 1, 2              ; WORD emits 3-byte values
 PTR     WORD TABLE             ; a relocatable symbol can be stored as a WORD
 RESULT  RESW 1                 ; reservations occupy addresses but emit no bytes
 BUFFER  RESB 8
