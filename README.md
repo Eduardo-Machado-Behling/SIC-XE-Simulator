@@ -4,6 +4,7 @@ Web-based SIC/XE simulator with a **C++ backend** and **Next.js frontend**.
 
 ## Collaborators
 - Eduardo Machado Behling
+- Pedro da Silva D'Ávila
 
 ## Requirements
 
