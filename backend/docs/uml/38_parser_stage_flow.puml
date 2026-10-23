@@ -1,56 +1,39 @@
 @startuml
-title Assembler Stage 0 - Parse Source Lines
+title Parser Logic - High-Level Flow
+left to right direction
 skinparam linetype ortho
 skinparam shadowing false
 skinparam state {
-  BackgroundColor White
-  BorderColor #455A64
-  ArrowColor #546E7A
+  BackgroundColor #F1F1F1
+  BorderColor #181818
+  ArrowColor #181818
 }
 
 [*] --> ReadLine
-state "Read next physical line\nIncrement source line number" as ReadLine
-state "Normalize line\nRemove trailing CR/LF\nIf first character is '.', skip line" as Normalize
-state "Strip semicolon comment\nOnly outside apostrophe quotes" as StripComment
-state "Empty after comment removal?" as Empty
-state "Scan first whitespace field\noperationMnemonic strips '+' and suffix\nuppercase lookup in ISA/directive catalog" as FirstField
-state "Known instruction or directive?" as KnownOperation
-state "Treat field as label\nvalidate identifier\nreject register names as labels" as Label
-state "Read next field as operation" as ReadOperation
-state "Parse mnemonic modifiers\n'+' means extended request\n',p' / ',b' selects relative mode" as Modifiers
-state "Resolve operation\ndirective first, then instruction\nunknown mnemonic -> diagnostic" as Resolve
-state "Capture operand text\nrecord 1-based source column\nsplit commas outside quoted literals\ntrim fields and preserve field columns" as Operands
-state "Register-form alias?" as Alias
-state "Dispatch by operand schema\nor DirectiveKind\nparse registers, expressions, literals\nvalidate arity and operand constraints" as Dispatch
-state "Return Statement\nsyntax, parsed operands, source positions,\nvalid flag, diagnostics" as Result
-state "Skip line\nblank, comment, or dot-comment" as Skip
-state "Return label-only Statement" as LabelOnly
-state "Report error\nreturn invalid Statement" as Invalid
-state "More source lines?" as MoreLines
+state "Read and clean line\n(remove comments)" as ReadLine
+state "Usable code?" as HasCode <<choice>>
+state "Ignore blank or comment" as Ignore
+state "Identify label and operation" as Identify
+state "Known operation?" as Known <<choice>>
+state "Report unknown operation" as Unknown
+state "Split operands and select parser" as Prepare
+state "Instruction?" as IsInstruction <<choice>>
+state "Parse instruction\n(validate format and operands)" as ParseInstruction
+state "Parse directive\n(validate directive operands)" as ParseDirective
+state "Build Statement\n(fields, source positions, diagnostics)" as Build
 
-ReadLine --> Normalize
-Normalize --> Skip : dot-comment
-Normalize --> StripComment : otherwise
-StripComment --> Empty
-Empty --> Skip : yes
-Empty --> FirstField : no
-FirstField --> KnownOperation
-KnownOperation --> Modifiers : yes
-KnownOperation --> Label : no
-Label --> ReadOperation
-ReadOperation --> LabelOnly : no operation
-ReadOperation --> Modifiers : operation found
-Modifiers --> Resolve
-Resolve --> Invalid : unknown mnemonic
-Resolve --> Operands : known operation
-Operands --> Alias : instruction candidate
-Operands --> Dispatch : directive
-Alias --> Dispatch : alias applied or not applicable
-Dispatch --> Result
-Invalid --> Result
-LabelOnly --> MoreLines
-Result --> MoreLines
-Skip --> MoreLines
-MoreLines --> ReadLine : yes
-MoreLines --> [*] : no
+ReadLine --> HasCode
+HasCode --> Ignore : no
+HasCode --> Identify : yes
+Identify --> Known
+Known --> Unknown : no
+Known --> Prepare : yes
+Prepare --> IsInstruction
+IsInstruction --> ParseInstruction : yes
+IsInstruction --> ParseDirective : no
+ParseInstruction --> Build
+ParseDirective --> Build
+Unknown --> Build
+Ignore --> [*]
+Build --> [*]
 @enduml

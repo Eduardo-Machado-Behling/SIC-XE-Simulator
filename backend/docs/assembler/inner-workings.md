@@ -389,6 +389,12 @@ This behavior is why diagnostics are part of the public result rather than only 
 
 The standalone diagrams are in `docs/uml/`:
 
+- [High-level assembler flow](../uml/36_assembler_high_level_flow.puml)
+- [Syntax and format resolution](../uml/37_syntax_and_format_resolution.puml)
+- [Parser flow](../uml/38_parser_stage_flow.puml)
+- [Pass-1 layout flow](../uml/39_pass1_stage_flow.puml)
+- [Pass-2 evaluation and emission flow](../uml/40_pass2_stage_flow.puml)
+- [Instruction encoding flow](../uml/41_instruction_encoding_flow.puml)
 - [Assembler component/data-flow map](../uml/24_assembler_pipeline.puml)
 - [Parse and two-pass activity](../uml/25_assembler_passes.puml)
 - [Pass-1 layout and directive state](../uml/26_assembler_pass1.puml)

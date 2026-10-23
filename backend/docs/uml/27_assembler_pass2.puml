@@ -1,57 +1,58 @@
 @startuml
+title Pass 2: statement evaluation, encoding, and emission
 skinparam linetype ortho
-title Pass 2: emission and metadata
+skinparam shadowing false
+
 start
-while (next Statement?) is (yes)
-  if (Statement.valid?) then (yes)
-    if (directive?) then (yes)
-      switch (directive)
+:Visit statements in source order;
+while (More statements?) is (yes)
+  :Select next Statement;
+  if (Statement valid after pass 1?) then (yes)
+    if (Instruction?) then (yes)
+      :Delegate instruction encoding to
+      41_instruction_encoding_flow.puml;
+    else (directive)
+      switch (Directive)
       case (BYTE)
-        :Convert literals or evaluate values;
-        :Range-check and form byte vector;
+        :Copy parsed literal bytes;
+        :Evaluate numeric items in order;
+        :Require each numeric value -128..255;
+        :Build byte vector;
       case (WORD)
-        :Evaluate each value;
-        :Range-check 24-bit value;
-        :Form three big-endian bytes;
-        :Add 6-half-byte relocation when relocatable;
+        :Evaluate expressions in order;
+        :Require each value -2^23..2^24-1;
+        :Append each value as 3 big-endian bytes;
+        :Record 6-half-byte relocation for each relocatable item;
       case (BASE)
-        :Set active base value;
+        :Evaluate expression and set active BASE value;
       case (NOBASE)
-        :Clear active base value;
+        :Clear active BASE value;
       case (END)
-        :Resolve optional entry expression;
-      case (layout-only)
-        :No object bytes;
-      endswitch
-    else (instruction)
-      switch (operand schema)
-      case (None / Reg / RegReg / RegCount / Number)
-        :Encode fixed schema fields;
-      case (Memory, SIC mode)
-        :Validate 15-bit address;
-        :Encode SIC address and X bit;
-      case (Memory, SIC/XE mode)
-        :Encode n/i mode;
-        if (format 4?) then (yes)
-          :Validate 20-bit target;
-          :Encode x/e/address;
-          :Add 5-half-byte relocation when relocatable;
-        else (format 3)
-          :Select immediate, PC, BASE or direct field;
-          :Range-check displacement;
-          :Encode x/b/p and 12-bit field;
+        if (Entry expression present?) then (yes)
+          :Evaluate expression and set entry point;
+        else (no)
+          :Keep default entry point;
         endif
+      case (START / RESB / RESW / EQU / ORG)
+        :No pass-2 bytes;
       endswitch
     endif
   endif
-  :emit() checks each address for overlap;
-  :Write bytes into sparse CodeMemory;
-  :Append listing row for the statement;
+  :For produced BYTE, WORD, or instruction bytes call emit();
+  note right
+    emit checks each destination address in order.
+    On overlap it reports an error and marks the statement invalid.
+    Successful emission stores bytes in sparse CodeMemory and Statement::bytes.
+  end note
+  :Append listing row for every statement;
+  note right
+    Includes statement address, bytes successfully associated
+    with the statement, and original source text.
+  end note
 endwhile (no)
 :Return from Engine::pass2();
 :Engine::run finalizes AssemblyInfo;
-:Collect symbol references and instruction source map;
-:Sort definitions and references by source position;
+:Include memory, relocations, listing, diagnostics,
+symbols and source metadata in AssemblyResult;
 stop
 @enduml
-

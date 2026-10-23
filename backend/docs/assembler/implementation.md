@@ -86,9 +86,12 @@ The pipeline is:
 
 The parser builds a shared intermediate representation before either pass. It
 recognizes syntax and records operands, but it does not assign final
-addresses, resolve symbols, or emit object bytes. The mapping from the
-textbook model to the current classes and methods is shown in the
-[two-pass assembler diagram](../uml/21_assembler_two_pass.puml).
+addresses, resolve symbols, or emit object bytes. The pipeline is shown in the
+[high-level assembler flow](../uml/36_assembler_high_level_flow.puml), with
+separate flows for [parsing](../uml/38_parser_stage_flow.puml),
+[pass 1](../uml/39_pass1_stage_flow.puml),
+[pass 2](../uml/40_pass2_stage_flow.puml), and
+[instruction encoding](../uml/41_instruction_encoding_flow.puml).
 
 ## 3. Source syntax set
 
