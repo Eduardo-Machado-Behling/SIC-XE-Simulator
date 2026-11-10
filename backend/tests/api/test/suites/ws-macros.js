@@ -227,6 +227,8 @@ export default function wsMacros(ctx) {
       const types = response.result.events.map((event) => event.type);
       assert.ok(types.indexOf('ProgramAssembled') > types.indexOf('MacrosExpanded'),
         `MacrosExpanded must come before ProgramAssembled: ${types.join(', ')}`);
+      assert.ok(types.includes('ProgramCleared') && types.includes('MacrosExpanded'),
+        `both events are sent: ${types.join(', ')}`);
       assert.ok(types.indexOf('MacrosExpanded') > types.indexOf('ProgramCleared'), 'after the clear');
     });
 
@@ -263,6 +265,7 @@ export default function wsMacros(ctx) {
       assert.match(response.error.detail,
         /^6:9: error: In expansion of CARREGA \(#001, MASMAPRG\.ASM:3\): Undefined symbol 'NADA'$/m);
       const details = macrosExpanded(response);
+      checkReport(details);
       assert.equal(details.ok, true);
       assert.ok(!response.error.events.some((event) => event.type === 'ProgramAssembled'), 'nothing was assembled');
     });
