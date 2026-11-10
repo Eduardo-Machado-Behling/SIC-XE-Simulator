@@ -70,6 +70,24 @@ Token nextToken(std::string_view s, std::size_t& pos) {
   return {s.substr(start, pos - start), start};
 }
 
+// Comma-separated items outside quotes, each trimmed; an empty list has none.
+std::vector<Token> splitList(std::string_view list) {
+  std::vector<Token> items;
+  if (list.empty()) return items;
+  auto add = [&](std::size_t begin, std::size_t end) {
+    while (begin < end && isSpace(list[begin])) ++begin;
+    items.push_back({trim(list.substr(begin, end - begin)), begin});
+  };
+  bool inQuote = false;
+  std::size_t start = 0;
+  for (std::size_t i = 0; i < list.size(); ++i) {
+    if (list[i] == '\'') inQuote = !inQuote;
+    else if (list[i] == ',' && !inQuote) { add(start, i); start = i + 1; }
+  }
+  add(start, list.size());
+  return items;
+}
+
 // ---- stored body ------------------------------------------------------------
 
 // A stored body line is a sequence of pieces, never text with '#' markers, so a
@@ -87,17 +105,53 @@ using PieceLine = std::vector<Piece>;
 
 PieceLine textLine(std::string_view text) { return {{Piece::Kind::Text, std::string(text)}}; }
 
-// Display form (spec 4.4): "#i", or "#(d,i)" in a definition with nested definitions.
+// Display form of a marker (spec 4.4): "#i", or "#(d,i)" in a definition with nested definitions.
+std::string markerText(const Piece& param, bool nested) {
+  return nested ? "#(" + std::to_string(param.level) + "," + std::to_string(param.index) + ")"
+                : "#" + std::to_string(param.index);
+}
+
 std::string displayForm(const PieceLine& line, bool nested) {
   std::string out;
   for (const Piece& p : line) {
     switch (p.kind) {
       case Piece::Kind::Text: out += p.text; break;
-      case Piece::Kind::Param:
-        out += nested ? "#(" + std::to_string(p.level) + "," + std::to_string(p.index) + ")"
-                      : "#" + std::to_string(p.index);
-        break;
+      case Piece::Kind::Param: out += markerText(p, nested); break;
       case Piece::Kind::Serial: out += ".SER"; break;
+    }
+  }
+  return out;
+}
+
+// A stored line read from an expansion (spec 4.4): Param{1,i} becomes actual i. Serial
+// stays, because it is replaced only when the line goes to the output.
+PieceLine substitute(const PieceLine& line, const std::vector<std::string>& actuals) {
+  PieceLine out;
+  for (const Piece& p : line) {
+    if (p.kind == Piece::Kind::Param && p.level == 1)
+      out.push_back({Piece::Kind::Text, actuals[static_cast<std::size_t>(p.index)]});
+    else
+      out.push_back(p);
+  }
+  return out;
+}
+
+// .SER value: the serial in at least three digits (HEAD.SER -> HEAD017).
+std::string serialText(int serial) {
+  std::string digits = std::to_string(serial);
+  if (digits.size() < 3) digits.insert(0, 3 - digits.size(), '0');
+  return digits;
+}
+
+// An expanded line as it goes to the output. A marker can only be left inside a nested
+// definition, and it keeps its display form.
+std::string outputText(const PieceLine& line, int serial) {
+  std::string out;
+  for (const Piece& p : line) {
+    switch (p.kind) {
+      case Piece::Kind::Text: out += p.text; break;
+      case Piece::Kind::Param: out += markerText(p, true); break;
+      case Piece::Kind::Serial: out += serialText(serial); break;
     }
   }
   return out;
@@ -208,26 +262,15 @@ Prototype parsePrototype(std::string_view code) {
   }
   if (t2.text.empty()) return p;
 
-  // Formals: comma-separated (outside quotes), trimmed; "X=" / "X=default" are keywords.
-  const std::string_view list = code.substr(formalsAt);
-  auto addFormal = [&](std::size_t begin, std::size_t end) {
-    std::string_view item = list.substr(begin, end - begin);
-    std::size_t lead = 0;
-    while (lead < item.size() && isSpace(item[lead])) ++lead;
+  // Formals: "X" is positional, "X=" / "X=default" a keyword.
+  for (const Token& item : splitList(code.substr(formalsAt))) {
     PrototypeFormal f;
-    f.offset = formalsAt + begin + lead;
-    const std::size_t eq = item.find('=');
-    f.name = std::string(trim(item.substr(0, eq)));
-    if (eq != std::string_view::npos) f.defaultValue = std::string(trim(item.substr(eq + 1)));
+    f.offset = formalsAt + item.offset;
+    const std::size_t eq = item.text.find('=');
+    f.name = std::string(trim(item.text.substr(0, eq)));
+    if (eq != std::string_view::npos) f.defaultValue = std::string(trim(item.text.substr(eq + 1)));
     p.formals.push_back(std::move(f));
-  };
-  bool inQuote = false;
-  std::size_t start = 0;
-  for (std::size_t i = 0; i < list.size(); ++i) {
-    if (list[i] == '\'') inQuote = !inQuote;
-    else if (list[i] == ',' && !inQuote) { addFormal(start, i); start = i + 1; }
   }
-  addFormal(start, list.size());
   return p;
 }
 
@@ -263,6 +306,25 @@ struct DefinitionInProgress {
   std::vector<int> sourceLines;
 };
 
+// An expansion being read: the top frame of the expansion stack supplies the next line.
+struct Frame {
+  int definition = 0;
+  std::size_t next = 0;              // next stored line: 0 is the prototype, the last is MCEND
+  std::vector<std::string> actuals;  // #0..#n
+  int serial = 0;
+  int sourceLine = 0;                // the outermost call's source line
+  bool crlf = false;                 // generated lines end in '\r' when that call line did
+  std::size_t expansion = 0;         // its entry in result.expansions
+};
+
+// 1-based index of the formal called `name` (case-insensitive), 0 if there is none.
+std::size_t formalIndex(const MacroDefinition& def, std::string_view name) {
+  const std::string upper = toUpper(name);
+  for (std::size_t i = 0; i < def.formals.size(); ++i)
+    if (toUpper(def.formals[i].name) == upper) return i + 1;
+  return 0;
+}
+
 class OnePass {
  public:
   OnePass(const MacroProcessorOptions& options, MacroResult& result)
@@ -290,6 +352,8 @@ class OnePass {
     if (isDefn) defineStart(f, content, lineNo);
     else if (isEnd) defineEnd(f, content, lineNo);
     else if (d() > 0) store(bodyLine(content), lineNo);
+    else if (const int slot = nameSlot(toUpper(f.op)); slot >= 0)
+      call(f, content, raw.size() != content.size(), lineNo, slot);
     else copy(raw, lineNo);
   }
 
@@ -501,12 +565,119 @@ class OnePass {
     bodies_.push_back(std::move(done.lines));
   }
 
-  void copy(std::string_view raw, int lineNo) {
-    if (!result_.lineMap.empty()) result_.text += '\n';
-    result_.text += raw;
-    const int output = static_cast<int>(result_.lineMap.size()) + 1;
-    result_.lineMap.push_back({output, lineNo, LineKind::Verbatim, 0});
+  // A call in the source (spec 4.2, 4.5): the call as a '.' comment, then "LABEL EQU *"
+  // when the call has a label and the prototype has no label formal, then the body,
+  // read from a new frame on the expansion stack.
+  void call(const Fields& f, std::string_view content, bool crlf, int lineNo, int slot) {
+    const MacroName& name = result_.names[static_cast<std::size_t>(slot)];
+    const MacroDefinition& def = result_.definitions[static_cast<std::size_t>(name.definition)];
+    Frame frame;
+    frame.definition = def.index;
+    frame.actuals = bindActuals(def, f, lineNo);
+    frame.serial = ++serial_;
+    frame.sourceLine = lineNo;
+    frame.crlf = crlf;
+    frame.expansion = result_.expansions.size();
+
+    Expansion e;
+    e.serial = frame.serial;
+    e.macro = def.name;
+    e.definition = def.index;
+    e.depth = 1;  // a call in the source is top level: parent 0
+    e.callLine = lineNo;
+    e.callText = std::string(content);
+    if (!def.labelFormal.empty()) e.actuals.push_back({0, def.labelFormal, frame.actuals[0]});
+    for (std::size_t i = 0; i < def.formals.size(); ++i)
+      e.actuals.push_back({static_cast<int>(i) + 1, def.formals[i].name, frame.actuals[i + 1]});
+    e.outputFrom = outputCount() + 1;
+    result_.expansions.push_back(std::move(e));
+
+    emitGenerated("." + std::string(content), LineKind::Call, frame);
+    if (!f.label.empty() && def.labelFormal.empty())
+      emitGenerated(std::string(f.label) + " EQU *", LineKind::Label, frame);
+    frames_.push_back(std::move(frame));
+    expand();
   }
+
+  // The actual list #0..#n of a call (spec 4.2). #0 is the call's label when the prototype
+  // has a label formal. IDENT=value goes to formal IDENT, any other actual is positional,
+  // and a formal left without a value takes its default, or "". An actual in error is
+  // ignored and the call is still expanded.
+  std::vector<std::string> bindActuals(const MacroDefinition& def, const Fields& f, int lineNo) {
+    const std::size_t n = def.formals.size();
+    std::vector<std::optional<std::string>> given(n + 1);  // [0] unused: #0 is never an operand
+    auto problem = [&](const Token& item, const std::string& message) {
+      diags_.error(lineNo, static_cast<int>(f.operandsOffset + item.offset) + 1, message,
+                   static_cast<int>(std::max<std::size_t>(item.text.size(), 1)));
+    };
+    std::size_t positional = 0;
+    bool tooMany = false;
+    for (const Token& item : splitList(f.operands)) {
+      const std::size_t eq = item.text.find('=');
+      const std::string_view keyword =
+          eq == std::string_view::npos ? std::string_view{} : trim(item.text.substr(0, eq));
+      std::size_t index = 0;
+      std::string_view value = item.text;
+      if (isIdentifier(keyword)) {
+        index = formalIndex(def, keyword);
+        value = trim(item.text.substr(eq + 1));
+        if (index == 0) {
+          problem(item, "Unknown keyword '" + std::string(keyword) + "' for " + def.name);
+          continue;
+        }
+      } else if (++positional > n) {
+        if (!tooMany) problem(item, "Too many arguments for " + def.name + " (expects " + std::to_string(n) + ")");
+        tooMany = true;
+        continue;
+      } else {
+        index = positional;
+      }
+      if (given[index]) {
+        problem(item, "Argument '" + def.formals[index - 1].name + "' given twice");
+        continue;
+      }
+      given[index] = std::string(value);
+    }
+
+    std::vector<std::string> actuals(n + 1);
+    if (!def.labelFormal.empty()) actuals[0] = std::string(f.label);
+    for (std::size_t i = 1; i <= n; ++i)
+      actuals[i] = given[i] ? *given[i] : def.formals[i - 1].defaultValue.value_or("");
+    return actuals;
+  }
+
+  // Reads from the expansion stack until it is empty (spec 4.4). A stored body is the
+  // prototype, the body lines and MCEND; reading MCEND ends the expansion.
+  void expand() {
+    while (!frames_.empty()) {
+      Frame& top = frames_.back();
+      const std::vector<PieceLine>& body = bodies_[static_cast<std::size_t>(top.definition)];
+      const std::size_t at = top.next++;
+      if (at == 0) continue;  // the prototype
+      if (at + 1 >= body.size()) {
+        result_.expansions[top.expansion].outputTo = outputCount();
+        frames_.pop_back();
+        continue;
+      }
+      emitGenerated(outputText(substitute(body[at], top.actuals), top.serial), LineKind::Expanded, top);
+    }
+  }
+
+  int outputCount() const { return static_cast<int>(result_.lineMap.size()); }
+
+  void emit(std::string_view text, LineKind kind, int source, int serial) {
+    if (!result_.lineMap.empty()) result_.text += '\n';
+    result_.text += text;
+    result_.lineMap.push_back({outputCount() + 1, source, kind, serial});
+  }
+
+  // A line made by an expansion maps to the outermost call and ends like that call line.
+  void emitGenerated(std::string text, LineKind kind, const Frame& frame) {
+    if (frame.crlf) text += '\r';
+    emit(text, kind, frame.sourceLine, frame.serial);
+  }
+
+  void copy(std::string_view raw, int lineNo) { emit(raw, LineKind::Verbatim, lineNo, 0); }
 
   const MacroProcessorOptions& options_;
   MacroResult& result_;
@@ -517,6 +688,8 @@ class OnePass {
   DefinitionInProgress current_;
   std::vector<std::vector<PieceLine>> bodies_;  // stored bodies, parallel to result_.definitions;
                                                 // expansion reads these, not displayBody
+  std::vector<Frame> frames_;          // expansion stack: e = !frames_.empty()
+  int serial_ = 0;                     // serial of the last expansion
 };
 
 }  // namespace

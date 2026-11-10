@@ -219,7 +219,8 @@ TEST(definitions_are_removed_from_output) {
   CHECK(r.lineMap[0].output == 1 && r.lineMap[0].source == 1 && r.lineMap[0].kind == LineKind::Verbatim);
   CHECK(r.lineMap[1].output == 2 && r.lineMap[1].source == 6 && r.lineMap[1].kind == LineKind::Verbatim);
   CHECK(r.lineMap[2].output == 3 && r.lineMap[2].source == 7);
-  if (!r.definitions.empty())   // no '\r' in the stored body
+  CHECK(r.definitions.size() == 1);
+  if (r.definitions.size() == 1)   // no '\r' in the stored body
     CHECK((r.definitions[0].displayBody == std::vector<std::string>{"SOMA X", "        LDA #1", "        MCEND"}));
 }
 
@@ -245,6 +246,152 @@ TEST(definition_errors) {   // spec 4.6
   // Errors do not stop the processor: the definition after a stray MCEND is still read.
   auto r = MacroProcessor().process("        MCEND\nMCDEFN\nSOMA X\nMCEND\n");
   CHECK(!r.ok()); CHECK(r.definitions.size() == 1); CHECK(r.names.size() == 1);
+}
+
+// ---------------------------------------------------------------------------
+// Expansion (one level)
+static const char M3_DEFINITION[] = "MCDEFN\nM3 P,Q,R=Z\n        LDA P\n        LDA Q\n        LDA R\nMCEND\n";
+
+TEST(exercise1_seventeenth_expansion) {   // SOLUCAO_MACRO2 ex.1
+  MacroProcessorOptions o; o.isOperation = calingaertOps();
+  std::string src = EX1_DEFINITION;
+  for (int i = 0; i < 16; ++i) src += "           MOD         A, B, C\n";
+  src += "PUZZLE MOD COCONUTS, MONKEYS, LEFTOVER\n";
+  auto r = MacroProcessor(o).process(src);
+  CHECK(r.ok()); CHECK(r.expansions.size() == 17);
+  if (r.expansions.size() != 17) return;
+  CHECK(r.expansions[16].serial == 17);
+  auto out = outputLines(r, LineKind::Expanded);
+  CHECK(out.size() == 17 * 6);
+  if (out.size() < 6) return;
+  std::vector<std::string> last(out.end() - 6, out.end());
+  CHECK((last == std::vector<std::string>{"PUZZLE LOAD COCONUTS", "HEAD017 SUB MONKEYS",
+        "BRPOS HEAD017", "BRZERO HEAD017", "ADD MONKEYS", "STORE LEFTOVER"}));
+  CHECK(out[1] == "HEAD001 SUB B");
+  // An empty #0 leaves the line starting with the blanks that followed the marker.
+  CHECK(r.text.find("\n      LOAD        A\n") != std::string::npos);
+  CHECK(outputLines(r, LineKind::Label).empty());   // the label formal takes PUZZLE, no EQU
+}
+
+TEST(keyword_defaults_and_dot_marker) {   // slides 19/21
+  MacroProcessorOptions o; o.isOperation = calingaertOps();
+  auto r = MacroProcessor(o).process("MCDEFN\nINCR L=,A=ACCUM,B=1,C=ACCUM\nL LOAD A\nADD @.B\nSTORE C\nMCEND\n"
+                                      "INCR L=MARK, A=COUNT, B=1, C=COUNT\nINCR\n");
+  CHECK(r.ok());
+  CHECK((outputLines(r, LineKind::Expanded) == std::vector<std::string>{
+        "MARK LOAD COUNT", "ADD @1", "STORE COUNT", "LOAD ACCUM", "ADD @1", "STORE ACCUM"}));
+}
+
+TEST(mixed_positional_and_keyword) {
+  auto r = MacroProcessor().process(std::string(M3_DEFINITION) + "        M3 1,R=9,2\n");
+  CHECK(r.ok());
+  CHECK((outputLines(r, LineKind::Expanded) == std::vector<std::string>{"LDA 1", "LDA 2", "LDA 9"}));
+  CHECK(r.expansions.size() == 1);
+  if (r.expansions.size() != 1) return;
+  const auto& a = r.expansions[0].actuals;
+  CHECK(a.size() == 3);   // no label formal, so no #0
+  if (a.size() != 3) return;
+  CHECK(a[0].index == 1 && a[0].formal == "P" && a[0].value == "1");
+  CHECK(a[1].index == 2 && a[1].formal == "Q" && a[1].value == "2");
+  CHECK(a[2].index == 3 && a[2].formal == "R" && a[2].value == "9");
+}
+
+TEST(empty_actual) {   // slide 17: INCR , COUNT
+  auto r = MacroProcessor().process(std::string(M3_DEFINITION) + "        M3 ,2\n");
+  CHECK(r.ok());
+  CHECK((outputLines(r, LineKind::Expanded) == std::vector<std::string>{"LDA", "LDA 2", "LDA Z"}));
+  CHECK(r.expansions.size() == 1);
+  if (r.expansions.size() != 1) return;
+  CHECK(r.expansions[0].actuals.size() == 3);
+  if (r.expansions[0].actuals.size() == 3) CHECK(r.expansions[0].actuals[0].value.empty());
+}
+
+TEST(label_without_label_formal_becomes_equ) {
+  auto r = MacroProcessor().process("MCDEFN\nSOMA2 P\n        LDA P\nMCEND\nAQUI SOMA2 X\n");
+  CHECK(r.ok());
+  CHECK((outputLines(r, LineKind::Call) == std::vector<std::string>{".AQUI SOMA2 X"}));
+  CHECK((outputLines(r, LineKind::Label) == std::vector<std::string>{"AQUI EQU *"}));
+  CHECK((outputLines(r, LineKind::Expanded) == std::vector<std::string>{"LDA X"}));
+  CHECK(r.text == ".AQUI SOMA2 X\nAQUI EQU *\n        LDA X\n");
+}
+
+TEST(quotes_comments_and_registers_untouched) {   // spec 4.3
+  auto r = MacroProcessor().process(
+      "MCDEFN\nM A\n        CLEAR $A\n        BYTE C'A'\n        LDA A ; A\nMCEND\n        M BUF\n");
+  CHECK(r.ok());
+  CHECK((outputLines(r, LineKind::Expanded) == std::vector<std::string>{"CLEAR $A", "BYTE C'A'", "LDA BUF ; A"}));
+}
+
+TEST(literal_immediate_survives_expansion) {   // Review Focus 1
+  auto r = MacroProcessor().process("MCDEFN\nSOMA X\n        LDA #1\n        LDA #X\n        LDA @X\nMCEND\n"
+                                    "        SOMA 3\n");
+  CHECK(r.ok());
+  CHECK((outputLines(r, LineKind::Expanded) == std::vector<std::string>{"LDA #1", "LDA #3", "LDA @3"}));
+}
+
+TEST(case_insensitive_call) {   // Review Focus 3
+  auto r = MacroProcessor().process("MCDEFN\nSOMA X,Y,Z\n        LDA X\n        ADD Y\n        STA Z\nMCEND\n"
+                                    "        soma 1,2,3\n        soma z=3,x=1,y=2\n");
+  CHECK(r.ok());
+  CHECK((outputLines(r, LineKind::Expanded) == std::vector<std::string>{"LDA 1", "ADD 2", "STA 3",
+        "LDA 1", "ADD 2", "STA 3"}));
+  CHECK(r.expansions.size() == 2);
+  if (!r.expansions.empty()) CHECK(r.expansions[0].macro == "SOMA");
+}
+
+TEST(crlf_expansion) {   // Review Focus 2: generated lines end like their call line
+  const std::string src = "P START 0\r\n        MCDEFN\r\n        SOMA X,Y\r\n        LDA X\r\n        ADD Y\r\n"
+                          "        MCEND\r\nAQUI    SOMA A,B\r\n        SOMA C,D\n        END P\r\n";
+  auto r = MacroProcessor().process(src);
+  CHECK(r.ok());
+  CHECK(r.text == "P START 0\r\n.AQUI    SOMA A,B\r\nAQUI EQU *\r\n        LDA A\r\n        ADD B\r\n"
+                  ".        SOMA C,D\n        LDA C\n        ADD D\n        END P\r\n");
+  CHECK(r.expansions.size() == 2);
+  if (r.expansions.empty()) return;
+  CHECK(r.expansions[0].callText == "AQUI    SOMA A,B");
+  CHECK(r.expansions[0].actuals.size() == 2);
+  if (r.expansions[0].actuals.size() == 2) CHECK(r.expansions[0].actuals[1].value == "B");
+}
+
+TEST(call_errors) {   // spec 4.6, each on the call line
+  const std::string def = "MCDEFN\nSOMA X,Y,V\n        LDA X\nMCEND\n";
+  CHECK(hasError(def + "        SOMA 1,2,3,4\n", "Too many arguments for SOMA (expects 3)", 5));
+  CHECK(hasError(def + "        SOMA 1,Z=2\n", "Unknown keyword 'Z' for SOMA", 5));
+  CHECK(hasError(def + "        SOMA 1,X=2\n", "Argument 'X' given twice", 5));
+  CHECK(hasError(def + "        SOMA Y=1,y=2\n", "Argument 'Y' given twice", 5));
+
+  // The error points at the offending actual, and the call is still expanded.
+  auto r = MacroProcessor().process(def + "        SOMA 1,2,3,4\n");
+  CHECK(r.diagnostics.size() == 1);
+  if (!r.diagnostics.empty()) { CHECK(r.diagnostics[0].column == 20); CHECK(r.diagnostics[0].length == 1); }
+  CHECK(r.expansions.size() == 1);
+}
+
+TEST(line_map_kinds) {
+  const std::string src = "PROG    START 0\n        MCDEFN\nDOBRA   V\n        LDA V\n        ADD V\n"
+                          "        MCEND\n        DOBRA N\nAQUI    DOBRA M\n        END PROG\n";
+  auto r = MacroProcessor().process(src);
+  CHECK(r.ok());
+  CHECK(r.text == "PROG    START 0\n.        DOBRA N\n        LDA N\n        ADD N\n.AQUI    DOBRA M\nAQUI EQU *\n"
+                  "        LDA M\n        ADD M\n        END PROG\n");
+  struct Row { int source; LineKind kind; int serial; };
+  const Row rows[] = {{1, LineKind::Verbatim, 0}, {7, LineKind::Call, 1},     {7, LineKind::Expanded, 1},
+                      {7, LineKind::Expanded, 1}, {8, LineKind::Call, 2},     {8, LineKind::Label, 2},
+                      {8, LineKind::Expanded, 2}, {8, LineKind::Expanded, 2}, {9, LineKind::Verbatim, 0},
+                      {10, LineKind::Verbatim, 0}};
+  CHECK(r.lineMap.size() == 10);
+  for (std::size_t i = 0; i < r.lineMap.size() && i < 10; ++i) {
+    const LineOrigin& o = r.lineMap[i];
+    CHECK(o.output == static_cast<int>(i) + 1 && o.source == rows[i].source && o.kind == rows[i].kind &&
+          o.serial == rows[i].serial);
+  }
+  CHECK(r.expansions.size() == 2);
+  if (r.expansions.size() != 2) return;
+  const Expansion& e = r.expansions[0];
+  CHECK(e.serial == 1 && e.macro == "DOBRA" && e.definition == 0 && e.parent == 0 && e.depth == 1);
+  CHECK(e.callLine == 7 && e.callText == "        DOBRA N");
+  CHECK(e.outputFrom == 2 && e.outputTo == 4);
+  CHECK(r.expansions[1].serial == 2 && r.expansions[1].outputFrom == 5 && r.expansions[1].outputTo == 8);
 }
 
 int main(int argc, char** argv) {
