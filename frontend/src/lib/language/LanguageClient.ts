@@ -13,6 +13,7 @@ export type LanguageDiagnostic = {
 export type LanguageCatalog = {
     instructions: string[];
     directives: string[];
+    macroDirectives?: string[];
     registers: string[];
 };
 
