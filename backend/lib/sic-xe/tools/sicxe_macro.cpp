@@ -44,13 +44,15 @@ std::string serialName(int serial) {
   return buf;
 }
 
-// The Lines column, as the UI shows it: the source lines of the definition ("3-8"), or
-// the serial of the expansion that created the macro ("#004").
-std::string nameLines(const MacroName& n, const MacroDefinition& d) {
-  if (n.line == 0) return d.originSerial > 0 ? serialName(d.originSerial) : std::string();
+// The Lines column, as the UI shows it: the source lines of the definition, from its
+// MCDEFN line to its MCEND line ("2-7", as in "SOMA — defined at line 2"), or the serial
+// of the expansion that created the macro ("#004").
+std::string nameLines(const MacroDefinition& d) {
+  if (d.originSerial > 0) return serialName(d.originSerial);
+  const int first = d.originSourceLine;
   const int last = d.bodySourceLines.empty() ? 0 : d.bodySourceLines.back();
-  if (last > 0 && last != n.line) return std::to_string(n.line) + "-" + std::to_string(last);
-  return std::to_string(n.line);
+  if (last > first) return std::to_string(first) + "-" + std::to_string(last);
+  return std::to_string(first);
 }
 
 using Row = std::vector<std::string>;
@@ -89,7 +91,7 @@ void printTables(std::ostream& out, const MacroResult& r) {
   std::vector<Row> rows;
   for (const MacroName& n : r.names) {
     const MacroDefinition& d = r.definitions[static_cast<std::size_t>(n.definition)];
-    rows.push_back({n.name, flat(d.prototype), nameLines(n, d)});
+    rows.push_back({n.name, flat(d.prototype), nameLines(d)});
   }
   printTable(out, {"Name", "Prototype", "Lines"}, rows);
 

@@ -23,10 +23,14 @@ foreach(heading "Name table" "Definition table" "Expansions" "Trace")
   endif()
 endforeach()
 
-# The Name table: a source range for SOMA, the creating serial for MULTK, trace content.
-if(NOT out MATCHES "SOMA +L +SOMA X,Y,Z +3-7")
-  message(FATAL_ERROR "Name table lacks the range of SOMA:\n${out}")
-endif()
+# The Name table: each source definition from its MCDEFN line to its MCEND line, the
+# creating serial for MULTK, trace content.
+foreach(row "SOMA +L +SOMA X,Y,Z +2-7\n" "DOBRA +L +DOBRA V +8-11\n" "MAXIMO +MAXIMO P=,Q=,R=MAIOR +12-19\n"
+            "ESCALA +ESCALA K +20-28\n")
+  if(NOT out MATCHES "${row}")
+    message(FATAL_ERROR "Name table lacks the row '${row}':\n${out}")
+  endif()
+endforeach()
 if(NOT out MATCHES "MULTK [^\n]*#004")
   message(FATAL_ERROR "Name table lacks #004 for MULTK:\n${out}")
 endif()
