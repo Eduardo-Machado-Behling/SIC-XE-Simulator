@@ -13,6 +13,7 @@ set(ASSEMBLER_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/expression.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/isa.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/macro_processor.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/macro_remap.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/macro_text.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/parser.cpp"
 )
