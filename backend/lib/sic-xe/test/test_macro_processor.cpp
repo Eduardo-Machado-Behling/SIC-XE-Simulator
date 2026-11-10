@@ -574,6 +574,84 @@ TEST(nested_crlf) {   // generated lines end like the outermost call line
                   ".        OUTER 6\n.        INNER 6\n        LDA 6\n");
 }
 
+// A definition made by an expansion keeps the markers of the parse its lines had in the
+// source, and an actual can change how its prototype parses: the body then names a
+// formal the prototype no longer has.
+static const Diagnostic* findError(const MacroResult& r, const std::string& msg) {
+  for (const Diagnostic& d : r.diagnostics)
+    if (d.severity == Severity::Error && d.message == msg) return &d;
+  std::printf("  (wanted: %s; got:\n", msg.c_str());
+  for (const Diagnostic& d : r.diagnostics) std::printf("    %s\n", d.toString().c_str());
+  std::printf("  )\n");
+  return nullptr;
+}
+
+static bool errorAt(const MacroResult& r, const std::string& msg, int line, int column, int length) {
+  const Diagnostic* d = findError(r, msg);
+  return d && d->line == line && d->column == column && d->length == length;
+}
+
+// Lines 1-8; INNER's "LDA Q" is stored as #(2,2).
+static const char GEN_INNER[] = "MCDEFN\nGEN K\nMCDEFN\nINNER P=K,Q\nLDA Q\nMCEND\nMCEND\nPROG START 0\n";
+
+TEST(reparsed_prototype_closed_quote) {   // C'A' keeps the comma outside the quote: two formals
+  auto r = MacroProcessor().process(std::string(GEN_INNER) + "GEN C'A'\nINNER X,Y\nEND PROG\n");
+  CHECK(r.ok());
+  CHECK((outputLines(r, LineKind::Expanded) == std::vector<std::string>{"LDA Y"}));
+}
+
+TEST(reparsed_prototype_half_typed_quote) {   // C'A quotes the comma: INNER P=C'A,Q has one formal
+  auto r = MacroProcessor().process(std::string(GEN_INNER) + "GEN C'A\nINNER X,Y\nEND PROG\n");
+  CHECK(!r.ok());
+  CHECK(errorAt(r, "Body of INNER uses parameter #2 but its prototype has 1", 9, 1, 3));   // GEN, the call
+  CHECK(errorAt(r, "Too many arguments for INNER (expects 1)", 10, 9, 1));
+  CHECK(r.diagnostics.size() == 2);
+  const MacroDefinition* inner = activeDefinition(r, "INNER");
+  CHECK(inner != nullptr);
+  if (inner) CHECK((display(*inner) == std::vector<std::string>{"INNER P=C'A,Q", "LDA #2", "MCEND"}));
+  CHECK(r.text == "PROG START 0\n.GEN C'A\n.INNER X,Y\nLDA \nEND PROG\n");   // #2 has no actual
+}
+
+TEST(reparsed_prototype_half_typed_quote_one_argument) {   // no argument error is needed to reach #2
+  auto r = MacroProcessor().process(std::string(GEN_INNER) + "GEN C'A\nINNER X\nEND PROG\n");
+  CHECK(!r.ok());
+  CHECK(errorAt(r, "Body of INNER uses parameter #2 but its prototype has 1", 9, 1, 3));
+  CHECK(r.diagnostics.size() == 1);
+  CHECK(r.text == "PROG START 0\n.GEN C'A\n.INNER X\nLDA \nEND PROG\n");
+}
+
+TEST(reparsed_prototype_equals_actual) {   // L K P,Q with K = "=X" re-parses as macro L with formals "=X P", Q
+  auto r = MacroProcessor().process("MCDEFN\nGEN K\nMCDEFN\nL K P,Q\nLDA Q\nMCEND\nMCEND\nPROG START 0\n"
+                                    "GEN =X\nL X,Y\nEND PROG\n");
+  CHECK(!r.ok());
+  CHECK(errorAt(r, "Body of L uses parameter #2 but its prototype has 1", 9, 1, 3));
+  CHECK(findError(r, "Too many arguments for L (expects 1)") != nullptr);
+  CHECK(r.text == "PROG START 0\n.GEN =X\n.L X,Y\nLDA \nEND PROG\n");
+}
+
+TEST(reparsed_prototype_lost_label) {   // L K P with K = "Z=" re-parses as macro L with formal Z=P
+  auto r = MacroProcessor().process("MCDEFN\nGEN K\nMCDEFN\nL K P\nL LDA P\nMCEND\nMCEND\nPROG START 0\n"
+                                    "GEN K=Z=\nL 1\nEND PROG\n");
+  CHECK(!r.ok());
+  CHECK(errorAt(r, "Body of L uses parameter #0 but its prototype has no label formal", 9, 1, 3));
+  CHECK(r.diagnostics.size() == 1);
+  CHECK(r.text == "PROG START 0\n.GEN K=Z=\n.L 1\n LDA 1\nEND PROG\n");
+}
+
+TEST(reparsed_prototype_mcdefn_actual) {   // OPEN MCDEFN makes NEWM, with no formals, out of OPEN's body
+  auto r = MacroProcessor().process("MCDEFN\nOPEN K\nK\nNEWM\nMCDEFN\nINNER2 R\nLDA R\nMCEND\nMCEND\n"
+                                    "PROG START 0\nOPEN MCDEFN\nMCEND\nNEWM\nEND PROG\n");
+  CHECK(!r.ok());
+  CHECK(errorAt(r, "Body of NEWM uses parameter #1 but its prototype has 0", 11, 1, 4));   // OPEN, the call
+  CHECK(r.diagnostics.size() == 1);
+  const MacroDefinition* newm = activeDefinition(r, "NEWM");
+  const MacroDefinition* inner = activeDefinition(r, "INNER2");
+  CHECK(newm != nullptr && inner != nullptr);
+  if (newm) CHECK(newm->formals.empty());
+  if (inner) CHECK((inner->displayBody == std::vector<std::string>{"INNER2 R", "LDA ", "MCEND"}));
+  CHECK(r.text == "PROG START 0\n.OPEN MCDEFN\n.NEWM\nEND PROG\n");
+}
+
 // ---------------------------------------------------------------------------
 // Limits (spec 4.4): each one is an error that stops the processing
 TEST(recursion_limit) {

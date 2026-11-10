@@ -15,6 +15,14 @@ std::string markerText(const Piece& param, bool nested) {
                 : "#" + std::to_string(param.index);
 }
 
+// Actual `index`, or "" past the list: a body that outgrew its re-parsed prototype, an
+// error already reported when its definition closed.
+const std::string& actualAt(const std::vector<std::string>& actuals, int index) {
+  static const std::string none;
+  return index >= 0 && static_cast<std::size_t>(index) < actuals.size() ? actuals[static_cast<std::size_t>(index)]
+                                                                        : none;
+}
+
 }  // namespace
 
 // ---- text helpers -------------------------------------------------------------
@@ -106,7 +114,7 @@ PieceLine substitute(const PieceLine& line, const std::vector<std::string>& actu
     if (p.kind != Piece::Kind::Param)
       out.push_back(p);
     else if (p.level == 1)
-      out.push_back({Piece::Kind::Text, actuals[static_cast<std::size_t>(p.index)]});
+      out.push_back({Piece::Kind::Text, actualAt(actuals, p.index)});
     else
       out.push_back({Piece::Kind::Param, {}, p.level - 1, p.index});
   }
