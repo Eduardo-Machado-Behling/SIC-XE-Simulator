@@ -63,6 +63,9 @@ std::string displayForm(const PieceLine& line, bool nested);
 // goes to the output.
 PieceLine substitute(const PieceLine& line, const std::vector<std::string>& actuals);
 
+// .SER value: the serial in at least three digits (HEAD.SER -> HEAD017).
+std::string serialText(int serial);
+
 // An expanded line as it goes to the output. A marker can only be left inside a nested
 // definition, and it keeps its display form.
 std::string outputText(const PieceLine& line, int serial);

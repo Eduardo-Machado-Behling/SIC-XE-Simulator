@@ -1,9 +1,12 @@
 // Dependency-free test runner for the macro processor (same pattern as test_assembler.cpp).
 #include <cctype>
 #include <cstdio>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
+#include "assembler/assembler.hpp"
 #include "assembler/macro_processor.hpp"
 
 using namespace sicxe;
@@ -754,6 +757,133 @@ TEST(trace_crlf_text) {   // a step's text never carries the '\r' of a CRLF sour
   if (steps.size() != 10) return;
   CHECK(steps[0].text == "P START 0" && steps[5].text == " M");
   CHECK(steps[7].fromExpansion && steps[7].text == " LDA #1");
+}
+
+// ---------------------------------------------------------------------------
+// Assembler diagnostics moved from MASMAPRG.ASM to the source (spec 5), and the demo program (spec 7)
+
+// Prints the diagnostics when a check on them fails.
+static void dump(const char* what, const std::vector<Diagnostic>& ds) {
+  std::printf("  (%s:\n", what);
+  for (const Diagnostic& d : ds) std::printf("    %s [length %d]\n", d.toString().c_str(), d.length);
+  std::printf("  )\n");
+}
+
+TEST(assembler_error_in_expansion_maps_to_call) {
+  const std::string src = "PROG    START 0\n        MCDEFN\n        CARREGA\n        LDA NAOEXISTE\n"
+                          "        MCEND\n        LDA #1\nAQUI    CARREGA\n        END PROG\n";
+  auto r = MacroProcessor().process(src);
+  CHECK(r.ok());
+  const std::vector<Diagnostic> assembled = Assembler().assembleDetailed(r.text).info.diagnostics;
+  CHECK(assembled.size() == 1);
+  if (assembled.size() != 1) {
+    dump("assembled", assembled);
+    return;
+  }
+  CHECK(assembled[0].line == 5);   // the body line in MASMAPRG.ASM, after the call comment and AQUI EQU *
+  const std::vector<Diagnostic> mapped = remapAssemblyDiagnostics(r, src, assembled);
+  CHECK(mapped.size() == 1);
+  if (mapped.size() != 1) return;
+  const Diagnostic& d = mapped[0];
+  CHECK(d.line == 7 && d.column == 9 && d.length == 7);   // CARREGA on the call line
+  CHECK(d.severity == Severity::Error);
+  CHECK(d.message.rfind("In expansion of", 0) == 0);
+  CHECK(d.message == "In expansion of CARREGA (#001, MASMAPRG.ASM:5): " + assembled[0].message);
+
+  const SourceSpan body = mapToSource(r, src, 5, 13, 9);
+  CHECK(body.line == 7 && body.column == 9 && body.length == 7 && body.synthetic);
+  const SourceSpan copied = mapToSource(r, src, 2, 9, 3);
+  CHECK(copied.line == 6 && copied.column == 9 && copied.length == 3 && !copied.synthetic);
+  // CRLF: CARREGA ends its line, so a '\r' left on it would hide the name.
+  const std::string crlf = "PROG    START 0\r\n        MCDEFN\r\n        CARREGA\r\n        LDA NAOEXISTE\r\n"
+                           "        MCEND\r\n        LDA #1\r\nAQUI    CARREGA\r\n        END PROG\r\n";
+  const SourceSpan crlfBody = mapToSource(MacroProcessor().process(crlf), crlf, 5, 13, 9);
+  CHECK(crlfBody.line == 7 && crlfBody.column == 9 && crlfBody.length == 7 && crlfBody.synthetic);
+
+  // A nested call: the message names the innermost expansion, the span is the outermost call.
+  const std::string nested = "PROG START 0\nMCDEFN\nINTERNA\n LDA NAOEXISTE\nMCEND\nMCDEFN\nEXTERNA\n INTERNA\n"
+                             "MCEND\nL1   externa   ; lower case\n END PROG\n";
+  auto n = MacroProcessor().process(nested);
+  CHECK(n.ok());
+  const std::vector<Diagnostic> inner = Assembler().assembleDetailed(n.text).info.diagnostics;
+  CHECK(inner.size() == 1);
+  if (inner.size() != 1) {
+    dump("assembled", inner);
+    return;
+  }
+  CHECK(inner[0].line == 5);
+  const std::vector<Diagnostic> innerMapped = remapAssemblyDiagnostics(n, nested, inner);
+  CHECK(innerMapped.size() == 1);
+  if (innerMapped.size() != 1) return;
+  CHECK(innerMapped[0].line == 10 && innerMapped[0].column == 6 && innerMapped[0].length == 7);
+  CHECK(innerMapped[0].message == "In expansion of INTERNA (#002, MASMAPRG.ASM:5): " + inner[0].message);
+}
+
+TEST(verbatim_error_keeps_column) {
+  const std::string src = "PROG    START 0\n        MCDEFN\n        M\n        LDA #1\n        MCEND\n"
+                          "        LDA     NAOEXISTE\n        END PROG\n";
+  auto r = MacroProcessor().process(src);
+  CHECK(r.ok());
+  const std::vector<Diagnostic> assembled = Assembler().assembleDetailed(r.text).info.diagnostics;
+  CHECK(assembled.size() == 1);
+  if (assembled.size() != 1) {
+    dump("assembled", assembled);
+    return;
+  }
+  CHECK(assembled[0].line == 2 && assembled[0].column == 17);
+  const std::vector<Diagnostic> mapped = remapAssemblyDiagnostics(r, src, assembled);
+  CHECK(mapped.size() == 1);
+  if (mapped.size() != 1) return;
+  CHECK(mapped[0].line == 6);
+  CHECK(mapped[0].column == assembled[0].column && mapped[0].length == assembled[0].length);
+  CHECK(mapped[0].message == assembled[0].message && mapped[0].severity == assembled[0].severity);
+}
+
+TEST(remapped_message_line_numbers) {   // "first defined on line N" follows; "Missing END directive" never changes
+  const std::string src = "PROG    START 0\n        MCDEFN\nL       ROTULA V\nL       LDA V\n        MCEND\n"
+                          "DUP     ROTULA #1\nDUP     LDA #2\nW       WORD 1\nW       ROTULA #2\n";
+  auto r = MacroProcessor().process(src);
+  CHECK(r.ok());
+  const std::vector<Diagnostic> assembled = Assembler().assembleDetailed(r.text).info.diagnostics;
+  CHECK(assembled.size() == 3);
+  if (assembled.size() != 3) {
+    dump("assembled", assembled);
+    return;
+  }
+  const std::vector<Diagnostic> mapped = remapAssemblyDiagnostics(r, src, assembled);
+  CHECK(mapped.size() == 3);
+  if (mapped.size() != 3) return;
+  // DUP first defined by the expansion of line 6 (MASMAPRG.ASM:3), again on the verbatim line 7.
+  CHECK(assembled[0].message == "Duplicate symbol 'DUP' (first defined on line 3)");
+  CHECK(mapped[0].line == 7 && mapped[0].column == 1);
+  CHECK(mapped[0].message == "Duplicate symbol 'DUP' (first defined on line 6)");
+  // W first defined on the verbatim line 8 (MASMAPRG.ASM:5), again by the expansion of line 9.
+  CHECK(mapped[1].line == 9 && mapped[1].column == 9 && mapped[1].length == 6);
+  CHECK(mapped[1].message ==
+        "In expansion of ROTULA (#002, MASMAPRG.ASM:7): Duplicate symbol 'W' (first defined on line 8)");
+  // No END: the warning sits on the last statement, an expansion line, and keeps its exact message.
+  CHECK(assembled[2].severity == Severity::Warning && assembled[2].line == 7);
+  CHECK(mapped[2].message == "Missing END directive" && mapped[2].line == 9);
+}
+
+TEST(demo_program_expands_and_assembles) {   // spec 7: label formal, keywords, .SER, nested call and definition
+  std::ifstream in(SICXE_DEMO_ASM, std::ios::binary);
+  CHECK(in.good());
+  std::ostringstream text;
+  text << in.rdbuf();
+  const std::string src = text.str();
+  auto r = MacroProcessor().process(src);
+  CHECK(r.ok());
+  if (!r.ok()) dump("macro processor", r.diagnostics);
+  const AssemblyResult a = Assembler().assembleDetailed(r.text);
+  CHECK(a.ok());
+  if (!a.ok()) dump("assembler, remapped", remapAssemblyDiagnostics(r, src, a.info.diagnostics));
+  for (const char* symbol : {"FIM003", "N", "MAIOR", "TRIPLO"}) CHECK(a.info.symbols.count(symbol) == 1);
+  std::vector<std::string> macros;
+  for (const Expansion& e : r.expansions) macros.push_back(e.macro);
+  CHECK((macros == std::vector<std::string>{"DOBRA", "SOMA", "MAXIMO", "ESCALA", "MULTK"}));
+  const MacroDefinition* multk = activeDefinition(r, "MULTK");
+  CHECK(multk != nullptr && multk->originSerial == 4);
 }
 
 int main(int argc, char** argv) {
