@@ -51,6 +51,20 @@ execute_process(COMMAND "${CLI}" "${DEMO}" --bogus RESULT_VARIABLE rc ERROR_VARI
 if(NOT rc EQUAL 2)
   message(FATAL_ERROR "unknown flag: expected exit 2, got ${rc}")
 endif()
+execute_process(COMMAND "${CLI}" "${DEMO}" -o RESULT_VARIABLE rc ERROR_VARIABLE err)
+if(NOT rc EQUAL 2 OR NOT err MATCHES "-o needs a directory" OR NOT err MATCHES "usage")
+  message(FATAL_ERROR "-o without a directory: expected exit 2, the reason and usage, got ${rc}: ${err}")
+endif()
+
+# A directory is not a source file: exit 2, and nothing is written.
+file(MAKE_DIRECTORY "${WORK}/dir-input" "${WORK}/dir-output")
+execute_process(COMMAND "${CLI}" "${WORK}/dir-input" -o "${WORK}/dir-output" RESULT_VARIABLE rc ERROR_VARIABLE err)
+if(NOT rc EQUAL 2 OR NOT err MATCHES "is a directory")
+  message(FATAL_ERROR "directory input: expected exit 2 and a reason, got ${rc}: ${err}")
+endif()
+if(EXISTS "${WORK}/dir-output/MASMAPRG.ASM")
+  message(FATAL_ERROR "directory input: MASMAPRG.ASM must not be written")
+endif()
 
 # A macro error exits 1, names file:line:column on stderr and still writes the output.
 file(WRITE "${WORK}/bad.asm" "        MCDEFN\n        FOO\n        NOP\n        END\n")

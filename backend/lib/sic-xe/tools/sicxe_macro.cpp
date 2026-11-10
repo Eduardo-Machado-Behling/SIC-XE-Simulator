@@ -1,7 +1,7 @@
 // sicxe_macro: runs the macro processor on a source file and writes MASMAPRG.ASM.
 //   sicxe_macro <input> [-o <dir>] [--tables] [--trace]
-// Exit codes: 0 ok, 1 macro error (MASMAPRG.ASM is still written, so the partial
-// expansion can be inspected), 2 usage error.
+// Exit codes: 0 ok; 1 macro errors (MASMAPRG.ASM is still written, so the partial
+// expansion can be inspected); 2 usage or I/O error (input unreadable, output not written).
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
@@ -174,8 +174,13 @@ int main(int argc, char** argv) {
     const std::string a = argv[i];
     if (a == "--tables") tables = true;
     else if (a == "--trace") trace = true;
-    else if (a == "-o" && i + 1 < argc) outDir = argv[++i];
-    else if (!a.empty() && a[0] == '-') {
+    else if (a == "-o") {
+      if (i + 1 == argc) {
+        std::cerr << "sicxe_macro: -o needs a directory\n" << kUsage << '\n';
+        return 2;
+      }
+      outDir = argv[++i];
+    } else if (!a.empty() && a[0] == '-') {
       std::cerr << "sicxe_macro: unknown option '" << a << "'\n" << kUsage << '\n';
       return 2;
     } else if (input.empty()) input = a;
@@ -189,6 +194,12 @@ int main(int argc, char** argv) {
     return 2;
   }
 
+  // A directory opens as a stream on some systems and reads as empty.
+  std::error_code kind;
+  if (std::filesystem::is_directory(input, kind)) {
+    std::cerr << "sicxe_macro: cannot read '" << input << "': is a directory\n" << kUsage << '\n';
+    return 2;
+  }
   std::ifstream in(input, std::ios::binary);
   if (!in) {
     std::cerr << "sicxe_macro: cannot read '" << input << "'\n" << kUsage << '\n';
@@ -219,7 +230,7 @@ int main(int argc, char** argv) {
   out.close();
   if (!written || out.fail()) {
     std::cerr << "sicxe_macro: error writing '" << target.string() << "'\n";
-    return 1;
+    return 2;
   }
 
   if (tables) printTables(std::cout, result);
