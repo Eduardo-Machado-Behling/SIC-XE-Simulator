@@ -1,5 +1,4 @@
 // Dependency-free test runner for the macro processor (same pattern as test_assembler.cpp).
-#include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <fstream>

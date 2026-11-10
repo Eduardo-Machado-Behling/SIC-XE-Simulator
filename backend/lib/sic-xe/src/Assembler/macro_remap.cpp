@@ -16,7 +16,6 @@ using namespace macro_text;
 
 namespace {
 
-
 // The lineMap entry of a MASMAPRG.ASM line, null past the end.
 const LineOrigin* originOf(const MacroResult& r, int outputLine) {
   if (outputLine < 1 || static_cast<std::size_t>(outputLine) > r.lineMap.size()) return nullptr;
