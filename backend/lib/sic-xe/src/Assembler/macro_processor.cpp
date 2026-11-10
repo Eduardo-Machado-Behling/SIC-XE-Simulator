@@ -123,15 +123,19 @@ std::string displayForm(const PieceLine& line, bool nested) {
   return out;
 }
 
-// A stored line read from an expansion (spec 4.4): Param{1,i} becomes actual i. Serial
-// stays, because it is replaced only when the line goes to the output.
+// A stored line read from an expansion (spec 4.4): Param{1,i} becomes actual i, and
+// Param{k,i} becomes Param{k-1,i}, because the definitions nested in the body are one
+// level shallower once it is expanded. Serial stays: it is replaced only when the line
+// goes to the output.
 PieceLine substitute(const PieceLine& line, const std::vector<std::string>& actuals) {
   PieceLine out;
   for (const Piece& p : line) {
-    if (p.kind == Piece::Kind::Param && p.level == 1)
+    if (p.kind != Piece::Kind::Param)
+      out.push_back(p);
+    else if (p.level == 1)
       out.push_back({Piece::Kind::Text, actuals[static_cast<std::size_t>(p.index)]});
     else
-      out.push_back(p);
+      out.push_back({Piece::Kind::Param, {}, p.level - 1, p.index});
   }
   return out;
 }
@@ -282,8 +286,8 @@ struct FormalEntry {
   int index = 0;
 };
 
-// Where an open MCDEFN was written, for the errors that point back at it.
-struct OpenLevel {
+// A range of a source line, where an error is reported.
+struct SourceRange {
   int line = 0;
   int column = 0;
   int length = 0;
@@ -299,7 +303,8 @@ struct DefinitionInProgress {
   bool failed = false;  // missing prototype or unusable name: not entered in the tables
   std::string name, prototype, labelFormal;
   std::vector<Formal> formals;
-  int originLine = 0;
+  int originLine = 0;    // the MCDEFN line, 0 when created by an expansion
+  int originSerial = 0;  // the expansion that created it, 0 when written in the source
   int prototypeLine = 0;
   bool hasNested = false;
   std::vector<PieceLine> lines;
@@ -312,9 +317,19 @@ struct Frame {
   std::size_t next = 0;              // next stored line: 0 is the prototype, the last is MCEND
   std::vector<std::string> actuals;  // #0..#n
   int serial = 0;
-  int sourceLine = 0;                // the outermost call's source line
+  SourceRange call;                  // the outermost call's macro name: generated lines map to its
+                                     // line, and errors found while expanding are reported there
   bool crlf = false;                 // generated lines end in '\r' when that call line did
   std::size_t expansion = 0;         // its entry in result.expansions
+};
+
+// A line to process (spec 4.4): read from the source, or from the top expansion frame
+// with its markers already substituted.
+struct Line {
+  std::string_view raw;               // as read, with any '\r'
+  std::string_view content;           // without '\r'; an expansion line as text
+  int number = 0;                     // source line, 0 when read from an expansion
+  const PieceLine* pieces = nullptr;  // the expansion line, null for a source line
 };
 
 // 1-based index of the formal called `name` (case-insensitive), 0 if there is none.
@@ -330,9 +345,27 @@ class OnePass {
   OnePass(const MacroProcessorOptions& options, MacroResult& result)
       : options_(options), result_(result) {}
 
+  // A source line, then every line its call put on the expansion stack. Nothing is read
+  // once a limit has stopped the processing.
   void read(std::string_view raw, int lineNo) {
-    const std::string_view content = withoutCr(raw);
-    const std::string_view code = codeOf(content);
+    if (stopped_) return;
+    process({raw, withoutCr(raw), lineNo, nullptr});
+    expand();
+  }
+
+  void finish() {
+    if (awaitingPrototype_) missingPrototype();
+    for (const SourceRange& open : levels_) error(open, "MCDEFN without MCEND");
+    result_.diagnostics = diags_.sorted();
+  }
+
+ private:
+  int d() const { return static_cast<int>(levels_.size()); }
+
+  // One line through the Normal / Definition / Expansion logic of spec 4.4, the same for
+  // a source line and a line read from an expansion.
+  void process(const Line& line) {
+    const std::string_view code = codeOf(line.content);
     const Fields f = fields(code);
     const std::string keyword = toUpper(operationMnemonic(f.op));
     const bool isDefn = keyword == "MCDEFN";
@@ -341,31 +374,35 @@ class OnePass {
     if (awaitingPrototype_ && !isDefn && !isEnd) {
       // Comments and blank lines before the prototype do not count as one.
       if (trim(code).empty()) {
-        if (d() > 1) store(textLine(content), lineNo);
+        if (d() > 1) store(asRead(line), line);
       } else {
-        prototype(content, code, lineNo);
+        prototype(line, code);
       }
       return;
     }
     if (awaitingPrototype_) missingPrototype();
 
-    if (isDefn) defineStart(f, content, lineNo);
-    else if (isEnd) defineEnd(f, content, lineNo);
-    else if (d() > 0) store(bodyLine(content), lineNo);
-    else if (const int slot = nameSlot(toUpper(f.op)); slot >= 0)
-      call(f, content, raw.size() != content.size(), lineNo, slot);
-    else copy(raw, lineNo);
+    if (isDefn) defineStart(f, line);
+    else if (isEnd) defineEnd(f, line);
+    else if (d() > 0) store(line.pieces ? *line.pieces : bodyLine(line.content), line);
+    else if (const int slot = nameSlot(toUpper(f.op)); slot >= 0) call(f, line, slot);
+    else if (line.pieces) emitGenerated(std::string(line.content), LineKind::Expanded);
+    else copy(line.raw, line.number);
   }
 
-  void finish() {
-    if (awaitingPrototype_) missingPrototype();
-    for (const OpenLevel& open : levels_)
-      diags_.error(open.line, open.column, "MCDEFN without MCEND", open.length);
-    result_.diagnostics = diags_.sorted();
+  // A line stored as read: the source text, or the pieces of an expansion line.
+  static PieceLine asRead(const Line& line) { return line.pieces ? *line.pieces : textLine(line.content); }
+
+  // Where an error on `line` goes: `offset` of a source line, or the macro name of the
+  // outermost call for a line read from an expansion.
+  SourceRange rangeAt(const Line& line, std::size_t offset, std::size_t length) const {
+    if (line.pieces) return frames_.back().call;
+    return {line.number, static_cast<int>(offset) + 1, static_cast<int>(std::max<std::size_t>(length, 1))};
   }
 
- private:
-  int d() const { return static_cast<int>(levels_.size()); }
+  void error(const SourceRange& at, std::string message) {
+    diags_.error(at.line, at.column, std::move(message), at.length);
+  }
 
   // Assembler field rule, extended: field 1 is the operation when it names an
   // instruction, a directive, MCDEFN/MCEND or a macro defined so far.
@@ -412,60 +449,58 @@ class OnePass {
     return toPieces(content, [this](std::string_view word, std::size_t) { return findFormal(word, d()); });
   }
 
-  void keywordAlone(const Fields& f, const char* keyword, int lineNo) {
+  void keywordAlone(const Fields& f, const char* keyword, const Line& line) {
     const std::string message = std::string(keyword) + " takes no label or operands";
-    if (!f.label.empty())
-      diags_.error(lineNo, static_cast<int>(f.labelOffset) + 1, message, static_cast<int>(f.label.size()));
-    else if (!f.operands.empty())
-      diags_.error(lineNo, static_cast<int>(f.operandsOffset) + 1, message,
-                   static_cast<int>(f.operands.size()));
+    if (!f.label.empty()) error(rangeAt(line, f.labelOffset, f.label.size()), message);
+    else if (!f.operands.empty()) error(rangeAt(line, f.operandsOffset, f.operands.size()), message);
   }
 
-  void defineStart(const Fields& f, std::string_view content, int lineNo) {
+  // A definition started by an expansion records the expansion's serial (spec 4.4).
+  void defineStart(const Fields& f, const Line& line) {
     result_.hasMacros = true;
-    keywordAlone(f, "MCDEFN", lineNo);
-    levels_.push_back({lineNo, static_cast<int>(f.opOffset) + 1, static_cast<int>(f.op.size())});
+    keywordAlone(f, "MCDEFN", line);
+    levels_.push_back(rangeAt(line, f.opOffset, f.op.size()));
     if (d() == 1) {
       current_ = {};
-      current_.originLine = lineNo;
+      current_.originLine = line.number;
+      if (line.pieces) current_.originSerial = frames_.back().serial;
     } else {
       current_.hasNested = true;
-      store(textLine(content), lineNo);
+      store(asRead(line), line);
     }
     awaitingPrototype_ = true;
   }
 
-  void defineEnd(const Fields& f, std::string_view content, int lineNo) {
-    keywordAlone(f, "MCEND", lineNo);
+  void defineEnd(const Fields& f, const Line& line) {
+    keywordAlone(f, "MCEND", line);
     if (d() == 0) {
-      diags_.error(lineNo, static_cast<int>(f.opOffset) + 1, "MCEND without MCDEFN",
-                   static_cast<int>(f.op.size()));
+      error(rangeAt(line, f.opOffset, f.op.size()), "MCEND without MCDEFN");
       return;
     }
     while (!formals_.empty() && formals_.back().level == d()) formals_.pop_back();
-    store(textLine(content), lineNo);
+    store(asRead(line), line);
     levels_.pop_back();
     if (d() == 0) closeDefinition();
   }
 
   void missingPrototype() {
     awaitingPrototype_ = false;
-    const OpenLevel& open = levels_.back();
-    diags_.error(open.line, open.column, "Missing prototype after MCDEFN", open.length);
+    error(levels_.back(), "Missing prototype after MCDEFN");
     if (d() == 1) current_.failed = true;
   }
 
   // Formals of level d() are pushed before the line is stored. At level 1 the line is
   // the new definition's prototype; deeper, it is a body line whose own formal names
-  // stay as written while names of enclosing levels become markers (Figure 4.10).
-  void prototype(std::string_view content, std::string_view code, int lineNo) {
+  // stay as written while names of enclosing levels become markers (Figure 4.10). A
+  // line read from an expansion already has those markers.
+  void prototype(const Line& line, std::string_view code) {
     awaitingPrototype_ = false;
     Prototype p = parsePrototype(code);
     std::vector<std::size_t> ownNames;
     if (!p.label.empty()) ownNames.push_back(p.labelOffset);
     for (const PrototypeFormal& f : p.formals) ownNames.push_back(f.offset);
 
-    const bool usable = checkPrototype(p, lineNo, d() == 1);
+    const bool usable = checkPrototype(p, line, d() == 1);
     if (!p.label.empty()) formals_.push_back({toUpper(p.label), d(), 0});
     for (std::size_t i = 0; i < p.formals.size(); ++i)
       formals_.push_back({toUpper(p.formals[i].name), d(), static_cast<int>(i) + 1});
@@ -475,7 +510,7 @@ class OnePass {
         if (std::find(ownNames.begin(), ownNames.end(), offset) != ownNames.end()) return std::nullopt;
         return findFormal(word, d() - 1);
       };
-      store(toPieces(content, enclosingFormal), lineNo);
+      store(line.pieces ? *line.pieces : toPieces(line.content, enclosingFormal), line);
       return;
     }
     current_.failed = current_.failed || !usable;
@@ -483,17 +518,15 @@ class OnePass {
     current_.prototype = std::string(trim(code));
     current_.labelFormal = p.label;
     for (const PrototypeFormal& f : p.formals) current_.formals.push_back({f.name, f.defaultValue});
-    current_.prototypeLine = lineNo;
-    store(textLine(content), lineNo);
+    current_.prototypeLine = line.number;
+    store(textLine(line.content), line);
   }
 
   // Drops invalid and repeated formals (reporting them when `report`), so indices
   // match the formal list. Returns false when the name cannot be a macro name.
-  bool checkPrototype(Prototype& p, int lineNo, bool report) {
+  bool checkPrototype(Prototype& p, const Line& line, bool report) {
     auto problem = [&](std::size_t offset, std::size_t length, const std::string& message) {
-      if (report)
-        diags_.error(lineNo, static_cast<int>(offset) + 1, message,
-                     static_cast<int>(std::max<std::size_t>(length, 1)));
+      if (report) error(rangeAt(line, offset, length), message);
     };
     bool usable = true;
     const std::string upper = toUpper(p.name);
@@ -530,9 +563,9 @@ class OnePass {
     return usable;
   }
 
-  void store(PieceLine line, int lineNo) {
-    current_.lines.push_back(std::move(line));
-    current_.sourceLines.push_back(lineNo);
+  void store(PieceLine stored, const Line& line) {
+    current_.lines.push_back(std::move(stored));
+    current_.sourceLines.push_back(line.number);
   }
 
   // Level 1 closed: the definition enters the definition table and the name table.
@@ -549,6 +582,7 @@ class OnePass {
     def.labelFormal = std::move(done.labelFormal);
     def.formals = std::move(done.formals);
     def.originSourceLine = done.originLine;
+    def.originSerial = done.originSerial;
     def.hasNested = done.hasNested;
     for (const PieceLine& line : done.lines) def.displayBody.push_back(displayForm(line, done.hasNested));
     def.bodySourceLines = std::move(done.sourceLines);
@@ -565,50 +599,60 @@ class OnePass {
     bodies_.push_back(std::move(done.lines));
   }
 
-  // A call in the source (spec 4.2, 4.5): the call as a '.' comment, then "LABEL EQU *"
-  // when the call has a label and the prototype has no label formal, then the body,
-  // read from a new frame on the expansion stack.
-  void call(const Fields& f, std::string_view content, bool crlf, int lineNo, int slot) {
+  // A call (spec 4.2, 4.5), in the source or nested in an expansion: a new frame on the
+  // expansion stack, then the call as a '.' comment (a nested call with its actuals in
+  // place) and "LABEL EQU *" when the call has a label and the prototype has no label
+  // formal. expand() then reads the body from the frame.
+  void call(const Fields& f, const Line& line, int slot) {
     const MacroName& name = result_.names[static_cast<std::size_t>(slot)];
     const MacroDefinition& def = result_.definitions[static_cast<std::size_t>(name.definition)];
+    const bool nested = line.pieces != nullptr;
+    const int depth = static_cast<int>(frames_.size()) + 1;
     Frame frame;
+    frame.call = rangeAt(line, f.opOffset, f.op.size());
+    if (depth > options_.maxDepth) {
+      stop(frame.call, "Macro expansion too deep (limit " + std::to_string(options_.maxDepth) + "): " + def.name);
+      return;
+    }
+    if (serial_ >= options_.maxExpansions) {
+      stop(frame.call, "Too many macro expansions (limit " + std::to_string(options_.maxExpansions) + ")");
+      return;
+    }
     frame.definition = def.index;
-    frame.actuals = bindActuals(def, f, lineNo);
+    frame.actuals = bindActuals(def, f, line);
     frame.serial = ++serial_;
-    frame.sourceLine = lineNo;
-    frame.crlf = crlf;
+    frame.crlf = nested ? frames_.back().crlf : line.raw.size() != line.content.size();
     frame.expansion = result_.expansions.size();
 
     Expansion e;
     e.serial = frame.serial;
     e.macro = def.name;
     e.definition = def.index;
-    e.depth = 1;  // a call in the source is top level: parent 0
-    e.callLine = lineNo;
-    e.callText = std::string(content);
+    e.parent = nested ? frames_.back().serial : 0;
+    e.depth = depth;
+    e.callLine = frame.call.line;
+    e.callText = std::string(line.content);
     if (!def.labelFormal.empty()) e.actuals.push_back({0, def.labelFormal, frame.actuals[0]});
     for (std::size_t i = 0; i < def.formals.size(); ++i)
       e.actuals.push_back({static_cast<int>(i) + 1, def.formals[i].name, frame.actuals[i + 1]});
     e.outputFrom = outputCount() + 1;
     result_.expansions.push_back(std::move(e));
 
-    emitGenerated("." + std::string(content), LineKind::Call, frame);
-    if (!f.label.empty() && def.labelFormal.empty())
-      emitGenerated(std::string(f.label) + " EQU *", LineKind::Label, frame);
+    const bool equ = !f.label.empty() && def.labelFormal.empty();
     frames_.push_back(std::move(frame));
-    expand();
+    emitGenerated("." + std::string(line.content), LineKind::Call);
+    if (equ) emitGenerated(std::string(f.label) + " EQU *", LineKind::Label);
   }
 
   // The actual list #0..#n of a call (spec 4.2). #0 is the call's label when the prototype
   // has a label formal. IDENT=value goes to formal IDENT, any other actual is positional,
   // and a formal left without a value takes its default, or "". An actual in error is
   // ignored and the call is still expanded.
-  std::vector<std::string> bindActuals(const MacroDefinition& def, const Fields& f, int lineNo) {
+  std::vector<std::string> bindActuals(const MacroDefinition& def, const Fields& f, const Line& line) {
     const std::size_t n = def.formals.size();
     std::vector<std::optional<std::string>> given(n + 1);  // [0] unused: #0 is never an operand
     auto problem = [&](const Token& item, const std::string& message) {
-      diags_.error(lineNo, static_cast<int>(f.operandsOffset + item.offset) + 1, message,
-                   static_cast<int>(std::max<std::size_t>(item.text.size(), 1)));
+      error(rangeAt(line, f.operandsOffset + item.offset, item.text.size()), message);
     };
     std::size_t positional = 0;
     bool tooMany = false;
@@ -647,7 +691,10 @@ class OnePass {
   }
 
   // Reads from the expansion stack until it is empty (spec 4.4). A stored body is the
-  // prototype, the body lines and MCEND; reading MCEND ends the expansion.
+  // prototype, the body lines and MCEND; reading MCEND ends the expansion. Every other
+  // line goes through process(), which can push frames and add definitions, so no
+  // reference into frames_ or bodies_ is kept across it. A line headed for the output
+  // (d = 0) has its .SER replaced; a line stored in a definition keeps it.
   void expand() {
     while (!frames_.empty()) {
       Frame& top = frames_.back();
@@ -659,8 +706,19 @@ class OnePass {
         frames_.pop_back();
         continue;
       }
-      emitGenerated(outputText(substitute(body[at], top.actuals), top.serial), LineKind::Expanded, top);
+      const PieceLine pieces = substitute(body[at], top.actuals);
+      const std::string text = d() == 0 ? outputText(pieces, top.serial) : displayForm(pieces, true);
+      process({text, text, 0, &pieces});
     }
+  }
+
+  // A limit was reached (spec 4.4): the error goes to the outermost call and processing
+  // ends. The open expansions end with the output produced so far.
+  void stop(SourceRange at, std::string message) {
+    error(at, std::move(message));
+    for (const Frame& frame : frames_) result_.expansions[frame.expansion].outputTo = outputCount();
+    frames_.clear();
+    stopped_ = true;
   }
 
   int outputCount() const { return static_cast<int>(result_.lineMap.size()); }
@@ -671,10 +729,17 @@ class OnePass {
     result_.lineMap.push_back({outputCount() + 1, source, kind, serial});
   }
 
-  // A line made by an expansion maps to the outermost call and ends like that call line.
-  void emitGenerated(std::string text, LineKind kind, const Frame& frame) {
-    if (frame.crlf) text += '\r';
-    emit(text, kind, frame.sourceLine, frame.serial);
+  // A line made by the top expansion maps to the outermost call and ends like that call
+  // line. The output limit is checked here, so a source copied as is is never cut.
+  void emitGenerated(std::string text, LineKind kind) {
+    if (stopped_) return;
+    const Frame& top = frames_.back();
+    if (outputCount() >= options_.maxOutputLines) {
+      stop(top.call, "Macro output too long (limit " + std::to_string(options_.maxOutputLines) + " lines)");
+      return;
+    }
+    if (top.crlf) text += '\r';
+    emit(text, kind, top.call.line, top.serial);
   }
 
   void copy(std::string_view raw, int lineNo) { emit(raw, LineKind::Verbatim, lineNo, 0); }
@@ -682,7 +747,7 @@ class OnePass {
   const MacroProcessorOptions& options_;
   MacroResult& result_;
   Diagnostics diags_;
-  std::vector<OpenLevel> levels_;      // one per open MCDEFN: d = levels_.size()
+  std::vector<SourceRange> levels_;    // one per open MCDEFN: d = levels_.size()
   std::vector<FormalEntry> formals_;   // formal-parameter stack
   bool awaitingPrototype_ = false;     // the next line with content is a prototype
   DefinitionInProgress current_;
@@ -690,6 +755,7 @@ class OnePass {
                                                 // expansion reads these, not displayBody
   std::vector<Frame> frames_;          // expansion stack: e = !frames_.empty()
   int serial_ = 0;                     // serial of the last expansion
+  bool stopped_ = false;               // a limit ended the processing
 };
 
 }  // namespace
