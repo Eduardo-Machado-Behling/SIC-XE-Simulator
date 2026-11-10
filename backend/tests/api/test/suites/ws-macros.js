@@ -64,8 +64,11 @@ function openSimulator(url) {
   });
 }
 
-/** Loads `source` as main.asm of a new SIC-XE project; returns the `load %main.asm` response. */
-async function loadSource(ctx, source) {
+/**
+ * Loads `source` as main.asm of a new SIC-XE project; returns the open connection and the
+ * `load %main.asm` response. The caller closes the connection.
+ */
+async function openLoaded(ctx, source) {
   const { sessionId, projectId } = await sessionWithProject(ctx.api, {
     name: 'Macros',
     architecture: 'SIC-XE',
@@ -75,10 +78,18 @@ async function loadSource(ctx, source) {
   try {
     const project = await client.command(`load $${sessionId}/${projectId}`);
     assert.ok(project.result, `load $ failed: ${JSON.stringify(project.error)}`);
-    return await client.command('load %main.asm');
-  } finally {
+    return { client, response: await client.command('load %main.asm') };
+  } catch (error) {
     client.close();
+    throw error;
   }
+}
+
+/** Loads `source` as main.asm of a new SIC-XE project; returns the `load %main.asm` response. */
+async function loadSource(ctx, source) {
+  const { client, response } = await openLoaded(ctx, source);
+  client.close();
+  return response;
 }
 
 const eventsOf = (response) => response.result?.events ?? response.error?.events ?? [];
@@ -230,6 +241,37 @@ export default function wsMacros(ctx) {
       assert.ok(types.includes('ProgramCleared') && types.includes('MacrosExpanded'),
         `both events are sent: ${types.join(', ')}`);
       assert.ok(types.indexOf('MacrosExpanded') > types.indexOf('ProgramCleared'), 'after the clear');
+    });
+
+    it('runs the demo program to HALT with the values of spec 7', async () => {
+      const { client, response } = await openLoaded(ctx, DEMO);
+      try {
+        assert.ok(response.result, `load % failed: ${JSON.stringify(response.error)}`);
+        // Memory as the MemoryWrite events leave it: the loaded program, then each step.
+        const memory = new Map();
+        const apply = (events) => events.filter((event) => event.type === 'MemoryWrite').forEach((event) => {
+          event.value.forEach((byte, i) => memory.set(event.address + i, byte));
+        });
+        apply(response.result.events);
+
+        const executed = [];
+        while (!executed.includes('HALT') && executed.length < 50) {
+          const step = await client.command('step');
+          assert.ok(step.result, `step failed: ${JSON.stringify(step.error)}`);
+          apply(step.result);
+          step.result.filter((event) => event.type === 'InstructionExecuted')
+            .forEach((event) => executed.push(event.instruction?.mnemonic));
+        }
+        // DOBRA 3, MAXIMO 4 (JGT skips LDA M), MULTK 3, then HALT: the 11th.
+        assert.deepEqual(executed, ['LDA', 'ADD', 'STA', 'LDA', 'COMP', 'JGT', 'STA', 'LDA', 'MUL', 'STA', 'HALT']);
+
+        const word = (address) => [0, 1, 2].map((i) => memory.get(address + i));
+        assert.deepEqual(word(0x22), [0x00, 0x00, 0x0a], 'N = 10 at 0x22');
+        assert.deepEqual(word(0x28), [0x00, 0x00, 0x0a], 'MAIOR = 10 at 0x28');
+        assert.deepEqual(word(0x2b), [0x00, 0x00, 0x1e], 'TRIPLO = 30 at 0x2B');
+      } finally {
+        client.close();
+      }
     });
 
     it('keeps source_line on MASMAPRG.ASM, the text that was assembled', async () => {
