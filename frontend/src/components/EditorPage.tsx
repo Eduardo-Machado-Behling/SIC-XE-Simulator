@@ -20,6 +20,7 @@ import { setAssemblerLanguageClient } from "@/lib/language/sicxeLanguage";
 import { simulatorWebSocketUrl } from "@/lib/transport/urls";
 import { Project } from "@/lib/simulator/Project";
 import { DEFAULT_MAIN_SOURCE } from "@/lib/simulator/defaultMainSource";
+import { entryPointFile } from "@/lib/simulator/generatedFiles";
 import {
     getStoredProject,
     saveStoredProject,
@@ -98,29 +99,6 @@ function parentFolders(paths: string[]): string[] {
         for (let i = 1; i <= parts.length; i++) folders.add(parts.slice(0, i).join("/"));
     }
     return [...folders];
-}
-
-function hasDirective(source: string, directive: "START" | "END"): boolean {
-    return source.split(/\r?\n/).some((line) => {
-        const code = line.replace(/;.*/, "").trim();
-        if (!code || code.startsWith(".")) return false;
-        const tokens = code.split(/\s+/);
-        return tokens[0]?.toUpperCase() === directive || tokens[1]?.toUpperCase() === directive;
-    });
-}
-
-function entryPointFile(files: Record<string, string>, architecture?: string): string {
-    const paths = Object.keys(files).sort();
-    const namedSources = paths.filter((path) => /\.(asm|sic|sicxe|sxe|s)$/i.test(path));
-    const assemblySources = namedSources.length > 0
-        ? namedSources
-        : paths.filter((path) => hasDirective(files[path], "START") || hasDirective(files[path], "END"));
-    const isSicxe = architecture?.toLowerCase().replace(/[^a-z0-9]/g, "") === "sicxe";
-    const sources = assemblySources.length > 0 ? assemblySources : isSicxe ? [] : paths;
-    return sources.find((path) => hasDirective(files[path], "START")) ??
-        sources.find((path) => hasDirective(files[path], "END")) ??
-        sources.find((path) => /(^|\/)main\.(asm|sic|sicxe|sxe|s)$/i.test(path)) ??
-        sources[0] ?? (isSicxe ? "" : paths[0] ?? "");
 }
 
 function validSegment(name: string): boolean {
