@@ -1,9 +1,11 @@
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "language/LanguageServer.hpp"
 
@@ -399,6 +401,84 @@ void test_rename_refuses_names_in_uncalled_macros() {
             "rename leaves the formal of an uncalled macro alone");
 }
 
+// The ranges of a references answer, as {line, start, end} on one line each.
+std::vector<std::array<int, 3>> reference_ranges(language::AssemblerLanguageSession& session, int id, int line,
+                                                 int character) {
+    json params = cursor(line, character);
+    params["context"] = {{"includeDeclaration", true}};
+    const json response = request(session, id, "textDocument/references", params);
+    std::vector<std::array<int, 3>> ranges;
+    for (const json& location : response.at("result")) {
+        const json& range = location.at("range");
+        require(range.at("start").at("line") == range.at("end").at("line"), "a reference stays on one line");
+        ranges.push_back({range.at("start").at("line").get<int>(), range.at("start").at("character").get<int>(),
+                          range.at("end").at("character").get<int>()});
+    }
+    return ranges;
+}
+
+using Ranges = std::vector<std::array<int, 3>>;
+
+// The edits of a rename answer, sorted, in the same form.
+Ranges edit_ranges(const json& response) {
+    require(response.contains("result"), "the rename is accepted");
+    Ranges ranges;
+    for (const json& edit : response.at("result").at("changes").at("sicxe://test/main.asm")) {
+        const json& range = edit.at("range");
+        require(range.at("start").at("line") == range.at("end").at("line"), "an edit stays on one line");
+        ranges.push_back({range.at("start").at("line").get<int>(), range.at("start").at("character").get<int>(),
+                          range.at("end").at("character").get<int>()});
+    }
+    std::sort(ranges.begin(), ranges.end());
+    return ranges;
+}
+
+void test_macro_review_focus_inputs() {
+    // Review Focus 2: CRLF. Ranges end before the '\r'.
+    language::AssemblerLanguageSession crlf;
+    const json crlfDiagnostics = open_document(crlf,
+        "PROG    START 0\r\n        MCDEFN\r\n        SOMA    X\r\n        LDA     X\r\n        ADD     TOTAL\r\n"
+        "        STA     TOTAL\r\n        MCEND\r\n        SOMA    VALOR\r\nTOTAL   WORD    0\r\nVALOR   WORD    1\r\n"
+        "        END     PROG\r\n").at("diagnostics");
+    require(crlfDiagnostics.empty(), "a CRLF source with a macro has no diagnostics");
+    require((reference_ranges(crlf, 2, 8, 0) == Ranges{{8, 0, 5}, {4, 16, 21}, {5, 16, 21}}),
+            "references of a body symbol in a CRLF source");
+    require((edit_ranges(rename_at(crlf, 3, 8, 0, "SUM")) == Ranges{{4, 16, 21}, {5, 16, 21}, {8, 0, 5}}),
+            "rename of a body symbol in a CRLF source");
+    require((reference_ranges(crlf, 4, 9, 0) == Ranges{{9, 0, 5}, {7, 16, 21}}),
+            "references of an actual in a CRLF source");
+    require((edit_ranges(rename_at(crlf, 5, 9, 0, "VAL")) == Ranges{{7, 16, 21}, {9, 0, 5}}),
+            "rename of an actual in a CRLF source");
+
+    // Review Focus 3: lowercase mcdefn/mcend, SOMA called as soma with a lowercase actual.
+    language::AssemblerLanguageSession lower;
+    const json lowerDiagnostics = open_document(lower,
+        "PROG    START 0\n        mcdefn\n        SOMA    X\n        LDA     X\n        ADD     TOTAL\n        mcend\n"
+        "        soma    valor\nTOTAL   WORD    0\nVALOR   WORD    1\n        END     PROG\n").at("diagnostics");
+    require(lowerDiagnostics.empty(), "lowercase macro keywords and call have no diagnostics");
+    require((reference_ranges(lower, 6, 7, 0) == Ranges{{7, 0, 5}, {4, 16, 21}}),
+            "references of a body symbol with lowercase macro keywords");
+    require((edit_ranges(rename_at(lower, 7, 7, 0, "SUM")) == Ranges{{4, 16, 21}, {7, 0, 5}}),
+            "rename of a body symbol with lowercase macro keywords");
+    require((reference_ranges(lower, 8, 8, 0) == Ranges{{8, 0, 5}, {6, 16, 21}}),
+            "references of a lowercase actual of a lowercase call");
+    require((edit_ranges(rename_at(lower, 9, 8, 0, "VAL")) == Ranges{{6, 16, 21}, {8, 0, 5}}),
+            "rename of a lowercase actual of a lowercase call");
+
+    // Review Focus 4: tabs between the fields of the prototype and of the call.
+    language::AssemblerLanguageSession tabs;
+    const json tabDiagnostics = open_document(tabs,
+        "PROG\tSTART\t0\n\tMCDEFN\nL\tSOMA\tX,Y,Z\nL\tLDA\tX\n\tADD\tY\n\tSTA\tZ\n\tMCEND\n\tSOMA\tVA,VB,TOTAL\n"
+        "VA\tWORD\t1\nVB\tWORD\t2\nTOTAL\tRESW\t1\n\tEND\tPROG\n").at("diagnostics");
+    require(tabDiagnostics.empty(), "a tab-separated macro source has no diagnostics");
+    require((reference_ranges(tabs, 10, 10, 0) == Ranges{{10, 0, 5}, {7, 12, 17}}),
+            "references of an actual on a tab-separated call");
+    require((edit_ranges(rename_at(tabs, 11, 10, 0, "SUM")) == Ranges{{7, 12, 17}, {10, 0, 5}}),
+            "rename of an actual on a tab-separated call");
+    require((edit_ranges(rename_at(tabs, 12, 8, 0, "VC")) == Ranges{{7, 6, 8}, {8, 0, 2}}),
+            "rename of the first actual on a tab-separated call");
+}
+
 } // namespace
 
 int main() {
@@ -411,5 +491,6 @@ int main() {
     test_rename_refuses_synthetic_symbol();
     test_rename_checks_the_expansion_again();
     test_rename_refuses_names_in_uncalled_macros();
+    test_macro_review_focus_inputs();
     std::cout << "Language server protocol and feature checks passed\n";
 }
