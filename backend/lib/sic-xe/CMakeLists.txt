@@ -27,6 +27,11 @@ target_include_directories(sicxe_assembler PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+# Command line macro processor. It links the static assembler only.
+add_executable(sicxe_macro tools/sicxe_macro.cpp)
+target_link_libraries(sicxe_macro PRIVATE sicxe_assembler)
+set_target_properties(sicxe_macro PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
+
 add_library(${LIB_NAME} SHARED
     ${SOURCES}
     ${SHARED_SOURCES}
@@ -160,6 +165,16 @@ if(BUILD_TESTING)
         add_sicxe_macro_test(remapped_diagnostic_on_a_call_label_line "remap.call-label-line")
         add_sicxe_macro_test(remap_passes_through_lines_outside_the_output "remap.outside-output-passes-through")
         add_sicxe_macro_test(demo_program_expands_and_assembles "demo.expands-and-assembles")
+
+        # Smoke test of the sicxe_macro command line tool.
+        add_test(
+            NAME sicxe.macro.cli-smoke
+            COMMAND ${CMAKE_COMMAND}
+                -DCLI=$<TARGET_FILE:sicxe_macro>
+                -DDEMO=${CMAKE_CURRENT_SOURCE_DIR}/test/data/macro_demo.asm
+                -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli-smoke
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tools/cli_smoke.cmake
+        )
 
         # SICXE::load_file tests. They compile the architecture's sources instead of
         # linking the DLL, which exports only create_arch/destroy_arch on Windows.
