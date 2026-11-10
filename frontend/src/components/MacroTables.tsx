@@ -96,12 +96,16 @@ export function MacroTables({ report, onSelectExpansion }: MacroTablesProps) {
                             <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] uppercase text-zinc-400">redefined</span>
                         )}
                     </div>
-                    <table aria-label={`${definition.name} definition ${definition.index} body`} className="w-full text-xs">
+                    {/* Fixed layout: the number column is 2rem in every definition,
+                        and a long line is cut instead of widening the panel. */}
+                    <table aria-label={`${definition.name} definition ${definition.index} body`} className="w-full table-fixed text-xs">
                         <tbody className="font-mono">
                             {definition.body.map((line, position) => (
                                 <tr key={position} className="border-t border-zinc-800">
                                     <td className="w-8 py-1 pr-2 text-right text-zinc-500">{position + 1}</td>
-                                    <td className="py-1 whitespace-pre text-zinc-300">{line.text}</td>
+                                    <td className="py-1 text-zinc-300">
+                                        <span className="block overflow-hidden text-ellipsis whitespace-pre" title={line.text}>{line.text}</span>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
