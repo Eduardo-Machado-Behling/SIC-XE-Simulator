@@ -8,7 +8,8 @@ export type ExecutionEvent =
     | MemoryWriteEvent
     | MemoryClearedEvent
     | ProgramClearedEvent
-    | ProgramAssembledEvent;
+    | ProgramAssembledEvent
+    | MacrosExpandedEvent;
 
 export type InstructionFormat =
     | "format1"
@@ -138,6 +139,114 @@ export interface ProgramAssembledEvent {
     };
 }
 
+export type MacroLineKind = "verbatim" | "call" | "label" | "expanded";
+
+export type MacroTraceAction =
+    | "copy"
+    | "define-start"
+    | "prototype"
+    | "store"
+    | "define-end"
+    | "call"
+    | "read-prototype"
+    | "expansion-end"
+    | "error";
+
+export interface MacroDiagnostic {
+    severity: "error" | "warning";
+    line: number;
+    column: number;
+    length: number;
+    message: string;
+}
+
+export interface MacroName {
+    name: string;
+    definition: number;
+    line: number;
+}
+
+export interface MacroFormal {
+    name: string;
+    default: string | null;
+}
+
+export interface MacroBodyLine {
+    text: string;
+    // Source line when the definition was written in the source, else null.
+    line: number | null;
+}
+
+export interface MacroDefinition {
+    index: number;
+    name: string;
+    prototype: string;
+    labelFormal: string | null;
+    formals: MacroFormal[];
+    active: boolean;
+    origin: { kind: "source"; line: number } | { kind: "expansion"; serial: number };
+    // Prototype first, MCEND last, in display form.
+    body: MacroBodyLine[];
+}
+
+export interface MacroActual {
+    index: number;
+    formal: string;
+    value: string;
+}
+
+export interface MacroExpansion {
+    serial: number;
+    macro: string;
+    definition: number;
+    parent: number | null;
+    depth: number;
+    callLine: number;
+    callText: string;
+    actuals: MacroActual[];
+    // Output (MASMAPRG.ASM) line range of the expansion.
+    output: { from: number; to: number };
+}
+
+export interface MacroLineOrigin {
+    output: number;
+    source: number | null;
+    kind: MacroLineKind;
+    serial: number | null;
+}
+
+export interface MacroTraceStep {
+    step: number;
+    read: { from: "source"; line: number } | { from: "expansion"; serial: number; bodyLine: number };
+    // Definition-mode counter before the line was processed.
+    d: number;
+    // Expansion-mode flag.
+    e: boolean;
+    depth: number;
+    text: string;
+    action: MacroTraceAction;
+    target: { output: number } | { definition: number; bodyLine: number } | { serial: number } | null;
+}
+
+export interface MacroReport {
+    file: "MASMAPRG.ASM";
+    ok: boolean;
+    hasMacros: boolean;
+    text: string;
+    diagnostics: MacroDiagnostic[];
+    names: MacroName[];
+    definitions: MacroDefinition[];
+    expansions: MacroExpansion[];
+    lineMap: MacroLineOrigin[];
+    trace: { truncated: boolean; steps: MacroTraceStep[] };
+}
+
+// Emitted by SICXE::load_file before assembling, on success and on failure.
+export interface MacrosExpandedEvent {
+    type: "MacrosExpanded";
+    details: MacroReport;
+}
+
 export interface MemoryClearedEvent {
     type: "MemoryCleared";
 }
@@ -168,6 +277,63 @@ function symbolArray(value: unknown): AssemblySymbol[] {
     }
 
     return value.map((symbol) => ({ name: symbol.name, value: symbol.value }));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function recordArray(value: unknown, field: string): Record<string, unknown>[] {
+    if (!Array.isArray(value) || !value.every(isRecord)) {
+        throw new TypeError(`Invalid '${field}' in MacrosExpanded event`);
+    }
+    return value;
+}
+
+function requireFields(
+    items: Record<string, unknown>[],
+    field: string,
+    checks: Record<string, "string" | "number" | "boolean">,
+): void {
+    for (const item of items) {
+        for (const [key, type] of Object.entries(checks)) {
+            if (typeof item[key] !== type) {
+                throw new TypeError(`Invalid '${field}.${key}' in MacrosExpanded event`);
+            }
+        }
+    }
+}
+
+function normalizeMacroReport(raw: unknown): MacroReport {
+    if (!isRecord(raw)) {
+        throw new TypeError("Invalid details in MacrosExpanded event");
+    }
+    if (typeof raw.text !== "string" || typeof raw.ok !== "boolean" || typeof raw.hasMacros !== "boolean") {
+        throw new TypeError("Invalid text or flags in MacrosExpanded event");
+    }
+    requireFields(recordArray(raw.lineMap, "lineMap"), "lineMap", { output: "number", kind: "string" });
+    requireFields(recordArray(raw.expansions, "expansions"), "expansions", {
+        serial: "number", macro: "string", callLine: "number",
+    });
+    for (const expansion of raw.expansions as Record<string, unknown>[]) {
+        if (!isRecord(expansion.output)) {
+            throw new TypeError("Invalid 'expansions.output' in MacrosExpanded event");
+        }
+    }
+    const definitions = recordArray(raw.definitions, "definitions");
+    requireFields(definitions, "definitions", { index: "number", name: "string" });
+    for (const definition of definitions) {
+        recordArray(definition.body, "definitions.body");
+    }
+    requireFields(recordArray(raw.names, "names"), "names", { name: "string", definition: "number" });
+    recordArray(raw.diagnostics, "diagnostics");
+    if (!isRecord(raw.trace) || typeof raw.trace.truncated !== "boolean") {
+        throw new TypeError("Invalid 'trace' in MacrosExpanded event");
+    }
+    requireFields(recordArray(raw.trace.steps, "trace.steps"), "trace.steps", {
+        step: "number", text: "string", action: "string",
+    });
+    return raw as unknown as MacroReport;
 }
 
 export function bytesToNumber(bytes: number[]): number {
@@ -267,6 +433,8 @@ export function normalizeExecutionEvent(raw: unknown): ExecutionEvent {
                 details: { symbols: symbolArray(details.symbols) },
             };
         }
+        case "MacrosExpanded":
+            return { type: "MacrosExpanded", details: normalizeMacroReport(event.details) };
         case "MemoryCleared":
             return { type: "MemoryCleared" };
         case "ProgramCleared":
@@ -290,4 +458,11 @@ export function symbolsFromEvents(events: ExecutionEvent[]): AssemblySymbol[] | 
         event.type === "ProgramAssembled" || event.type === "ProgramCleared",
     );
     return assembled?.type === "ProgramAssembled" ? assembled.details.symbols : null;
+}
+
+// The report of the last macro expansion in a batch of events, or null when the
+// batch has none.
+export function macroReportFromEvents(events: ExecutionEvent[]): MacroReport | null {
+    const expanded = events.findLast((event) => event.type === "MacrosExpanded");
+    return expanded?.type === "MacrosExpanded" ? expanded.details : null;
 }

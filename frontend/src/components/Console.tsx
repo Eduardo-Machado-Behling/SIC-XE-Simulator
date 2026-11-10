@@ -30,10 +30,19 @@ function bytesText(bytes: number[]): string {
     return bytes.map((byte) => hex(byte, 2)).join(" ");
 }
 
-function eventLines(event: ExecutionEvent): { text: string; level: "info" | "success" | "warning" }[] {
+export function eventLines(event: ExecutionEvent): { text: string; level: "info" | "success" | "warning" }[] {
     switch (event.type) {
         case "ProgramAssembled":
             return [{ text: `Assembly complete · ${event.details.symbols.length} symbols`, level: "success" }];
+        case "MacrosExpanded": {
+            const count = event.details.expansions.length;
+            return event.details.hasMacros
+                ? [{
+                    text: `Macro processor · ${count} ${count === 1 ? "expansion" : "expansions"} · ${event.details.file}`,
+                    level: "success",
+                }]
+                : [{ text: "Macro processor · no macros", level: "info" }];
+        }
         case "InstructionFetched":
             return [{
                 text: `${event.preview ? "Next" : "Fetch"}  0x${hex(event.address, 5)}  ${bytesText(event.bytes)}`,
