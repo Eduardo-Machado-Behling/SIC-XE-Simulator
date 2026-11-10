@@ -7,7 +7,7 @@ import RegisterTable, { RegisterState } from "@/components/RegisterTable";
 import MemoryTable from "@/components/MemoryTable";
 import SymbolTable from "@/components/SymbolTable";
 import { MacroView } from "@/components/MacroView";
-import type { TraceLine } from "@/components/MacroTrace";
+import type { TraceLine } from "@/lib/simulator/macroBands";
 import { Tabs, type TabDefinition } from "@/components/Tabs";
 import { Separator } from "react-resizable-panels";
 import { useState } from "react";

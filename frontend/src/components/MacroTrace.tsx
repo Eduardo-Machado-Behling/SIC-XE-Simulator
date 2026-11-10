@@ -3,12 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { MacroReport, MacroTraceStep } from "@/lib/simulator/ExecutionEvent";
+import type { TraceLine } from "@/lib/simulator/macroBands";
 
 // ============================================================
 // Types
 // ============================================================
-
-export type TraceLine = { file: "source" | "output"; line: number };
 
 export type MacroTraceProps = {
     report: MacroReport;
@@ -67,6 +66,13 @@ export function MacroTrace({ report, onSelectLine }: MacroTraceProps) {
     const { steps, truncated } = report.trace;
     const [current, setCurrent] = useState(0);
     const currentRow = useRef<HTMLTableRowElement | null>(null);
+
+    // A new Run brings a new report: start again from the first step.
+    const [shown, setShown] = useState(report);
+    if (shown !== report) {
+        setShown(report);
+        setCurrent(0);
+    }
 
     useEffect(() => {
         currentRow.current?.scrollIntoView?.({ block: "nearest" });

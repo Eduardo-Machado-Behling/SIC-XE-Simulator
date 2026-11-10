@@ -12,7 +12,7 @@ import { TopBar } from "@/components/TopBar";
 import { StatusBar } from "@/components/StatusBar";
 import { ExecutionView } from "@/components/ExecutionView";
 import { ErrorModal } from "@/components/ErrorModal";
-import type { TraceLine } from "@/components/MacroTrace";
+import type { TraceLine } from "@/lib/simulator/macroBands";
 import { resolvePendingLine, resolvePendingReveal } from "@/components/pendingReveal";
 import { useBandReveal } from "@/components/useBandReveal";
 
