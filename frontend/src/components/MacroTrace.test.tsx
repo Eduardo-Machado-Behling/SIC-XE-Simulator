@@ -119,6 +119,20 @@ describe("MacroTrace", () => {
         expect(screen.getAllByRole("row")).toHaveLength(demoReport.trace.steps.length + 1);
     });
 
+    // The Text column is cut with an ellipsis so that Action stays on screen;
+    // the whole line, comment included, stays reachable as a tooltip.
+    it("keeps the whole text of a long step in its title", () => {
+        const demoReport = demo as unknown as MacroReport;
+        const long = demoReport.trace.steps.reduce((a, b) => (b.text.length > a.text.length ? b : a));
+        expect(long.text.length).toBeGreaterThan(60);
+        render(<MacroTrace report={demoReport} onSelectLine={vi.fn()} />);
+        const row = screen.getAllByRole("row")[long.step];
+        const text = within(row).getAllByRole("cell")[4];
+        const element = text.querySelector("[title]");
+        expect(element?.getAttribute("title")).toBe(long.text);
+        expect(element?.textContent).toBe(long.text);
+    });
+
     it("handles an empty trace", () => {
         renderTrace({ trace: { truncated: false, steps: [] } });
         expect(screen.getByText("No trace steps")).toBeTruthy();
