@@ -10,6 +10,7 @@ import {
     Folder,
     FolderOpen,
     FolderPlus,
+    Lock,
     Pencil,
     Trash2,
 } from "lucide-react";
@@ -18,6 +19,8 @@ export type FileNode = {
     id: string;
     name: string;
     children?: FileNode[];
+    /** Read-only file produced by the macro processor. */
+    generated?: boolean;
 };
 
 export type FileExplorerProps = {
@@ -80,8 +83,15 @@ function FileTreeRow({
             ) : <span className="w-[14px]" />}
             {isFolder
                 ? node.isOpen ? <FolderOpen size={15} className="text-sky-300" /> : <Folder size={15} className="text-sky-300" />
-                : <File size={15} className="text-zinc-500" />}
+                : node.data.generated
+                    ? <Lock size={15} className="text-amber-300" />
+                    : <File size={15} className="text-zinc-500" />}
             <span className="truncate">{node.data.name}</span>
+            {node.data.generated && (
+                <span className="ml-auto rounded bg-amber-950/60 px-1.5 text-[10px] uppercase tracking-wide text-amber-300">
+                    generated
+                </span>
+            )}
         </div>
     );
 }
@@ -118,7 +128,7 @@ export function FileExplorer({
         : "";
 
     const renameSelected = () => {
-        if (!selectedId || !selectedNode) return;
+        if (!selectedId || !selectedNode || selectedNode.generated) return;
         const name = window.prompt("Rename", selectedNode.name)?.trim();
         if (name && name !== selectedNode.name && !name.includes("/") && !name.includes("\\")) {
             onRename(selectedId, name);
@@ -146,7 +156,7 @@ export function FileExplorer({
                     <ActionButton title={`New folder in ${parentFolder || "project"}`} onClick={() => onCreateFolder(parentFolder)}>
                         <FolderPlus size={15} />
                     </ActionButton>
-                    <ActionButton title="Rename selected item" disabled={!selectedId} onClick={renameSelected}>
+                    <ActionButton title="Rename selected item" disabled={!selectedId || selectedNode?.generated} onClick={renameSelected}>
                         <Pencil size={14} />
                     </ActionButton>
                     <ActionButton title="Delete selected item" disabled={!selectedId} onClick={deleteSelected} danger>
@@ -163,6 +173,8 @@ export function FileExplorer({
                     rowHeight={28}
                     indent={16}
                     openByDefault
+                    disableDrag={(node) => node.generated === true}
+                    disableEdit={(node) => node.generated === true}
                     onMove={({ dragIds, parentId }) => onMove(dragIds, parentId ?? "")}
                     onActivate={(node) => {
                         setSelectedId(node.data.id);

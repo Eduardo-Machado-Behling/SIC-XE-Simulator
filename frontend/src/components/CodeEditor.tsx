@@ -36,6 +36,8 @@ export type CodeEditorProps = {
     onCloseTab?: () => void;
     /** Called once Monaco has mounted, useful for registering custom languages. */
     onMount?: OnMount;
+    /** Blocks edits and shows the generated badge in the tab header. */
+    readOnly?: boolean;
     /** Editor theme. Defaults to "vs-dark". */
     theme?: string;
 };
@@ -55,6 +57,7 @@ export function CodeEditor({
     executingAddress = null,
     onCloseTab,
     onMount,
+    readOnly = false,
     theme = "vs-dark",
 }: CodeEditorProps) {
     const [editorInstance, setEditorInstance] = useState<editor.IStandaloneCodeEditor | null>(null);
@@ -159,6 +162,12 @@ export function CodeEditor({
 
                     <span>{path}</span>
 
+                    {readOnly && (
+                        <span className="rounded bg-amber-950/60 px-1.5 text-[10px] uppercase tracking-wide text-amber-300">
+                            generated
+                        </span>
+                    )}
+
                     {onCloseTab && (
                         <X
                             size={14}
@@ -215,6 +224,8 @@ export function CodeEditor({
                         bracketPairColorization: { enabled: true },
                         quickSuggestions: { other: true, comments: false, strings: false },
                         suggestOnTriggerCharacters: true,
+                        readOnly,
+                        domReadOnly: readOnly,
                     }}
                 />
             </div>
