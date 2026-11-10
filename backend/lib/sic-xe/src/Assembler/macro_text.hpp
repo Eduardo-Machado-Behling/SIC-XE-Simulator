@@ -60,7 +60,8 @@ std::string displayForm(const PieceLine& line, bool nested);
 // A stored line read from an expansion (spec 4.4): Param{1,i} becomes actual i, and
 // Param{k,i} becomes Param{k-1,i}, because the definitions nested in the body are one
 // level shallower once it is expanded. Serial stays: it is replaced only when the line
-// goes to the output.
+// goes to the output. A Param{1,i} with no actual i becomes "": its definition was
+// reported when it closed.
 PieceLine substitute(const PieceLine& line, const std::vector<std::string>& actuals);
 
 // .SER value: the serial in at least three digits (HEAD.SER -> HEAD017).
