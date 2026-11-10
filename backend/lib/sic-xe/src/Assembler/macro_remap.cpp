@@ -70,9 +70,11 @@ std::string withSourceLine(const MacroResult& r, std::string message) {
 }
 
 // "In expansion of NAME (#001, MASMAPRG.ASM:12): ", naming the innermost expansion: the
-// one that emitted the line.
+// one that emitted the line. Empty when the line is not in the output.
 std::string expansionPrefix(const MacroResult& r, int outputLine) {
-  const int serial = originOf(r, outputLine)->serial;
+  const LineOrigin* origin = originOf(r, outputLine);
+  if (!origin) return {};
+  const int serial = origin->serial;
   const Expansion* e = expansionOf(r, serial);
   return "In expansion of " + (e ? e->macro : std::string()) + " (#" + serialText(serial) + ", " +
          kOutputFile + ":" + std::to_string(outputLine) + "): ";
