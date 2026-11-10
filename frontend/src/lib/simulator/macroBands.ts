@@ -1,6 +1,6 @@
 import type { editor } from "monaco-editor";
 
-import type { MacroReport } from "./ExecutionEvent";
+import type { MacroExpansion, MacroReport } from "./ExecutionEvent";
 import { isGeneratedFile } from "./generatedFiles";
 
 // A coloured run of editor lines, 1-based and inclusive.
@@ -22,10 +22,17 @@ const BAND_COLORS = 6;
 // Shared so that editors without bands get the same array on every render.
 export const NO_BANDS: EditorBand[] = [];
 
+// Top-level calls that have a band. An inverted output range (a limit error
+// on the call's comment line) has nothing to colour, so it gets none.
+function bandedExpansions(report: MacroReport): MacroExpansion[] {
+    return report.expansions.filter((expansion) =>
+        expansion.parent === null && expansion.output.from <= expansion.output.to);
+}
+
 // One colour per top-level call: its call line in the source and its whole
 // output block (nested calls included) in MASMAPRG.ASM.
 export function macroBands(report: MacroReport): MacroBands {
-    const topLevel = report.expansions.filter((expansion) => expansion.parent === null);
+    const topLevel = bandedExpansions(report);
     return {
         source: topLevel.map((expansion, index) => ({
             from: expansion.callLine, to: expansion.callLine, colorIndex: index % BAND_COLORS,
@@ -55,11 +62,11 @@ export function expansionReveal(report: MacroReport, serial: number): ExpansionR
         if (!parent) break;
         root = parent;
     }
-    const topLevel = report.expansions.filter((candidate) => candidate.parent === null);
+    const bandIndex = expansion === root ? bandedExpansions(report).indexOf(root) : -1;
     return {
         outputLine: expansion.output.from,
         sourceLine: root.callLine,
-        bandIndex: expansion === root ? topLevel.indexOf(root) : null,
+        bandIndex: bandIndex < 0 ? null : bandIndex,
     };
 }
 

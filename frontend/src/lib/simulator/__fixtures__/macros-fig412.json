@@ -1,0 +1,486 @@
+{
+  "definitions": [
+    {
+      "active": true,
+      "body": [
+        {
+          "line": 2,
+          "text": "A FORMAL1"
+        },
+        {
+          "line": 3,
+          "text": "LDA #(1,1)"
+        },
+        {
+          "line": 4,
+          "text": "MCDEFN"
+        },
+        {
+          "line": 5,
+          "text": "B FORMAL2"
+        },
+        {
+          "line": 6,
+          "text": "STA #(2,1)"
+        },
+        {
+          "line": 7,
+          "text": "MCEND"
+        },
+        {
+          "line": 8,
+          "text": "MCEND"
+        }
+      ],
+      "formals": [
+        {
+          "default": null,
+          "name": "FORMAL1"
+        }
+      ],
+      "index": 0,
+      "labelFormal": null,
+      "name": "A",
+      "origin": {
+        "kind": "source",
+        "line": 1
+      },
+      "prototype": "A FORMAL1"
+    },
+    {
+      "active": true,
+      "body": [
+        {
+          "line": null,
+          "text": "B FORMAL2"
+        },
+        {
+          "line": null,
+          "text": "STA #1"
+        },
+        {
+          "line": null,
+          "text": "MCEND"
+        }
+      ],
+      "formals": [
+        {
+          "default": null,
+          "name": "FORMAL2"
+        }
+      ],
+      "index": 1,
+      "labelFormal": null,
+      "name": "B",
+      "origin": {
+        "kind": "expansion",
+        "serial": 1
+      },
+      "prototype": "B FORMAL2"
+    }
+  ],
+  "diagnostics": [],
+  "expansions": [
+    {
+      "actuals": [
+        {
+          "formal": "FORMAL1",
+          "index": 1,
+          "value": "ACTUAL1"
+        }
+      ],
+      "callLine": 9,
+      "callText": "A ACTUAL1",
+      "definition": 0,
+      "depth": 1,
+      "macro": "A",
+      "output": {
+        "from": 1,
+        "to": 2
+      },
+      "parent": null,
+      "serial": 1
+    },
+    {
+      "actuals": [
+        {
+          "formal": "FORMAL2",
+          "index": 1,
+          "value": "ACTUAL2"
+        }
+      ],
+      "callLine": 10,
+      "callText": "B ACTUAL2",
+      "definition": 1,
+      "depth": 1,
+      "macro": "B",
+      "output": {
+        "from": 3,
+        "to": 4
+      },
+      "parent": null,
+      "serial": 2
+    }
+  ],
+  "file": "MASMAPRG.ASM",
+  "hasMacros": true,
+  "lineMap": [
+    {
+      "kind": "call",
+      "output": 1,
+      "serial": 1,
+      "source": 9
+    },
+    {
+      "kind": "expanded",
+      "output": 2,
+      "serial": 1,
+      "source": 9
+    },
+    {
+      "kind": "call",
+      "output": 3,
+      "serial": 2,
+      "source": 10
+    },
+    {
+      "kind": "expanded",
+      "output": 4,
+      "serial": 2,
+      "source": 10
+    },
+    {
+      "kind": "verbatim",
+      "output": 5,
+      "serial": null,
+      "source": 11
+    }
+  ],
+  "names": [
+    {
+      "definition": 0,
+      "line": 2,
+      "name": "A"
+    },
+    {
+      "definition": 1,
+      "line": 0,
+      "name": "B"
+    }
+  ],
+  "ok": true,
+  "text": ".A ACTUAL1\nLDA ACTUAL1\n.B ACTUAL2\nSTA ACTUAL2\n",
+  "trace": {
+    "steps": [
+      {
+        "action": "define-start",
+        "d": 0,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 1
+        },
+        "step": 1,
+        "target": null,
+        "text": "MCDEFN"
+      },
+      {
+        "action": "prototype",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 2
+        },
+        "step": 2,
+        "target": {
+          "bodyLine": 1,
+          "definition": 0
+        },
+        "text": "A FORMAL1"
+      },
+      {
+        "action": "store",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 3
+        },
+        "step": 3,
+        "target": {
+          "bodyLine": 2,
+          "definition": 0
+        },
+        "text": "LDA FORMAL1"
+      },
+      {
+        "action": "store",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 4
+        },
+        "step": 4,
+        "target": {
+          "bodyLine": 3,
+          "definition": 0
+        },
+        "text": "MCDEFN"
+      },
+      {
+        "action": "store",
+        "d": 2,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 5
+        },
+        "step": 5,
+        "target": {
+          "bodyLine": 4,
+          "definition": 0
+        },
+        "text": "B FORMAL2"
+      },
+      {
+        "action": "store",
+        "d": 2,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 6
+        },
+        "step": 6,
+        "target": {
+          "bodyLine": 5,
+          "definition": 0
+        },
+        "text": "STA FORMAL2"
+      },
+      {
+        "action": "store",
+        "d": 2,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 7
+        },
+        "step": 7,
+        "target": {
+          "bodyLine": 6,
+          "definition": 0
+        },
+        "text": "MCEND"
+      },
+      {
+        "action": "define-end",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 8
+        },
+        "step": 8,
+        "target": {
+          "bodyLine": 7,
+          "definition": 0
+        },
+        "text": "MCEND"
+      },
+      {
+        "action": "call",
+        "d": 0,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 9
+        },
+        "step": 9,
+        "target": {
+          "serial": 1
+        },
+        "text": "A ACTUAL1"
+      },
+      {
+        "action": "read-prototype",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 1,
+          "from": "expansion",
+          "serial": 1
+        },
+        "step": 10,
+        "target": null,
+        "text": "A FORMAL1"
+      },
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 2,
+          "from": "expansion",
+          "serial": 1
+        },
+        "step": 11,
+        "target": {
+          "output": 2
+        },
+        "text": "LDA ACTUAL1"
+      },
+      {
+        "action": "define-start",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 3,
+          "from": "expansion",
+          "serial": 1
+        },
+        "step": 12,
+        "target": null,
+        "text": "MCDEFN"
+      },
+      {
+        "action": "prototype",
+        "d": 1,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 4,
+          "from": "expansion",
+          "serial": 1
+        },
+        "step": 13,
+        "target": {
+          "bodyLine": 1,
+          "definition": 1
+        },
+        "text": "B FORMAL2"
+      },
+      {
+        "action": "store",
+        "d": 1,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 5,
+          "from": "expansion",
+          "serial": 1
+        },
+        "step": 14,
+        "target": {
+          "bodyLine": 2,
+          "definition": 1
+        },
+        "text": "STA #(1,1)"
+      },
+      {
+        "action": "define-end",
+        "d": 1,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 6,
+          "from": "expansion",
+          "serial": 1
+        },
+        "step": 15,
+        "target": {
+          "bodyLine": 3,
+          "definition": 1
+        },
+        "text": "MCEND"
+      },
+      {
+        "action": "expansion-end",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 7,
+          "from": "expansion",
+          "serial": 1
+        },
+        "step": 16,
+        "target": null,
+        "text": "MCEND"
+      },
+      {
+        "action": "call",
+        "d": 0,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 10
+        },
+        "step": 17,
+        "target": {
+          "serial": 2
+        },
+        "text": "B ACTUAL2"
+      },
+      {
+        "action": "read-prototype",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 1,
+          "from": "expansion",
+          "serial": 2
+        },
+        "step": 18,
+        "target": null,
+        "text": "B FORMAL2"
+      },
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 2,
+          "from": "expansion",
+          "serial": 2
+        },
+        "step": 19,
+        "target": {
+          "output": 4
+        },
+        "text": "STA ACTUAL2"
+      },
+      {
+        "action": "expansion-end",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 3,
+          "from": "expansion",
+          "serial": 2
+        },
+        "step": 20,
+        "target": null,
+        "text": "MCEND"
+      }
+    ],
+    "truncated": false
+  }
+}

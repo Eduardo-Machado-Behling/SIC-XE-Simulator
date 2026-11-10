@@ -40,6 +40,24 @@ describe("macroReportFixture", () => {
 });
 
 describe("macroBands", () => {
+    it("skips an expansion whose output range is inverted, in both lists", () => {
+        // A limit error on the call's comment line leaves from > to.
+        const broken = {
+            ...report,
+            expansions: [
+                ...report.expansions,
+                { ...report.expansions[0], serial: 9, parent: null, callLine: 20, output: { from: 12, to: 11 } },
+                { ...report.expansions[0], serial: 10, parent: null, callLine: 21, output: { from: 12, to: 12 } },
+            ],
+        };
+        const bands = macroBands(broken);
+        expect(bands.source).toHaveLength(3);
+        expect(bands.source[2]).toEqual({ from: 21, to: 21, colorIndex: 2 });
+        expect(bands.output[2]).toEqual({ from: 12, to: 12, colorIndex: 2 });
+        expect(expansionReveal(broken, 10)?.bandIndex).toBe(2);
+        expect(expansionReveal(broken, 9)?.bandIndex).toBeNull();
+    });
+
     it("colours each top-level call line and its output block alike", () => {
         expect(macroBands(report)).toEqual({
             source: [{ from: 13, to: 13, colorIndex: 0 }, { from: 14, to: 14, colorIndex: 1 }],
