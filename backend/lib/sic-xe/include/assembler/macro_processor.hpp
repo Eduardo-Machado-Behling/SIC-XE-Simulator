@@ -111,6 +111,9 @@ struct MacroProcessorOptions {
   int maxDepth = 64;
   int maxExpansions = 2000;
   int maxOutputLines = 20000;
+  // Bytes of generated text: the whole output when an expansion emits a line, each actual
+  // once bound, and all the lines expansions read. 1 MiB, the language server's document limit.
+  int maxOutputBytes = 1048576;
   int maxTraceSteps = 5000;
 };
 

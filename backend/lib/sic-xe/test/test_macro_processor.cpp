@@ -1,5 +1,6 @@
 // Dependency-free test runner for the macro processor (same pattern as test_assembler.cpp).
 #include <cctype>
+#include <chrono>
 #include <cstdio>
 #include <fstream>
 #include <sstream>
@@ -695,6 +696,89 @@ TEST(output_limit) {
     CHECK(d.message == "Macro output too long (limit 4 lines)");
     CHECK(d.line == 8 && d.column == 9 && d.length == 1);
   }
+}
+
+// The one error of r, as "line:column:length message".
+static std::string onlyError(const MacroResult& r) {
+  if (r.diagnostics.size() != 1) {
+    std::printf("  (wanted one error; got:\n");
+    for (const Diagnostic& d : r.diagnostics) std::printf("    %s\n", d.toString().c_str());
+    std::printf("  )\n");
+    return "";
+  }
+  const Diagnostic& d = r.diagnostics[0];
+  return std::to_string(d.line) + ":" + std::to_string(d.column) + ":" + std::to_string(d.length) + " " + d.message;
+}
+
+TEST(byte_limit_doubling_recursion) {   // each level doubles the actual: 2^64 bytes without a byte limit
+  const auto start = std::chrono::steady_clock::now();
+  auto r = MacroProcessor().process("PROG START 0\nMCDEFN\nDOBRA V\nLDA #V\nDOBRA V+V\nMCEND\nDOBRA 1\nEND PROG\n");
+  const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
+  CHECK(!r.ok());
+  CHECK(onlyError(r) == "7:1:5 Macro output too long (limit 1048576 bytes)");   // DOBRA, the outermost call
+  CHECK(r.text.size() <= 1048576);
+  CHECK(r.expansions.size() < 64);   // stopped long before the depth limit
+  CHECK(ms.count() < 1000);
+  std::printf("  (DOBRA V+V stopped after %zu expansions, %zu output bytes, in %lld ms)\n", r.expansions.size(),
+              r.text.size(), static_cast<long long>(ms.count()));
+}
+
+TEST(byte_limit_total_output) {   // checked where a generated line is emitted, on the whole output
+  MacroProcessorOptions o; o.maxOutputBytes = 40;
+  auto r = MacroProcessor(o).process("P START 0\nMCDEFN\nM\n        LDA X\n        LDA Y\nMCEND\n        M\n"
+                                     "        M\n        END P\n");
+  CHECK(!r.ok());
+  CHECK(onlyError(r) == "7:9:1 Macro output too long (limit 40 bytes)");
+  CHECK(r.text == "P START 0\n.        M\n        LDA X");   // 34 bytes: LDA Y would make 48
+  CHECK(r.lineMap.size() == 3);
+  if (r.expansions.size() == 1) CHECK(r.expansions[0].outputTo == 3);
+}
+
+TEST(byte_limit_long_actual) {   // checked on each actual once bound, before the call is recorded
+  MacroProcessorOptions o; o.maxOutputBytes = 8;
+  auto r = MacroProcessor(o).process("MCDEFN\nM V\n        LDA V\nMCEND\n        M 123456789\n        END P\n");
+  CHECK(!r.ok());
+  CHECK(onlyError(r) == "5:9:1 Macro output too long (limit 8 bytes)");
+  CHECK(r.expansions.empty());
+  CHECK(r.text.empty());
+}
+
+TEST(byte_limit_lines_stored_in_a_definition) {   // checked on every line an expansion reads, before it is built
+  MacroProcessorOptions o; o.maxOutputBytes = 100;
+  // Each stored line is 24 bytes and its line break, under the limit; after the prototype,
+  // MCDEFN and INNER (20 bytes) the fourth one would reach 120. None goes to the output.
+  auto r = MacroProcessor(o).process("MCDEFN\nGROW V\nMCDEFN\nINNER\nLDA V\nLDA V\nLDA V\nLDA V\nLDA V\nMCEND\n"
+                                     "MCEND\n        GROW AAAAAAAAAAAAAAAAAAAA\n        END P\n");
+  CHECK(!r.ok());
+  CHECK(onlyError(r) == "12:9:4 Macro output too long (limit 100 bytes)");   // no "MCDEFN without MCEND"
+  CHECK(r.text == ".        GROW AAAAAAAAAAAAAAAAAAAA");
+  CHECK(r.definitions.size() == 1);   // GROW only: INNER never closed
+  for (const TraceStep& s : r.trace.steps)
+    if (s.fromExpansion) CHECK(s.targetBodyLine == 0);
+}
+
+TEST(byte_limit_spares_legal_programs) {
+  // A source without macros is never cut, however long (Ruling 108).
+  MacroProcessorOptions tiny; tiny.maxOutputBytes = 16;
+  const std::string plain = "PROG START 0\nX WORD 1\nY WORD 2\n        END PROG\n";
+  auto p = MacroProcessor(tiny).process(plain);
+  CHECK(p.ok()); CHECK(p.text == plain);
+
+  // A long program with macros, under the default limit: 1000 calls among 2000 plain lines.
+  std::string src = "PROG START 0\nMCDEFN\nSOMA X,Y,Z\n        LDA X\n        ADD Y\n        STA Z\nMCEND\n";
+  for (int i = 0; i < 1000; ++i) src += "        SOMA A,B,C\n        LDA #" + std::to_string(i) + "\n        STA C\n";
+  src += "A WORD 1\nB WORD 2\nC RESW 1\n        END PROG\n";
+  auto r = MacroProcessor().process(src);
+  CHECK(r.ok()); CHECK(r.expansions.size() == 1000);
+
+  // The limit is the whole output: a program that ends exactly at it passes, one byte less stops it.
+  const std::string edge = "P START 0\nMCDEFN\nM\n        LDA X\nMCEND\n        M";   // 34 bytes of output
+  MacroProcessorOptions o; o.maxOutputBytes = 34;
+  auto at = MacroProcessor(o).process(edge);
+  CHECK(at.ok()); CHECK(at.text == "P START 0\n.        M\n        LDA X");
+  o.maxOutputBytes = 33;
+  auto over = MacroProcessor(o).process(edge);
+  CHECK(onlyError(over) == "6:9:1 Macro output too long (limit 33 bytes)");
 }
 
 // ---------------------------------------------------------------------------

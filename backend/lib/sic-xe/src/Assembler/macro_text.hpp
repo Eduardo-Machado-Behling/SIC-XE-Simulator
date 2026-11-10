@@ -64,6 +64,11 @@ std::string displayForm(const PieceLine& line, bool nested);
 // reported when it closed.
 PieceLine substitute(const PieceLine& line, const std::vector<std::string>& actuals);
 
+// Length of the text substitute(line, actuals) is written as, without building it: a
+// Param{k,i} left for a nested definition as "#(k-1,i)", and .SER as `serialLength` bytes.
+std::size_t substitutedLength(const PieceLine& line, const std::vector<std::string>& actuals,
+                              std::size_t serialLength);
+
 // .SER value: the serial in at least three digits (HEAD.SER -> HEAD017).
 std::string serialText(int serial);
 

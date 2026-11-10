@@ -96,9 +96,12 @@ class OnePass {
     expand();
   }
 
+  // A definition a limit left open is not reported: the limit ended the text early.
   void finish() {
-    if (awaitingPrototype_) missingPrototype();
-    for (const SourceRange& open : levels_) error(open, "MCDEFN without MCEND");
+    if (!stopped_) {
+      if (awaitingPrototype_) missingPrototype();
+      for (const SourceRange& open : levels_) error(open, "MCDEFN without MCEND");
+    }
     if (d() > 0) untarget(current_.traceSteps);   // never entered in the tables
     result_.diagnostics = diags_.sorted();
   }
@@ -457,6 +460,11 @@ class OnePass {
     }
     frame.definition = def.index;
     frame.actuals = bindActuals(def, f, line);
+    for (const std::string& actual : frame.actuals)
+      if (actual.size() > byteLimit()) {
+        stop(frame.call, bytesTooLong());
+        return;
+      }
     frame.serial = ++serial_;
     if (TraceStep* s = step()) {
       s->action = TraceAction::Call;
@@ -537,11 +545,22 @@ class OnePass {
   // push frames and add definitions, so no reference into frames_ or bodies_ is kept
   // across it. A line headed for the output (d = 0) has its .SER replaced; a line stored
   // in a definition keeps it.
+  //
+  // Every line read counts towards the byte limit, with its line break, before it is
+  // built: a line that repeats a formal grows faster than any actual (DOBRA V+V doubles
+  // it at each level), and a line stored in a definition never reaches emitGenerated.
   void expand() {
     while (!frames_.empty()) {
       Frame& top = frames_.back();
       const std::vector<PieceLine>& body = bodies_[static_cast<std::size_t>(top.definition)];
       const std::size_t at = top.next++;
+      const std::size_t serialLength = d() == 0 ? serialText(top.serial).size() : 4;  // ".SER"
+      const std::size_t length = substitutedLength(body[at], top.actuals, serialLength) + 1;
+      if (readBytes_ + length > byteLimit()) {
+        stop(top.call, bytesTooLong());
+        return;
+      }
+      readBytes_ += length;
       const PieceLine pieces = substitute(body[at], top.actuals);
       const std::string text = d() == 0 ? outputText(pieces, top.serial) : displayForm(pieces, true);
       const Line line{text, text, 0, &pieces, static_cast<int>(at) + 1};
@@ -570,6 +589,12 @@ class OnePass {
 
   int outputCount() const { return static_cast<int>(result_.lineMap.size()); }
 
+  std::size_t byteLimit() const { return static_cast<std::size_t>(std::max(0, options_.maxOutputBytes)); }
+
+  std::string bytesTooLong() const {
+    return "Macro output too long (limit " + std::to_string(options_.maxOutputBytes) + " bytes)";
+  }
+
   void emit(std::string_view text, LineKind kind, int source, int serial) {
     if (!result_.lineMap.empty()) result_.text += '\n';
     result_.text += text;
@@ -577,7 +602,8 @@ class OnePass {
   }
 
   // A line made by the top expansion maps to the outermost call and ends like that call
-  // line. The output limit is checked here, so a source copied as is is never cut.
+  // line. The output limits are checked here, on the whole output, so a source copied as
+  // is is never cut.
   void emitGenerated(std::string text, LineKind kind) {
     if (stopped_) return;
     const Frame& top = frames_.back();
@@ -586,6 +612,11 @@ class OnePass {
       return;
     }
     if (top.crlf) text += '\r';
+    const std::size_t bytes = result_.text.size() + (result_.lineMap.empty() ? 0 : 1) + text.size();
+    if (bytes > byteLimit()) {
+      stop(top.call, bytesTooLong());
+      return;
+    }
     emit(text, kind, top.call.line, top.serial);
   }
 
@@ -611,6 +642,7 @@ class OnePass {
                                                 // expansion reads these, not displayBody
   std::vector<Frame> frames_;          // expansion stack: e = !frames_.empty()
   int serial_ = 0;                     // serial of the last expansion
+  std::size_t readBytes_ = 0;          // bytes of the lines read from expansions, line breaks included
   bool stopped_ = false;               // a limit ended the processing
   std::optional<std::size_t> step_;    // trace step of the line being processed; none past the limit
   bool lineFailed_ = false;            // the line being processed reported an error
