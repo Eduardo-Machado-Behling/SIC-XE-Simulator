@@ -44,6 +44,15 @@ std::string serialName(int serial) {
   return buf;
 }
 
+// The Lines column, as the UI shows it: the source lines of the definition ("3-8"), or
+// the serial of the expansion that created the macro ("#004").
+std::string nameLines(const MacroName& n, const MacroDefinition& d) {
+  if (n.line == 0) return d.originSerial > 0 ? serialName(d.originSerial) : std::string();
+  const int last = d.bodySourceLines.empty() ? 0 : d.bodySourceLines.back();
+  if (last > 0 && last != n.line) return std::to_string(n.line) + "-" + std::to_string(last);
+  return std::to_string(n.line);
+}
+
 using Row = std::vector<std::string>;
 
 // Prints a header, a rule and the rows with every column padded to its widest cell.
@@ -80,7 +89,7 @@ void printTables(std::ostream& out, const MacroResult& r) {
   std::vector<Row> rows;
   for (const MacroName& n : r.names) {
     const MacroDefinition& d = r.definitions[static_cast<std::size_t>(n.definition)];
-    rows.push_back({n.name, flat(d.prototype), std::to_string(d.displayBody.size())});
+    rows.push_back({n.name, flat(d.prototype), nameLines(n, d)});
   }
   printTable(out, {"Name", "Prototype", "Lines"}, rows);
 
@@ -193,14 +202,23 @@ int main(int argc, char** argv) {
 
   std::error_code ec;
   std::filesystem::create_directories(outDir, ec);
-  const std::filesystem::path target = std::filesystem::path(outDir) / "MASMAPRG.ASM";
+  if (ec) {
+    std::cerr << "sicxe_macro: cannot create '" << outDir << "': " << ec.message() << '\n';
+    return 2;
+  }
+  const std::filesystem::path target = std::filesystem::path(outDir) / std::string(kMacroOutputFile);
   std::ofstream out(target, std::ios::binary);
   if (!out) {
     std::cerr << "sicxe_macro: cannot write '" << target.string() << "'\n";
     return 2;
   }
   out.write(result.text.data(), static_cast<std::streamsize>(result.text.size()));
+  const bool written = out.good();
   out.close();
+  if (!written || out.fail()) {
+    std::cerr << "sicxe_macro: error writing '" << target.string() << "'\n";
+    return 1;
+  }
 
   if (tables) printTables(std::cout, result);
   if (trace) {
