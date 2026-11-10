@@ -68,6 +68,8 @@ if(BUILD_TESTING)
     list(FILTER TEST_SOURCES EXCLUDE REGEX "/demo\\.cpp$")
     # The macro processor has its own test runner (sicxe_macro_tests).
     list(FILTER TEST_SOURCES EXCLUDE REGEX "/test_macro_processor\\.cpp$")
+    # So does SICXE::load_file (sicxe_load_tests).
+    list(FILTER TEST_SOURCES EXCLUDE REGEX "/test_load\\.cpp$")
 
     message(STATUS
         "${LIB_NAME}: found ${TEST_SOURCES}"
@@ -158,6 +160,27 @@ if(BUILD_TESTING)
         add_sicxe_macro_test(remapped_diagnostic_on_a_call_label_line "remap.call-label-line")
         add_sicxe_macro_test(remap_passes_through_lines_outside_the_output "remap.outside-output-passes-through")
         add_sicxe_macro_test(demo_program_expands_and_assembles "demo.expands-and-assembles")
+
+        # SICXE::load_file tests. They compile the architecture's sources instead of
+        # linking the DLL, which exports only create_arch/destroy_arch on Windows.
+        set(LOAD_TEST_SOURCES ${SOURCES})
+        list(FILTER LOAD_TEST_SOURCES EXCLUDE REGEX "/src/main\\.cpp$")
+        add_executable(sicxe_load_tests
+            "${CMAKE_CURRENT_SOURCE_DIR}/test/test_load.cpp"
+            ${LOAD_TEST_SOURCES}
+            ${SHARED_SOURCES}
+        )
+        target_link_libraries(sicxe_load_tests PRIVATE sicxe_assembler nlohmann_json::nlohmann_json)
+
+        function(add_sicxe_load_test CASE_NAME DESCRIPTION)
+            add_test(
+                NAME "sicxe.load.${DESCRIPTION}"
+                COMMAND sicxe_load_tests "${CASE_NAME}"
+            )
+        endfunction()
+
+        add_sicxe_load_test(latin1_comment_still_reports_macros "latin1-comment-still-reports-macros")
+        add_sicxe_load_test(macro_report_replaces_invalid_utf8 "macro-report-replaces-invalid-utf8")
 
         add_sicxe_test(code_memory_is_sparse_and_merges "code-memory.sparse-segment-merging")
         add_sicxe_test(spec_example_style_program "assembly.example-program-encoding")
