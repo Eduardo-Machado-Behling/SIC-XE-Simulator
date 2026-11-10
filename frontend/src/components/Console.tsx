@@ -39,12 +39,13 @@ export function eventLines(event: ExecutionEvent): { text: string; level: "info"
             if (!event.details.ok) {
                 return [{ text: `Macro processor failed · ${event.details.file}`, level: "error" }];
             }
+            // A source without macros runs exactly as before: no line of its own.
             return event.details.hasMacros
                 ? [{
                     text: `Macro processor · ${count} ${count === 1 ? "expansion" : "expansions"} · ${event.details.file}`,
                     level: "success",
                 }]
-                : [{ text: "Macro processor · no macros", level: "info" }];
+                : [];
         }
         case "InstructionFetched":
             return [{
