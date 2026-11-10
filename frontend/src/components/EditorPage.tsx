@@ -291,6 +291,11 @@ export default function EditorPage({ projectId }: PageProps) {
     const reportCommandError = useCallback((reason: unknown) => {
         if (reason instanceof SimulatorCommandError) {
             if (reason.events?.length) applyExecutionEvents(reason.events, false);
+            // A Run that failed in the macro processor, or in the assembler
+            // after it, still writes the processor's line before the error.
+            // The failure's other events stay out of the console.
+            const macroEvents = reason.events?.filter((event) => event.type === "MacrosExpanded") ?? [];
+            if (macroEvents.length > 0) consoleHandleRef.current?.writeEvents(macroEvents);
             consoleHandleRef.current?.log(reason.problem.detail || reason.message, "error");
             setActionError({
                 title: reason.problem.title,

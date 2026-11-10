@@ -8,6 +8,7 @@ import type { ConsoleHandle, ConsoleProps } from "@/components/Console";
 import demoPayload from "@/lib/simulator/__fixtures__/macros-demo.json";
 import type { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
 import type { ExecutionEvent, MacroReport } from "@/lib/simulator/ExecutionEvent";
+import { SimulatorCommandError } from "@/lib/transport/SimulatorTransport";
 
 // The page with its backends faked: the simulator, the project store and the
 // language service. Nothing here opens a socket or a request.
@@ -79,6 +80,20 @@ const demo = demoPayload as unknown as MacroReport;
 function expanded(details: MacroReport): ExecutionEvent {
     return { type: "MacrosExpanded", details };
 }
+
+// A lone MCEND: the processor stops before any definition.
+const loneMcend: MacroReport = {
+    ...demo,
+    ok: false,
+    hasMacros: false,
+    text: "        MCEND",
+    names: [],
+    definitions: [],
+    expansions: [],
+    lineMap: [],
+    trace: { truncated: false, steps: [] },
+    diagnostics: [{ severity: "error", line: 1, column: 9, length: 5, message: "MCEND without MCDEFN" }],
+};
 
 function editorProps(path: string): CodeEditorProps {
     return editors.get(path) as CodeEditorProps;
@@ -161,6 +176,37 @@ describe("EditorPage with the macro processor", () => {
 
             await user.click(screen.getByTitle("Clear memory, assembly data, and registers"));
             expect(editorProps("main.asm").selectedLines).toBeNull();
+        });
+    });
+
+    describe("a failed Run (F5)", () => {
+        it("writes the macro processor's line before the error detail", async () => {
+            const user = await openPage();
+            fake.loadFile.mockRejectedValueOnce(new SimulatorCommandError(
+                { type: "assembly-error", status: 422, title: "Macro processing failed", detail: "1:9: MCEND without MCDEFN" },
+                [expanded(loneMcend)],
+            ));
+            await run(user);
+
+            expect(consoleCalls.slice(1)).toEqual([
+                ["writeEvents", [expanded(loneMcend)]],
+                ["log", "1:9: MCEND without MCDEFN", "error"],
+            ]);
+        });
+
+        it("writes the expansion line, and only it, when the assembler fails after the processor", async () => {
+            const user = await openPage();
+            const cleared: ExecutionEvent = { type: "ProgramCleared" };
+            fake.loadFile.mockRejectedValueOnce(new SimulatorCommandError(
+                { type: "assembly-error", status: 422, title: "Assembly failed", detail: "5: unknown mnemonic" },
+                [expanded(demo), cleared],
+            ));
+            await run(user);
+
+            expect(consoleCalls.slice(1)).toEqual([
+                ["writeEvents", [expanded(demo)]],
+                ["log", "5: unknown mnemonic", "error"],
+            ]);
         });
     });
 });
