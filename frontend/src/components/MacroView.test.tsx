@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { MacroView } from "@/components/MacroView";
+import demoPayload from "@/lib/simulator/__fixtures__/macros-demo.json";
+import type { MacroReport } from "@/lib/simulator/ExecutionEvent";
 import { macroReportFixture } from "@/lib/simulator/macroFixtures";
 
 function renderView(report = macroReportFixture, onSelectExpansion = vi.fn()) {
@@ -82,5 +84,31 @@ describe("MacroView", () => {
         await userEvent.click(screen.getByRole("tab", { name: "Trace" }));
         expect(screen.getByRole("tab", { name: "Tables" })).toBeTruthy();
         expect(within(screen.getByRole("tabpanel", { name: "Trace" })).getByText("Trace")).toBeTruthy();
+    });
+
+    describe("with the real demo payload", () => {
+        const demo = demoPayload as MacroReport;
+
+        it("renders the three tables with five expansion rows", () => {
+            renderView(demo);
+            const names = screen.getByRole("table", { name: "Macro name table" });
+            expect(within(names).getByRole("cell", { name: "MULTK" })).toBeTruthy();
+            const expansions = screen.getByRole("table", { name: "Macro expansion table" });
+            expect(within(expansions).getAllByRole("row")).toHaveLength(1 + 5);
+            expect(screen.getAllByRole("group").length).toBe(demo.definitions.length);
+        });
+
+        it("heads MULTK's definition with the expansion that created it", () => {
+            renderView(demo);
+            expect(screen.getByText("MULTK — created by expansion #004")).toBeTruthy();
+        });
+
+        it("shows the creating expansion, not 0, in the Lines column of MULTK", () => {
+            renderView(demo);
+            const row = within(screen.getByRole("table", { name: "Macro name table" }))
+                .getByRole("cell", { name: "MULTK" }).closest("tr")!;
+            const cells = within(row).getAllByRole("cell");
+            expect(cells[2].textContent).toBe("#004");
+        });
     });
 });
