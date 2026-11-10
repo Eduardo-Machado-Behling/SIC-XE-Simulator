@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolvePendingReveal, type RevealState } from "@/components/pendingReveal";
+import { resolvePendingLine, resolvePendingReveal, type RevealState } from "@/components/pendingReveal";
 import { macroBands } from "@/lib/simulator/macroBands";
 import { macroReportFixture } from "@/lib/simulator/macroFixtures";
 
@@ -69,5 +69,45 @@ describe("resolvePendingReveal", () => {
         expect(resolvePendingReveal(topLevel.serial, { ...base, bands: null }))
             .toEqual({ actions: [], pending: null });
         expect(resolvePendingReveal(99999, base)).toEqual({ actions: [], pending: null });
+    });
+});
+
+describe("resolvePendingLine", () => {
+    const output = { file: "output", line: 7 } as const;
+    const source = { file: "source", line: 3 } as const;
+
+    it("does nothing without a request", () => {
+        expect(resolvePendingLine(null, base)).toEqual({ actions: [], pending: null });
+    });
+
+    it("keeps an output request until the split view is shown and mounted, then runs it once", () => {
+        expect(resolvePendingLine(output, { ...base, outputMounted: false }))
+            .toEqual({ actions: [], pending: output });
+        expect(resolvePendingLine(output, { ...base, splitShown: false }))
+            .toEqual({ actions: [], pending: output });
+        expect(resolvePendingLine(output, base))
+            .toEqual({ actions: [{ editor: "output", kind: "line", line: 7 }], pending: null });
+    });
+
+    it("reveals the output line in the main editor when MASMAPRG.ASM is the active file", () => {
+        expect(resolvePendingLine(output, { ...base, generatedActive: true, splitPossible: false, splitShown: false }))
+            .toEqual({ actions: [{ editor: "source", kind: "line", line: 7 }], pending: null });
+    });
+
+    it("reveals a source line only while the entry file is open in the source pane", () => {
+        expect(resolvePendingLine(source, base))
+            .toEqual({ actions: [{ editor: "source", kind: "line", line: 3 }], pending: null });
+        expect(resolvePendingLine(source, { ...base, sourceActive: false })).toEqual({ actions: [], pending: null });
+        expect(resolvePendingLine(source, { ...base, generatedActive: true, sourceActive: false }))
+            .toEqual({ actions: [], pending: null });
+    });
+
+    it("drops the request once the entry file was edited", () => {
+        expect(resolvePendingLine(output, { ...base, bands: null })).toEqual({ actions: [], pending: null });
+        expect(resolvePendingLine(source, { ...base, bands: null })).toEqual({ actions: [], pending: null });
+    });
+
+    it("drops an output request when no split view is possible", () => {
+        expect(resolvePendingLine(output, { ...base, splitPossible: false })).toEqual({ actions: [], pending: null });
     });
 });

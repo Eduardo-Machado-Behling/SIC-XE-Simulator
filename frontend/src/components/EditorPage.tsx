@@ -12,7 +12,8 @@ import { TopBar } from "@/components/TopBar";
 import { StatusBar } from "@/components/StatusBar";
 import { ExecutionView } from "@/components/ExecutionView";
 import { ErrorModal } from "@/components/ErrorModal";
-import { resolvePendingReveal } from "@/components/pendingReveal";
+import type { TraceLine } from "@/components/MacroTrace";
+import { resolvePendingLine, resolvePendingReveal } from "@/components/pendingReveal";
 import { useBandReveal } from "@/components/useBandReveal";
 
 import { Simulator } from "@/lib/simulator/Simulator";
@@ -423,8 +424,15 @@ export default function EditorPage({ projectId }: PageProps) {
         if (canShowMacroOutput) setShowMacroOutput(true);
         setRevealTick((count) => count + 1); // renders even when the split view is already open
     };
+    // A trace step pointing at a line behaves the same way, for one line.
+    const pendingLine = useRef<TraceLine | null>(null);
+    const selectTraceLine = (target: TraceLine) => {
+        pendingLine.current = target;
+        if (target.file === "output" && canShowMacroOutput) setShowMacroOutput(true);
+        setRevealTick((count) => count + 1);
+    };
     useEffect(() => {
-        const { actions, pending } = resolvePendingReveal(pendingExpansion.current, {
+        const state = {
             report: macroReport,
             bands: macroView.bands,
             splitPossible: canShowMacroOutput,
@@ -432,9 +440,12 @@ export default function EditorPage({ projectId }: PageProps) {
             outputMounted: bandReveal.outputMounted(),
             generatedActive: isGeneratedFile(activeFile),
             sourceActive: activeFile === macroView.sourceFile,
-        });
-        pendingExpansion.current = pending;
-        for (const action of actions) {
+        };
+        const expansion = resolvePendingReveal(pendingExpansion.current, state);
+        const line = resolvePendingLine(pendingLine.current, state);
+        pendingExpansion.current = expansion.pending;
+        pendingLine.current = line.pending;
+        for (const action of [...expansion.actions, ...line.actions]) {
             if (action.kind === "band") {
                 if (action.editor === "output") bandReveal.showOutputBand(action.index);
                 else bandReveal.showSourceBand(action.index);
@@ -970,7 +981,7 @@ export default function EditorPage({ projectId }: PageProps) {
                                     transition-colors
                                 "
                         />
-                        <ExecutionView arch={arch} memory={memory} registers={registers} memorySize={arch?.memory.address_space_size} pc={pc} changedMemory={changedMemory} changedRegisters={changedRegisters} changeRevision={changeRevision} consumedMemory={consumedMemory} symbols={symbols} macros={macroReport} onSelectExpansion={selectExpansion} />
+                        <ExecutionView arch={arch} memory={memory} registers={registers} memorySize={arch?.memory.address_space_size} pc={pc} changedMemory={changedMemory} changedRegisters={changedRegisters} changeRevision={changeRevision} consumedMemory={consumedMemory} symbols={symbols} macros={macroReport} onSelectExpansion={selectExpansion} onSelectLine={selectTraceLine} />
                     </Panel>
                 </Group>
             </div>
