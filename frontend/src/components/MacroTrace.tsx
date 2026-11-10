@@ -126,14 +126,20 @@ export function MacroTrace({ report, onSelectLine }: MacroTraceProps) {
                 </ul>
             </div>
             <div className="flex-1 min-h-0 overflow-auto px-3 pb-3">
-                <table aria-label="Macro processor trace" className="w-full text-xs">
+                {/* Every column but Text keeps its width and never wraps; Text
+                    takes what is left and is cut with an ellipsis, so Action
+                    stays on screen in the ~420px panel (at 12px the other
+                    columns of the demo alone are wider than that). */}
+                <table aria-label="Macro processor trace" className="w-full text-[11px]">
                     <thead className="sticky top-0 bg-zinc-900 text-left text-zinc-400">
                         <tr>
-                            <th scope="col" className="py-1 font-medium">Step</th>
-                            <th scope="col" className="py-1 font-medium">Read</th>
-                            <th scope="col" className="py-1 font-medium">d</th>
-                            <th scope="col" className="py-1 font-medium">e</th>
-                            <th scope="col" className="py-1 font-medium">Text</th>
+                            <th scope="col" className="py-1 pr-2 font-medium">Step</th>
+                            <th scope="col" className="py-1 pr-2 font-medium">Read</th>
+                            <th scope="col" className="py-1 pr-2 font-medium">d</th>
+                            <th scope="col" className="py-1 pr-2 font-medium">e</th>
+                            <th scope="col" className="w-full py-1 pr-2 font-medium">
+                                <span className="block w-0 min-w-full overflow-hidden text-ellipsis whitespace-nowrap">Text</span>
+                            </th>
                             <th scope="col" className="py-1 font-medium">Action</th>
                         </tr>
                     </thead>
@@ -146,11 +152,16 @@ export function MacroTrace({ report, onSelectLine }: MacroTraceProps) {
                                 className={i === index ? "bg-sky-900/50" : undefined}
                             >
                                 <td className="py-0.5 pr-2">{step.step}</td>
-                                <td className="pr-2">{formatRead(step)}</td>
+                                <td className="pr-2 whitespace-nowrap">{formatRead(step)}</td>
                                 <td className="pr-2">{step.d}</td>
-                                <td className="pr-2">{formatExpansionFlag(step)}</td>
-                                <td className="pr-2 whitespace-pre">{step.text}</td>
-                                <td>{step.action} <span className="text-zinc-400">{formatTarget(step, report)}</span></td>
+                                <td className="pr-2 whitespace-nowrap">{formatExpansionFlag(step)}</td>
+                                <td className="pr-2">
+                                    {/* Zero intrinsic width: the line never widens the table. */}
+                                    <span className="block w-0 min-w-full overflow-hidden text-ellipsis whitespace-pre" title={step.text}>
+                                        {step.text}
+                                    </span>
+                                </td>
+                                <td className="whitespace-nowrap">{step.action} <span className="text-zinc-400">{formatTarget(step, report)}</span></td>
                             </tr>
                         ))}
                     </tbody>
