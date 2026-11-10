@@ -70,6 +70,31 @@ export function expansionReveal(report: MacroReport, serial: number): ExpansionR
     };
 }
 
+// A run of editor lines, 1-based and inclusive.
+export interface LineRange {
+    from: number;
+    to: number;
+}
+
+// What a click on an expansion row marks: its own output block in
+// MASMAPRG.ASM (a nested call marks only its own lines, not its band) and, in
+// the source, the call line of the outermost call that contains it.
+export interface ExpansionHighlight {
+    output: LineRange;
+    source: LineRange;
+}
+
+// An inverted output range gets no mark, as it gets no band.
+export function expansionHighlight(report: MacroReport, serial: number): ExpansionHighlight | null {
+    const expansion = report.expansions.find((candidate) => candidate.serial === serial);
+    const reveal = expansionReveal(report, serial);
+    if (!expansion || !reveal || expansion.output.from > expansion.output.to) return null;
+    return {
+        output: { from: expansion.output.from, to: expansion.output.to },
+        source: { from: reveal.sourceLine, to: reveal.sourceLine },
+    };
+}
+
 // Source line a MASMAPRG.ASM line came from: its own line when copied, else
 // the line of the outermost call that produced it.
 export function sourceLineForOutput(report: MacroReport, outputLine: number): number | null {
@@ -103,6 +128,13 @@ export function secondaryLineDecoration(line: number): editor.IModelDeltaDecorat
     };
 }
 
+export function selectedExpansionDecoration(range: LineRange): editor.IModelDeltaDecoration {
+    return {
+        range: wholeLines(range.from, range.to),
+        options: { isWholeLine: true, className: "macro-band-selected" },
+    };
+}
+
 // The side-by-side view of the last Run.
 export interface MacroViewState {
     // Entry file of that Run: the only file that gets the source bands and
@@ -129,6 +161,8 @@ export interface EditorDecorations {
     bands: EditorBand[];
     executingLine: number | null;
     secondaryLine: number | null;
+    // Lines of the expansion selected in the Expansions table.
+    selectedLines: LineRange | null;
 }
 
 export interface DecorationContext {
@@ -138,6 +172,8 @@ export interface DecorationContext {
     executingLine: number | null;
     // Entry file of the last Run.
     executionSourceFile: string | null;
+    // Serial of the expansion selected in the Expansions table, if any.
+    selectedExpansion?: number | null;
 }
 
 // What the editor showing `path` highlights. After a Run with macros the
@@ -150,19 +186,30 @@ export function editorDecorations(path: string, context: DecorationContext): Edi
             bands: NO_BANDS,
             executingLine: path === context.executionSourceFile ? executingLine : null,
             secondaryLine: null,
+            selectedLines: null,
         };
     }
+    // The selection goes with the bands once the entry file is edited.
+    const selected = view.bands && context.selectedExpansion != null
+        ? expansionHighlight(report, context.selectedExpansion)
+        : null;
     if (isGeneratedFile(path)) {
-        return { bands: view.bands?.output ?? NO_BANDS, executingLine, secondaryLine: null };
+        return {
+            bands: view.bands?.output ?? NO_BANDS,
+            executingLine,
+            secondaryLine: null,
+            selectedLines: selected?.output ?? null,
+        };
     }
     if (path === view.sourceFile && view.bands) {
         return {
             bands: view.bands.source,
             executingLine: null,
             secondaryLine: executingLine === null ? null : sourceLineForOutput(report, executingLine),
+            selectedLines: selected?.source ?? null,
         };
     }
-    return { bands: NO_BANDS, executingLine: null, secondaryLine: null };
+    return { bands: NO_BANDS, executingLine: null, secondaryLine: null, selectedLines: null };
 }
 
 // A line of the source or of MASMAPRG.ASM that a trace step points at.

@@ -15,7 +15,9 @@ import {
     bandDecorations,
     NO_BANDS,
     secondaryLineDecoration,
+    selectedExpansionDecoration,
     type EditorBand,
+    type LineRange,
 } from "@/lib/simulator/macroBands";
 
 // ============================================================
@@ -41,6 +43,8 @@ export type CodeEditorProps = {
     bands?: EditorBand[];
     /** 1-based line lit as the source of the executing MASMAPRG.ASM line. */
     secondaryLine?: number | null;
+    /** Lines of the expansion selected in the Macros tab, marked over the bands. */
+    selectedLines?: LineRange | null;
     /** Called with the index in `bands` of the band the user clicked. */
     onBandClick?: (index: number) => void;
     /** Extra controls at the right end of the tab bar. */
@@ -72,6 +76,7 @@ export function CodeEditor({
     executingAddress = null,
     bands = NO_BANDS,
     secondaryLine = null,
+    selectedLines = null,
     onBandClick,
     headerActions,
     onCloseTab,
@@ -158,6 +163,20 @@ export function CodeEditor({
         editorInstance.revealLineInCenterIfOutsideViewport(secondaryLine);
         return () => decorations.clear();
     }, [editorInstance, secondaryLine]);
+
+    // By value: the page computes a new range object on every render.
+    const selectedFrom = selectedLines?.from ?? null;
+    const selectedTo = selectedLines?.to ?? null;
+    useEffect(() => {
+        if (!editorInstance || selectedFrom === null || selectedTo === null) return;
+        const model = editorInstance.getModel();
+        if (!model || model.isDisposed() || selectedFrom > model.getLineCount()) return;
+
+        const decorations = editorInstance.createDecorationsCollection([
+            selectedExpansionDecoration({ from: selectedFrom, to: selectedTo }),
+        ]);
+        return () => decorations.clear();
+    }, [editorInstance, selectedFrom, selectedTo]);
 
     useEffect(() => {
         if (!editorInstance || !onBandClick || bands.length === 0) return;

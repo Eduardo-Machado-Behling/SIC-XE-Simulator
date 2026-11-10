@@ -25,10 +25,11 @@ export interface ArchProps {
     symbols: AssemblySymbol[] | null;
     macros?: MacroReport | null;
     onSelectExpansion?: (serial: number) => void;
+    selectedExpansion?: number | null;
     onSelectLine?: (target: TraceLine) => void;
 }
 
-export function ExecutionView({ arch, registers, memory, memorySize, pc, changedMemory, changedRegisters, changeRevision, consumedMemory, symbols, macros = null, onSelectExpansion, onSelectLine }: ArchProps) {
+export function ExecutionView({ arch, registers, memory, memorySize, pc, changedMemory, changedRegisters, changeRevision, consumedMemory, symbols, macros = null, onSelectExpansion, selectedExpansion = null, onSelectLine }: ArchProps) {
     const [selectedTab, setSelectedTab] = useState("cpu");
 
     // The memory table scrolls to the PC on every execution update, but a
@@ -79,7 +80,7 @@ export function ExecutionView({ arch, registers, memory, memorySize, pc, changed
         {
             id: "macros",
             label: "Macros",
-            content: <MacroView report={macros} onSelectExpansion={onSelectExpansion ?? (() => {})} onSelectLine={onSelectLine} />,
+            content: <MacroView report={macros} onSelectExpansion={onSelectExpansion ?? (() => {})} selectedExpansion={selectedExpansion} onSelectLine={onSelectLine} />,
         },
     ];
 

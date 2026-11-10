@@ -99,6 +99,15 @@ describe("MacroView", () => {
         expect(onSelect).toHaveBeenCalledWith(1);
     });
 
+    it("marks the selected expansion's row", () => {
+        render(<MacroView report={demoPayload as MacroReport} onSelectExpansion={vi.fn()} selectedExpansion={2} />);
+        const table = screen.getByRole("table", { name: "Macro expansion table" });
+        const selected = within(table).getAllByRole("row", { selected: true });
+        expect(selected).toHaveLength(1);
+        expect(within(selected[0]).getByText("002")).toBeTruthy();
+        expect(within(table).getAllByRole("row", { selected: false })).toHaveLength(4);
+    });
+
     it("shows the trace in the Trace sub-tab and forwards line selections", async () => {
         const onSelectLine = vi.fn();
         render(<MacroView report={demoPayload as MacroReport} onSelectExpansion={vi.fn()} onSelectLine={onSelectLine} />);
