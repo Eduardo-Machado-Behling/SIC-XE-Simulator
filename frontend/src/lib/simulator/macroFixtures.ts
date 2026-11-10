@@ -26,6 +26,18 @@ import type { MacroReport } from "@/lib/simulator/ExecutionEvent";
 //   17  M       WORD 7
 //   18  TOTAL   RESW 1
 //   19          END INICIO
+//   20          MCDEFN
+//   21  L       TRIPLA V
+//   22  L       ADD V
+//   23          MCEND
+//   24          MCDEFN
+//   25  L       TRIPLA V
+//   26  L       STA V
+//   27          MCEND
+//
+// TRIPLA is defined twice (lines 20 and 24), so definition 2 is the redefined,
+// inactive one and the name table points at definition 3. Nothing calls it, so
+// the trace stops at END and has no steps for these definition lines.
 export const rawMacroReportFixture = {
     file: "MASMAPRG.ASM",
     ok: true,
@@ -52,6 +64,7 @@ export const rawMacroReportFixture = {
     names: [
         { name: "SOMA", definition: 0, line: 3 },
         { name: "DOBRA", definition: 1, line: 9 },
+        { name: "TRIPLA", definition: 3, line: 25 },
     ],
     definitions: [
         {
@@ -86,6 +99,34 @@ export const rawMacroReportFixture = {
                 { text: "L DOBRA V", line: 9 },
                 { text: "#0 SOMA #1,#1,#1", line: 10 },
                 { text: "MCEND", line: 11 },
+            ],
+        },
+        {
+            index: 2,
+            name: "TRIPLA",
+            prototype: "L TRIPLA V",
+            labelFormal: "L",
+            formals: [{ name: "V", default: null }],
+            active: false,
+            origin: { kind: "source", line: 20 },
+            body: [
+                { text: "L TRIPLA V", line: 21 },
+                { text: "#0 ADD #1", line: 22 },
+                { text: "MCEND", line: 23 },
+            ],
+        },
+        {
+            index: 3,
+            name: "TRIPLA",
+            prototype: "L TRIPLA V",
+            labelFormal: "L",
+            formals: [{ name: "V", default: null }],
+            active: true,
+            origin: { kind: "source", line: 24 },
+            body: [
+                { text: "L TRIPLA V", line: 25 },
+                { text: "#0 STA #1", line: 26 },
+                { text: "MCEND", line: 27 },
             ],
         },
     ],

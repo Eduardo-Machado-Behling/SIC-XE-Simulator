@@ -36,6 +36,33 @@ export function macroBands(report: MacroReport): MacroBands {
     };
 }
 
+// Where to scroll the two panes for one expansion. Nested expansions have no
+// band of their own: they reveal their own output and the call line of the
+// outermost call that contains them. `bandIndex` is the expansion's band when
+// it is a top-level call, else null.
+export interface ExpansionReveal {
+    outputLine: number;
+    sourceLine: number;
+    bandIndex: number | null;
+}
+
+export function expansionReveal(report: MacroReport, serial: number): ExpansionReveal | null {
+    const expansion = report.expansions.find((candidate) => candidate.serial === serial);
+    if (!expansion) return null;
+    let root = expansion;
+    for (let hops = 0; root.parent !== null && hops <= report.expansions.length; hops++) {
+        const parent = report.expansions.find((candidate) => candidate.serial === root.parent);
+        if (!parent) break;
+        root = parent;
+    }
+    const topLevel = report.expansions.filter((candidate) => candidate.parent === null);
+    return {
+        outputLine: expansion.output.from,
+        sourceLine: root.callLine,
+        bandIndex: expansion === root ? topLevel.indexOf(root) : null,
+    };
+}
+
 // Source line a MASMAPRG.ASM line came from: its own line when copied, else
 // the line of the outermost call that produced it.
 export function sourceLineForOutput(report: MacroReport, outputLine: number): number | null {

@@ -2,10 +2,11 @@
 "use client";
 
 import { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
-import type { AssemblySymbol } from "@/lib/simulator/ExecutionEvent";
+import type { AssemblySymbol, MacroReport } from "@/lib/simulator/ExecutionEvent";
 import RegisterTable, { RegisterState } from "@/components/RegisterTable";
 import MemoryTable from "@/components/MemoryTable";
 import SymbolTable from "@/components/SymbolTable";
+import { MacroView } from "@/components/MacroView";
 import { Tabs, type TabDefinition } from "@/components/Tabs";
 import { Separator } from "react-resizable-panels";
 import { useState } from "react";
@@ -21,9 +22,11 @@ export interface ArchProps {
     changeRevision: number;
     consumedMemory: number[];
     symbols: AssemblySymbol[] | null;
+    macros?: MacroReport | null;
+    onSelectExpansion?: (serial: number) => void;
 }
 
-export function ExecutionView({ arch, registers, memory, memorySize, pc, changedMemory, changedRegisters, changeRevision, consumedMemory, symbols }: ArchProps) {
+export function ExecutionView({ arch, registers, memory, memorySize, pc, changedMemory, changedRegisters, changeRevision, consumedMemory, symbols, macros = null, onSelectExpansion }: ArchProps) {
     const [selectedTab, setSelectedTab] = useState("cpu");
 
     // The memory table scrolls to the PC on every execution update, but a
@@ -70,6 +73,11 @@ export function ExecutionView({ arch, registers, memory, memorySize, pc, changed
             id: "assembler",
             label: "Assembler",
             content: <SymbolTable symbols={symbols} />,
+        },
+        {
+            id: "macros",
+            label: "Macros",
+            content: <MacroView report={macros} onSelectExpansion={onSelectExpansion ?? (() => {})} />,
         },
     ];
 

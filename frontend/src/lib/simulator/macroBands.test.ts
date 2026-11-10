@@ -5,6 +5,7 @@ import {
     bandDecorations,
     clearMacroViewOnEdit,
     editorDecorations,
+    expansionReveal,
     macroBands,
     macroViewForRun,
     NO_MACRO_VIEW,
@@ -164,5 +165,19 @@ describe("clearMacroViewOnEdit (Review Focus 5)", () => {
 
         expect(clearMacroViewOnEdit(edited, "main.asm")).toBe(edited);
         expect(clearMacroViewOnEdit(NO_MACRO_VIEW, "main.asm")).toBe(NO_MACRO_VIEW);
+    });
+});
+
+describe("expansionReveal", () => {
+    it("reveals a top-level expansion through its band", () => {
+        expect(expansionReveal(report, 3)).toEqual({ outputLine: 8, sourceLine: 14, bandIndex: 1 });
+    });
+
+    it("reveals a nested expansion at its own output and its outermost call line", () => {
+        expect(expansionReveal(report, 2)).toEqual({ outputLine: 4, sourceLine: 13, bandIndex: null });
+    });
+
+    it("knows no expansion that is not in the report", () => {
+        expect(expansionReveal(report, 99)).toBeNull();
     });
 });
