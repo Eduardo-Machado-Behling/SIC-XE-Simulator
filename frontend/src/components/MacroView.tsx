@@ -22,6 +22,24 @@ export type MacroViewProps = {
 // ============================================================
 
 export function MacroView({ report, onSelectExpansion, onSelectLine }: MacroViewProps) {
+    // The processor stopped before it saw a definition (a lone MCEND): there
+    // are no tables, but the failure is the processor's, so say why.
+    if (report && !report.ok && !report.hasMacros) {
+        return (
+            <section className="flex h-full min-h-0 w-full flex-col bg-zinc-900">
+                <div role="alert" className="space-y-1 px-3 py-3 text-xs text-red-300">
+                    {report.diagnostics.length === 0
+                        ? <p>The macro processor stopped</p>
+                        : report.diagnostics.map((diagnostic, index) => (
+                            <p key={index}>
+                                The macro processor stopped: {diagnostic.line}:{diagnostic.column} {diagnostic.message}
+                            </p>
+                        ))}
+                </div>
+            </section>
+        );
+    }
+
     if (!report?.hasMacros) {
         return (
             <section className="flex h-full min-h-0 w-full flex-col bg-zinc-900">

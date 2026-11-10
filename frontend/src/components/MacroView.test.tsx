@@ -24,6 +24,26 @@ describe("MacroView", () => {
         expect(screen.getByText("Run a program that uses MCDEFN to see the macro processor")).toBeTruthy();
     });
 
+    // A lone MCEND: the processor failed before it saw any MCDEFN.
+    it("shows the processor's diagnostics when it failed without macros", () => {
+        renderView({
+            ...macroReportFixture,
+            ok: false,
+            hasMacros: false,
+            names: [],
+            definitions: [],
+            expansions: [],
+            diagnostics: [
+                { severity: "error", line: 1, column: 9, length: 5, message: "MCEND without MCDEFN" },
+                { severity: "error", line: 4, column: 1, length: 6, message: "MCDEFN without MCEND" },
+            ],
+        });
+        const alert = screen.getByRole("alert");
+        expect(within(alert).getByText("The macro processor stopped: 1:9 MCEND without MCDEFN")).toBeTruthy();
+        expect(within(alert).getByText("The macro processor stopped: 4:1 MCDEFN without MCEND")).toBeTruthy();
+        expect(screen.queryByText("Run a program that uses MCDEFN to see the macro processor")).toBeNull();
+    });
+
     it("lists the macro names with prototype and line", () => {
         renderView();
         const table = screen.getByRole("table", { name: "Macro name table" });
