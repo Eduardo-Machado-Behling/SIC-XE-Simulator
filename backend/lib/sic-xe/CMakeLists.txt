@@ -155,6 +155,8 @@ if(BUILD_TESTING)
         add_sicxe_macro_test(assembler_error_in_expansion_maps_to_call "remap.error-in-expansion-maps-to-call")
         add_sicxe_macro_test(verbatim_error_keeps_column "remap.verbatim-error-keeps-column")
         add_sicxe_macro_test(remapped_message_line_numbers "remap.message-line-numbers")
+        add_sicxe_macro_test(remapped_diagnostic_on_a_call_label_line "remap.call-label-line")
+        add_sicxe_macro_test(remap_passes_through_lines_outside_the_output "remap.outside-output-passes-through")
         add_sicxe_macro_test(demo_program_expands_and_assembles "demo.expands-and-assembles")
 
         add_sicxe_test(code_memory_is_sparse_and_merges "code-memory.sparse-segment-merging")
