@@ -121,6 +121,22 @@ PieceLine substitute(const PieceLine& line, const std::vector<std::string>& actu
   return out;
 }
 
+std::size_t substitutedLength(const PieceLine& line, const std::vector<std::string>& actuals,
+                              std::size_t serialLength) {
+  std::size_t length = 0;
+  for (const Piece& p : line) {
+    switch (p.kind) {
+      case Piece::Kind::Text: length += p.text.size(); break;
+      case Piece::Kind::Param:
+        length += p.level == 1 ? actualAt(actuals, p.index).size()
+                               : markerText({Piece::Kind::Param, {}, p.level - 1, p.index}, true).size();
+        break;
+      case Piece::Kind::Serial: length += serialLength; break;
+    }
+  }
+  return length;
+}
+
 std::string serialText(int serial) {
   std::string digits = std::to_string(serial);
   if (digits.size() < 3) digits.insert(0, 3 - digits.size(), '0');
