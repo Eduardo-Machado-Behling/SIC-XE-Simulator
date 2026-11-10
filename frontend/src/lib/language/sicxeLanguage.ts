@@ -32,6 +32,7 @@ const fallbackVocabulary: LanguageCatalog = {
     directives: ["START", "END", "BYTE", "WORD", "RESB", "RESW", "BASE", "NOBASE", "EQU", "ORG"],
     registers: ["A", "X", "L", "B", "S", "T", "F", "PC", "SW"],
 };
+const fallbackMacroDirectives = ["MCDEFN", "MCEND"];
 let vocabulary: LanguageCatalog = fallbackVocabulary;
 
 export function setAssemblerLanguageClient(client: AssemblerLanguageClient | null): void {
@@ -52,50 +53,65 @@ function monarchDefinition(catalog: LanguageCatalog): MonarchLanguage {
         directives: catalog.directives.length ? catalog.directives : fallbackVocabulary.directives,
         registers: catalog.registers.length ? catalog.registers : fallbackVocabulary.registers,
     };
+    // MCDEFN/MCEND are not assembler directives: they are always highlighted,
+    // whether or not the server catalog lists them.
+    const macroDirectives = [...new Set([...fallbackMacroDirectives, ...(catalog.macroDirectives ?? [])])];
     return {
         ignoreCase: true,
         instructions: available.instructions,
         directives: available.directives,
+        macroDirectives,
         registers: available.registers,
         registersPrefixed: available.registers.map((register) => `$${register}`),
         tokenizer: {
-            root: [
-                [/^\..*$/, "sicxe-comment"],
-                [/;.*$/, "sicxe-comment"],
-                [/[ \t]+/, "white"],
-                [/C'[^']*'/i, "sicxe-string"],
-                [/X'[0-9a-fA-F]*'/i, "sicxe-hex"],
-                [/\$[A-Za-z_][A-Za-z0-9_]*/, {
-                    cases: {
-                        "@registersPrefixed": "sicxe-register",
-                        "@default": "sicxe-invalid-register",
-                    },
-                }],
-                [/\+[A-Za-z_][A-Za-z0-9_]*/, "sicxe-extended-instruction"],
-                [/^[A-Za-z_][A-Za-z0-9_]*(?=\s+)/, {
-                    cases: {
-                        "@instructions": "sicxe-instruction",
-                        "@directives": "sicxe-directive",
-                        "@default": "sicxe-label",
-                    },
-                }],
-                [/[A-Za-z_][A-Za-z0-9_]*/, {
-                    cases: {
-                        "@instructions": "sicxe-instruction",
-                        "@directives": "sicxe-directive",
-                        "@registers": "sicxe-missing-register-prefix",
-                        "@default": "sicxe-symbol",
-                    },
-                }],
-                [/0[xX][0-9a-fA-F]+/, "sicxe-hex"],
-                [/\d+/, "sicxe-number"],
-                [/[#@]/, "sicxe-operator"],
-                [/,[pPbB]\b/, "sicxe-relative-mode"],
-                [/,/, "sicxe-delimiter"],
-                [/[()+*/-]/, "sicxe-operator"],
-            ],
+            root: tokenRules(false),
+            // Pushed on every MCDEFN and popped on every MCEND, so nested definitions balance.
+            macroBody: tokenRules(true),
         },
     };
+}
+
+function tokenRules(inMacroBody: boolean): languages.IMonarchLanguageRule[] {
+    return [
+        [/^\..*$/, "sicxe-comment"],
+        [/;.*$/, "sicxe-comment"],
+        [/[ \t]+/, "white"],
+        [/C'[^']*'/i, "sicxe-string"],
+        [/X'[0-9a-fA-F]*'/i, "sicxe-hex"],
+        [/MCDEFN\b/i, "sicxe-directive", "@push"],
+        [/MCEND\b/i, "sicxe-directive", "@pop"],
+        [/[A-Za-z_][A-Za-z0-9_]*\.SER\b/i, "sicxe-macro-marker"],
+        [/\.[A-Za-z_][A-Za-z0-9_]*/, "sicxe-macro-marker"],
+        [/\$[A-Za-z_][A-Za-z0-9_]*/, {
+            cases: {
+                "@registersPrefixed": "sicxe-register",
+                "@default": "sicxe-invalid-register",
+            },
+        }],
+        [/\+[A-Za-z_][A-Za-z0-9_]*/, "sicxe-extended-instruction"],
+        [/^[A-Za-z_][A-Za-z0-9_]*(?=\s+)/, {
+            cases: {
+                "@instructions": "sicxe-instruction",
+                "@directives": "sicxe-directive",
+                "@default": "sicxe-label",
+            },
+        }],
+        [/[A-Za-z_][A-Za-z0-9_]*/, {
+            cases: {
+                "@instructions": "sicxe-instruction",
+                "@directives": "sicxe-directive",
+                // Inside a macro body a bare register name is a formal parameter.
+                ...(inMacroBody ? {} : { "@registers": "sicxe-missing-register-prefix" }),
+                "@default": "sicxe-symbol",
+            },
+        }],
+        [/0[xX][0-9a-fA-F]+/, "sicxe-hex"],
+        [/\d+/, "sicxe-number"],
+        [/[#@]/, "sicxe-operator"],
+        [/,[pPbB]\b/, "sicxe-relative-mode"],
+        [/,/, "sicxe-delimiter"],
+        [/[()+*/-]/, "sicxe-operator"],
+    ];
 }
 
 function installTokenizer(monaco: Monaco, catalog: LanguageCatalog): void {
@@ -122,6 +138,7 @@ function installTheme(monaco: Monaco): void {
             { token: "sicxe-operator", foreground: "D4D4D4" },
             { token: "sicxe-relative-mode", foreground: "DCDCAA", fontStyle: "bold" },
             { token: "sicxe-delimiter", foreground: "D4D4D4" },
+            { token: "sicxe-macro-marker", foreground: "A1A1AA", fontStyle: "italic" },
         ],
         colors: {},
     });
