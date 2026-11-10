@@ -23,6 +23,17 @@ foreach(heading "Name table" "Definition table" "Expansions" "Trace")
   endif()
 endforeach()
 
+# The Name table: a source range for SOMA, the creating serial for MULTK, trace content.
+if(NOT out MATCHES "SOMA +L +SOMA X,Y,Z +3-7")
+  message(FATAL_ERROR "Name table lacks the range of SOMA:\n${out}")
+endif()
+if(NOT out MATCHES "MULTK [^\n]*#004")
+  message(FATAL_ERROR "Name table lacks #004 for MULTK:\n${out}")
+endif()
+if(NOT out MATCHES "Step[^\n]*\n-+[^\n]*\n *1 +line 1 ")
+  message(FATAL_ERROR "the trace has no rows:\n${out}")
+endif()
+
 # Usage errors exit 2.
 execute_process(COMMAND "${CLI}" RESULT_VARIABLE rc ERROR_VARIABLE err)
 if(NOT rc EQUAL 2 OR NOT err MATCHES "usage")
