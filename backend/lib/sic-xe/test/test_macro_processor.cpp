@@ -1075,7 +1075,7 @@ TEST(remap_passes_through_lines_outside_the_output) {
   }
 }
 
-TEST(demo_program_expands_and_assembles) {   // spec 7: label formal, keywords, .SER, nested call and definition
+TEST(demo_program_expands_and_assembles) {   // spec 6.11 and 7: label formal, keywords, .SER, nested call and definition
   std::ifstream in(SICXE_DEMO_ASM, std::ios::binary);
   CHECK(in.good());
   std::ostringstream text;
@@ -1087,7 +1087,22 @@ TEST(demo_program_expands_and_assembles) {   // spec 7: label formal, keywords, 
   const AssemblyResult a = Assembler().assembleDetailed(r.text);
   CHECK(a.ok());
   if (!a.ok()) dump("assembler, remapped", remapAssemblyDiagnostics(r, src, a.info.diagnostics));
-  for (const char* symbol : {"FIM003", "N", "MAIOR", "TRIPLO"}) CHECK(a.info.symbols.count(symbol) == 1);
+  // Spec 7: code 0x00-0x21 (HALT at 0x21), then N and M; MAIOR and TRIPLO are reserved.
+  const std::vector<int> object = {0x03, 0x20, 0x1F, 0x1B, 0x20, 0x1C, 0x0F, 0x20, 0x19, 0x03, 0x20, 0x16, 0x2B, 0x20,
+                                   0x16, 0x37, 0x20, 0x03, 0x03, 0x20, 0x10, 0x0F, 0x20, 0x10, 0x03, 0x20, 0x07, 0x21,
+                                   0x00, 0x03, 0x0F, 0x20, 0x0A, 0xFC, 0x00, 0x00, 0x05, 0x00, 0x00, 0x07};
+  CHECK(a.memory.byteCount() == object.size());
+  for (std::size_t address = 0; address < object.size(); ++address) {
+    const std::optional<byte_t> b = a.memory.read(address);
+    CHECK(b.has_value() && *b == object[address]);
+    if (!b || *b != object[address]) std::printf("  (byte at 0x%02zX)\n", address);
+  }
+  const std::pair<const char*, std::int64_t> symbols[] = {{"INICIO", 0x00}, {"FIM003", 0x15}, {"N", 0x22},
+                                                          {"M", 0x25},      {"MAIOR", 0x28},  {"TRIPLO", 0x2B}};
+  for (const auto& [name, value] : symbols) {
+    CHECK(a.info.symbols.count(name) == 1);
+    if (a.info.symbols.count(name)) CHECK(a.info.symbols.at(name) == value);
+  }
   std::vector<std::string> macros;
   for (const Expansion& e : r.expansions) macros.push_back(e.macro);
   CHECK((macros == std::vector<std::string>{"DOBRA", "SOMA", "MAXIMO", "ESCALA", "MULTK"}));
