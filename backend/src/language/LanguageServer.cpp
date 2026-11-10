@@ -6,8 +6,10 @@
 #include <cstdio>
 #include <cstdint>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <string_view>
+#include <tuple>
 #include <unordered_set>
 
 #include "assembler/isa.hpp"
@@ -212,6 +214,144 @@ json location(const std::string& uri, int line, int column, int length) {
     return {{"uri", uri}, {"range", lsp_range(line, column, length)}};
 }
 
+// Line `number` (1-based) of `text`, without its '\r'; empty past the end.
+std::string_view text_line(std::string_view text, int number) {
+    std::size_t start = 0;
+    for (int line = 1; line < number; ++line) {
+        const std::size_t newline = text.find('\n', start);
+        if (newline == std::string_view::npos) return {};
+        start = newline + 1;
+    }
+    std::size_t end = text.find('\n', start);
+    if (end == std::string_view::npos) end = text.size();
+    if (end > start && text[end - 1] == '\r') --end;
+    return text.substr(start, end - start);
+}
+
+struct Identifier {
+    std::string_view text;
+    std::size_t offset = 0;
+    bool keyword = false;  // followed by '=': the formal of a keyword argument
+};
+
+// The identifiers of a line's code, with the parser's comment rules: a '.' in column 1
+// makes the line a comment, and ';' outside quotes starts one. Quoted text, the C/X of a
+// C'..'/X'..' literal, a '$' register and a name joined to '.' (NAME.SER, HEAD.X) are
+// not identifiers of their own.
+std::vector<Identifier> identifiers(std::string_view line) {
+    std::vector<Identifier> found;
+    if (!line.empty() && line.front() == '.') return found;
+    std::size_t position = 0;
+    while (position < line.size() && line[position] != ';') {
+        const char c = line[position];
+        if (c == '\'') {
+            const std::size_t close = line.find('\'', position + 1);
+            position = close == std::string_view::npos ? line.size() : close + 1;
+            continue;
+        }
+        if (!identifier_character(c)) {
+            ++position;
+            continue;
+        }
+        const std::size_t start = position;
+        while (position < line.size() && identifier_character(line[position])) ++position;
+        const std::string_view text = line.substr(start, position - start);
+        const char before = start > 0 ? line[start - 1] : ' ';
+        const char after = position < line.size() ? line[position] : ' ';
+        const bool literalPrefix = after == '\'' && (upper(text) == "C" || upper(text) == "X");
+        if (!identifier_start(text.front()) || before == '$' || before == '.' || after == '.' || literalPrefix)
+            continue;
+        std::size_t next = position;
+        while (next < line.size() && (line[next] == ' ' || line[next] == '\t')) ++next;
+        found.push_back({text, start, next < line.size() && line[next] == '='});
+    }
+    return found;
+}
+
+// A formal in a body line is a parameter marker, never a symbol.
+bool is_formal(const sicxe::MacroDefinition& definition, std::string_view word) {
+    const std::string name = upper(word);
+    return upper(definition.labelFormal) == name ||
+           std::any_of(definition.formals.begin(), definition.formals.end(),
+                       [&](const sicxe::Formal& formal) { return upper(formal.name) == name; });
+}
+
+// Where a symbol the assembler found in the expanded text (MASMAPRG.ASM) is in the
+// document (spec 5). A verbatim line keeps its position. On an expansion line the whole
+// name is looked for in the definition body line the line was expanded from, then in
+// the call line; failing both, it is the macro name of the call, marked synthetic.
+class SourcePositions {
+public:
+    SourcePositions(const sicxe::MacroResult& macros, std::string_view text) : m_macros(macros), m_text(text) {
+        // The trace is the only record of the body line an output line was copied from.
+        // Past a truncated trace the body line is unknown and the call line is searched.
+        m_bodies.resize(macros.lineMap.size());
+        for (const sicxe::TraceStep& step : macros.trace.steps) {
+            if (!step.fromExpansion || step.action != sicxe::TraceAction::Copy) continue;
+            if (step.targetOutput < 1 || static_cast<std::size_t>(step.targetOutput) > m_bodies.size()) continue;
+            if (step.serial < 1 || static_cast<std::size_t>(step.serial) > macros.expansions.size()) continue;
+            const int definition = macros.expansions[static_cast<std::size_t>(step.serial) - 1].definition;
+            if (definition < 0 || static_cast<std::size_t>(definition) >= macros.definitions.size()) continue;
+            const std::vector<int>& lines = macros.definitions[static_cast<std::size_t>(definition)].bodySourceLines;
+            if (step.line < 1 || static_cast<std::size_t>(step.line) > lines.size()) continue;
+            m_bodies[static_cast<std::size_t>(step.targetOutput) - 1] = {lines[static_cast<std::size_t>(step.line) - 1],
+                                                                         definition};
+        }
+    }
+
+    sicxe::SourceSpan symbol(std::string_view name, int line, int column, int length) const {
+        const sicxe::SourceSpan call = sicxe::mapToSource(m_macros, m_text, line, column, length);
+        if (!call.synthetic) return call;
+        const std::string target = upper(name);
+        if (line >= 1 && static_cast<std::size_t>(line) <= m_bodies.size()) {
+            const Body& body = m_bodies[static_cast<std::size_t>(line) - 1];
+            if (body.sourceLine > 0) {
+                const sicxe::MacroDefinition& definition = m_macros.definitions[static_cast<std::size_t>(body.definition)];
+                for (const Identifier& word : identifiers(text_line(m_text, body.sourceLine))) {
+                    if (upper(word.text) == target && !is_formal(definition, word.text))
+                        return {body.sourceLine, static_cast<int>(word.offset) + 1, static_cast<int>(word.text.size()),
+                                false};
+                }
+            }
+        }
+        // On the call line, the macro name and the formals of keyword arguments are not actuals.
+        for (const Identifier& word : identifiers(text_line(m_text, call.line))) {
+            if (upper(word.text) == target && !word.keyword && static_cast<int>(word.offset) + 1 != call.column)
+                return {call.line, static_cast<int>(word.offset) + 1, static_cast<int>(word.text.size()), false};
+        }
+        return call;
+    }
+
+private:
+    struct Body {
+        int sourceLine = 0;  // 0: not copied from a body written in the source
+        int definition = 0;
+    };
+
+    const sicxe::MacroResult& m_macros;
+    std::string_view m_text;
+    std::vector<Body> m_bodies;  // by MASMAPRG.ASM line
+};
+
+// Where a symbol is written in the document: its definition when asked, then its
+// references, each place once (every expansion of a body line maps to the same one).
+std::vector<sicxe::SourceSpan> occurrences(const SourcePositions& positions, const sicxe::AssemblyInfo& info,
+                                           const sicxe::SymbolLocation& definition, bool includeDeclaration) {
+    std::vector<sicxe::SourceSpan> spans;
+    std::set<std::tuple<int, int, int, bool>> seen;
+    auto add = [&](const sicxe::SourceSpan& span) {
+        if (seen.emplace(span.line, span.column, span.length, span.synthetic).second) spans.push_back(span);
+    };
+    if (includeDeclaration)
+        add(positions.symbol(definition.name, definition.line, definition.column, definition.length));
+    const std::string target = upper(definition.name);
+    for (const sicxe::SymbolReference& reference : info.symbolReferences) {
+        if (upper(reference.name) == target)
+            add(positions.symbol(reference.name, reference.line, reference.column, reference.length));
+    }
+    return spans;
+}
+
 std::string directive_detail(std::string_view name) {
     const std::string directive = upper(name);
     if (directive == "START") return "Set the program start address.\n\n`START expression`";
@@ -244,7 +384,10 @@ json AssemblerLanguageSession::request_error(const json& id, int code, std::stri
 
 void AssemblerLanguageSession::analyze(Document& document) {
     if (!document.analyzed) {
-        document.analysis = sicxe::Assembler().assembleDetailed(document.text);
+        // The same pipeline as a Run (spec 5): the macro processor, then the assembler on
+        // its output. A source without macros comes out unchanged.
+        document.macros = sicxe::MacroProcessor().process(document.text);
+        document.analysis = sicxe::Assembler().assembleDetailed(document.macros.text);
         document.analyzed = true;
     }
 }
@@ -252,10 +395,10 @@ void AssemblerLanguageSession::analyze(Document& document) {
 json AssemblerLanguageSession::publish_diagnostics(Document& document) {
     analyze(document);
     json diagnostics = json::array();
-    for (const sicxe::Diagnostic& diagnostic : document.analysis.info.diagnostics) {
+    auto add = [&](const sicxe::Diagnostic& diagnostic, const char* source) {
         if (!document.saved && diagnostic.severity == sicxe::Severity::Warning &&
             diagnostic.message == "Missing END directive")
-            continue;
+            return;
 
         const int startLine = std::max(0, diagnostic.line - 1);
         const int startColumn = diagnostic.column > 0 ? diagnostic.column - 1 : 0;
@@ -264,8 +407,19 @@ json AssemblerLanguageSession::publish_diagnostics(Document& document) {
                         {"end", {{"line", startLine},
                                   {"character", startColumn + std::max(1, diagnostic.length)}}}}},
             {"severity", diagnostic.severity == sicxe::Severity::Error ? 1 : 2},
-            {"source", "SIC/XE assembler"},
+            {"source", source},
             {"message", diagnostic.message}});
+    };
+    // The macro processor's diagnostics are already positions of the document.
+    for (const sicxe::Diagnostic& diagnostic : document.macros.diagnostics)
+        add(diagnostic, "SIC/XE macro processor");
+    // As in a Run, a macro processor error stops before the assembler (spec 4.6): an
+    // unclosed MCDEFN swallows the rest of the program, and every symbol defined there
+    // would be reported undefined.
+    if (document.macros.ok()) {
+        for (const sicxe::Diagnostic& diagnostic : sicxe::remapAssemblyDiagnostics(
+                 document.macros, document.text, document.analysis.info.diagnostics))
+            add(diagnostic, "SIC/XE assembler");
     }
     return {{"jsonrpc", "2.0"},
             {"method", "textDocument/publishDiagnostics"},
@@ -448,12 +602,15 @@ json AssemblerLanguageSession::hover(Document& document, const json& params) {
                                         (hasRegisterPrefix ? "`" : "`; write register operands with a `$` prefix.")}}}};
     }
     if (hasRegisterPrefix) return nullptr;
+    const SourcePositions positions(document.macros, document.text);
     for (const sicxe::SymbolLocation& symbol : document.analysis.info.symbolDefinitions) {
-        if (upper(symbol.name) == name)
-            return {{"contents", {{"kind", "markdown"},
-                                  {"value", "**" + symbol.name + "** — symbol value `" +
-                                               std::to_string(symbol.value) + "` (defined on line " +
-                                               std::to_string(symbol.line) + ")"}}}};
+        if (upper(symbol.name) != name) continue;
+        const sicxe::SourceSpan at = positions.symbol(symbol.name, symbol.line, symbol.column, symbol.length);
+        return {{"contents", {{"kind", "markdown"},
+                              {"value", "**" + symbol.name + "** — symbol value `" + std::to_string(symbol.value) +
+                                           (at.synthetic ? "` (produced by the macro expansion on line "
+                                                         : "` (defined on line ") +
+                                           std::to_string(at.line) + ")"}}}};
     }
     return nullptr;
 }
@@ -462,9 +619,11 @@ json AssemblerLanguageSession::definition(Document& document, const json& params
     analyze(document);
     const auto token = token_at(document.text, params.value("position", json::object()));
     if (!token) return nullptr;
+    const SourcePositions positions(document.macros, document.text);
     for (const sicxe::SymbolLocation& symbol : document.analysis.info.symbolDefinitions) {
-        if (upper(symbol.name) == upper(token->text))
-            return location(document.uri, symbol.line, symbol.column, symbol.length);
+        if (upper(symbol.name) != upper(token->text)) continue;
+        const sicxe::SourceSpan at = positions.symbol(symbol.name, symbol.line, symbol.column, symbol.length);
+        return location(document.uri, at.line, at.column, at.length);
     }
     return nullptr;
 }
@@ -482,13 +641,10 @@ json AssemblerLanguageSession::references(Document& document, const json& params
     if (definition == document.analysis.info.symbolDefinitions.end()) return json::array();
 
     const bool includeDeclaration = params.value("context", json::object()).value("includeDeclaration", false);
+    const SourcePositions positions(document.macros, document.text);
     json result = json::array();
-    if (includeDeclaration)
-        result.push_back(location(document.uri, definition->line, definition->column, definition->length));
-    for (const sicxe::SymbolReference& reference : document.analysis.info.symbolReferences) {
-        if (upper(reference.name) == target)
-            result.push_back(location(document.uri, reference.line, reference.column, reference.length));
-    }
+    for (const sicxe::SourceSpan& at : occurrences(positions, document.analysis.info, *definition, includeDeclaration))
+        result.push_back(location(document.uri, at.line, at.column, at.length));
     return result;
 }
 
@@ -505,6 +661,10 @@ json AssemblerLanguageSession::rename(Document& document, const json& params) {
     const std::string normalized = upper(newName);
     if (sicxe::findInstruction(normalized) || sicxe::findDirective(normalized) || sicxe::registerNumber(normalized))
         throw std::invalid_argument("newName is reserved by the assembler");
+    if (normalized == "MCDEFN" || normalized == "MCEND" ||
+        std::any_of(document.macros.names.begin(), document.macros.names.end(),
+                    [&](const sicxe::MacroName& macro) { return upper(macro.name) == normalized; }))
+        throw std::invalid_argument("newName is reserved by the macro processor");
 
     const std::string target = upper(token->text);
     const auto definition = std::find_if(document.analysis.info.symbolDefinitions.begin(),
@@ -514,14 +674,15 @@ json AssemblerLanguageSession::rename(Document& document, const json& params) {
                                          });
     if (definition == document.analysis.info.symbolDefinitions.end()) return nullptr;
 
+    // A synthetic place is the macro name of a call, not the symbol: editing it would
+    // rename the call, and the text that made the symbol is not in the document.
+    const SourcePositions positions(document.macros, document.text);
+    const std::vector<sicxe::SourceSpan> spans = occurrences(positions, document.analysis.info, *definition, true);
+    if (std::any_of(spans.begin(), spans.end(), [](const sicxe::SourceSpan& at) { return at.synthetic; }))
+        throw std::invalid_argument("Cannot rename a symbol produced by a macro expansion");
     json edits = json::array();
-    edits.push_back({{"range", lsp_range(definition->line, definition->column, definition->length)},
-                     {"newText", newName}});
-    for (const sicxe::SymbolReference& reference : document.analysis.info.symbolReferences) {
-        if (upper(reference.name) == target)
-            edits.push_back({{"range", lsp_range(reference.line, reference.column, reference.length)},
-                             {"newText", newName}});
-    }
+    for (const sicxe::SourceSpan& at : spans)
+        edits.push_back({{"range", lsp_range(at.line, at.column, at.length)}, {"newText", newName}});
     return {{"changes", {{document.uri, std::move(edits)}}}};
 }
 
@@ -565,6 +726,8 @@ std::vector<json> AssemblerLanguageSession::handle(const json& message) {
                 instructions.push_back(instruction.mnemonic);
             const json directives = {"START", "END", "BYTE", "WORD", "RESB", "RESW", "BASE", "NOBASE", "EQU", "ORG"};
             const json registers = register_names();
+            // Keywords of the macro processor, not assembler directives (spec 5).
+            const json macroDirectives = {"MCDEFN", "MCEND"};
             const json capabilities = {
                 {"textDocumentSync", {{"openClose", true}, {"change", 1}, {"save", {{"includeText", false}}}}},
                 {"completionProvider", {{"resolveProvider", false}, {"triggerCharacters", {" ", ",", "#", "@", "+", "$"}}}},
@@ -574,7 +737,8 @@ std::vector<json> AssemblerLanguageSession::handle(const json& message) {
                 {"renameProvider", true},
                 {"experimental", {{"sicxe", {{"instructions", std::move(instructions)},
                                                 {"directives", directives},
-                                                {"registers", registers}}}}}};
+                                                {"registers", registers},
+                                                {"macroDirectives", macroDirectives}}}}}};
             respond({{"capabilities", capabilities},
                      {"serverInfo", {{"name", "sicxe-assembler-language-server"}, {"version", "1.0"}}}});
         } else if (method == "initialized" || method == "$/cancelRequest" || method == "exit") {
