@@ -365,6 +365,25 @@ TEST(call_errors) {   // spec 4.6, each on the call line
   CHECK(r.diagnostics.size() == 1);
   if (!r.diagnostics.empty()) { CHECK(r.diagnostics[0].column == 20); CHECK(r.diagnostics[0].length == 1); }
   CHECK(r.expansions.size() == 1);
+
+  // Two extra actuals: reported once.
+  CHECK(MacroProcessor().process(def + "        SOMA 1,2,3,4,5\n").diagnostics.size() == 1);
+
+  // "Z=2" and "X=2" start at column 16; the first value of X is the one expanded.
+  for (const char* call : {"        SOMA 1,Z=2\n", "        SOMA 1,X=2\n"}) {
+    auto bad = MacroProcessor().process(def + call);
+    CHECK(bad.diagnostics.size() == 1);
+    if (!bad.diagnostics.empty()) CHECK(bad.diagnostics[0].column == 16 && bad.diagnostics[0].length == 3);
+    CHECK((outputLines(bad, LineKind::Expanded) == std::vector<std::string>{"LDA 1"}));
+  }
+}
+
+TEST(comments_and_blank_lines_in_body) {   // spec 4.5: emitted on every expansion
+  auto r = MacroProcessor().process("MCDEFN\nM\n. note\n\n        LDA X\nMCEND\n        M\n        M\n");
+  CHECK(r.ok());
+  CHECK(r.text == ".        M\n. note\n\n        LDA X\n.        M\n. note\n\n        LDA X\n");
+  CHECK((outputLines(r, LineKind::Expanded) == std::vector<std::string>{". note", "", "LDA X", ". note", "",
+        "LDA X"}));
 }
 
 TEST(line_map_kinds) {
@@ -392,6 +411,187 @@ TEST(line_map_kinds) {
   CHECK(e.callLine == 7 && e.callText == "        DOBRA N");
   CHECK(e.outputFrom == 2 && e.outputTo == 4);
   CHECK(r.expansions[1].serial == 2 && r.expansions[1].outputFrom == 5 && r.expansions[1].outputTo == 8);
+}
+
+// ---------------------------------------------------------------------------
+// Nested calls and definitions created by an expansion
+static const char SCALE_DEFINITION[] =   // slides 40-41, column 1
+    "MCDEFN\nSCALE RP\nMCDEFN\nMULTSC A,B,C\nLOAD A\nMULT B\nSHIFTR RP\nSTORE C\nMCEND\n"
+    "MCDEFN\nDIVSC A,B,C\nLOAD A\nMULT B\nSHIFTL RP\nSTORE C\nMCEND\nMCEND\n";
+
+// The active definition called `name`, or null.
+static const MacroDefinition* activeDefinition(const MacroResult& r, const std::string& name) {
+  for (const MacroName& n : r.names)
+    if (n.name == name && n.definition >= 0 && n.definition < static_cast<int>(r.definitions.size()))
+      return &r.definitions[static_cast<std::size_t>(n.definition)];
+  return nullptr;
+}
+
+TEST(exercise2_nested_definition_keywords) {   // SOLUCAO_MACRO2 ex.2, column 1 as written
+  MacroProcessorOptions o; o.isOperation = calingaertOps();
+  auto r = MacroProcessor(o).process(
+      "MCDEFN\nOUTER A=,B=\nMCDEFN\nINNER A=,C=\nLOAD A\nMULT C\nMULT @4\nSTORE *+4\nBR *+3\nSPACE\nLOAD B\n"
+      "MULT B\nSUB *-5\nMCEND\nSTORE A\nMCEND\nOUTER B=BRAVO, A=DELTA\nINNER A=ALFA, C=CHARLIE\n");
+  CHECK(r.ok());
+  CHECK((outputLines(r, LineKind::Expanded) == std::vector<std::string>{"STORE DELTA", "LOAD ALFA",
+        "MULT CHARLIE", "MULT @4", "STORE *+4", "BR *+3", "SPACE", "LOAD BRAVO", "MULT BRAVO", "SUB *-5"}));
+  const MacroDefinition* inner = activeDefinition(r, "INNER");
+  CHECK(inner != nullptr);
+  if (!inner) return;
+  CHECK(inner->originSerial == 1);
+  CHECK((display(*inner) == std::vector<std::string>{"INNER A=,C=", "LOAD #1", "MULT #2", "MULT @4",
+        "STORE *+4", "BR *+3", "SPACE", "LOAD BRAVO", "MULT BRAVO", "SUB *-5", "MCEND"}));
+}
+
+TEST(figure_4_12_outputs) {
+  MacroProcessorOptions o; o.isOperation = calingaertOps();
+  auto r = MacroProcessor(o).process(
+      "MCDEFN\nA FORMAL1\nLOAD FORMAL1\nMCDEFN\nB FORMAL2\nSTORE FORMAL2\nMCEND\nMCEND\nA ACTUAL1\nB ACTUAL2\n");
+  CHECK(r.ok());
+  CHECK((outputLines(r, LineKind::Expanded) == std::vector<std::string>{"LOAD ACTUAL1", "STORE ACTUAL2"}));
+  CHECK(r.definitions.size() == 2); CHECK(r.names.size() == 2);
+  if (r.definitions.size() != 2 || r.names.size() != 2) return;
+  const MacroDefinition& b = r.definitions[1];
+  CHECK(b.name == "B"); CHECK(b.active); CHECK(!b.hasNested);
+  CHECK(b.originSerial == 1); CHECK(b.originSourceLine == 0);
+  CHECK((display(b) == std::vector<std::string>{"B FORMAL2", "STORE #1", "MCEND"}));
+  CHECK((b.bodySourceLines == std::vector<int>{0, 0, 0}));   // not from the source
+  CHECK(r.names[1].name == "B" && r.names[1].definition == 1 && r.names[1].line == 0);
+  CHECK(r.definitions[0].originSerial == 0);
+}
+
+TEST(scale_defines_multsc_and_divsc) {   // slides 40-41
+  MacroProcessorOptions o; o.isOperation = calingaertOps();
+  auto r = MacroProcessor(o).process(std::string(SCALE_DEFINITION) + "SCALE 3\n");
+  CHECK(r.ok());
+  CHECK((outputLines(r, LineKind::Call) == std::vector<std::string>{".SCALE 3"}));
+  CHECK(outputLines(r, LineKind::Expanded).empty());
+  const MacroDefinition* mult = activeDefinition(r, "MULTSC");
+  const MacroDefinition* div = activeDefinition(r, "DIVSC");
+  CHECK(mult != nullptr); CHECK(div != nullptr);
+  if (!mult || !div) return;
+  CHECK(mult->originSerial == 1 && div->originSerial == 1);
+  CHECK((display(*mult) == std::vector<std::string>{"MULTSC A,B,C", "LOAD #1", "MULT #2", "SHIFTR 3", "STORE #3",
+        "MCEND"}));
+  CHECK((display(*div) == std::vector<std::string>{"DIVSC A,B,C", "LOAD #1", "MULT #2", "SHIFTL 3", "STORE #3",
+        "MCEND"}));
+}
+
+TEST(discr_nested_calls) {   // slides 43-45
+  MacroProcessorOptions o; o.isOperation = calingaertOps();
+  auto r = MacroProcessor(o).process(
+      std::string(SCALE_DEFINITION) +   // lines 1-17
+      "MCDEFN\nDISCR A,B,C,D\nMULTSC A,C,TEMP1\nMULTSC TEMP1,@4,TEMP1\nMULTSC B,B,TEMP2\nSUB TEMP1\nSTORE D\n"
+      "MCEND\nSCALE 3\nDISCR P,Q,R,S\n");   // the DISCR call is line 27
+  CHECK(r.ok());
+  CHECK((outputLines(r, LineKind::Expanded) == std::vector<std::string>{"LOAD P", "MULT R", "SHIFTR 3",
+        "STORE TEMP1", "LOAD TEMP1", "MULT @4", "SHIFTR 3", "STORE TEMP1", "LOAD Q", "MULT Q", "SHIFTR 3",
+        "STORE TEMP2", "SUB TEMP1", "STORE S"}));
+  // Every nested call is a '.' comment, with its actuals in place.
+  CHECK((outputLines(r, LineKind::Call) == std::vector<std::string>{".SCALE 3", ".DISCR P,Q,R,S",
+        ".MULTSC P,R,TEMP1", ".MULTSC TEMP1,@4,TEMP1", ".MULTSC Q,Q,TEMP2"}));
+
+  // lineMap: the source is the outermost call, the serial the innermost expansion.
+  const std::vector<int> serials = {1, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 2, 2, 0};
+  CHECK(r.lineMap.size() == serials.size());
+  for (std::size_t i = 0; i < r.lineMap.size() && i < serials.size(); ++i) {
+    const LineOrigin& line = r.lineMap[i];
+    const int source = i == 0 ? 26 : i == 19 ? 28 : 27;
+    CHECK(line.serial == serials[i] && line.source == source);
+  }
+
+  // Nested ranges lie inside DISCR's, from each call comment to the last body line.
+  struct Row { int serial; const char* macro; int parent, depth, callLine; const char* callText; int from, to; };
+  const Row rows[] = {{1, "SCALE", 0, 1, 26, "SCALE 3", 1, 1},
+                      {2, "DISCR", 0, 1, 27, "DISCR P,Q,R,S", 2, 19},
+                      {3, "MULTSC", 2, 2, 27, "MULTSC P,R,TEMP1", 3, 7},
+                      {4, "MULTSC", 2, 2, 27, "MULTSC TEMP1,@4,TEMP1", 8, 12},
+                      {5, "MULTSC", 2, 2, 27, "MULTSC Q,Q,TEMP2", 13, 17}};
+  CHECK(r.expansions.size() == 5);
+  for (std::size_t i = 0; i < r.expansions.size() && i < 5; ++i) {
+    const Expansion& e = r.expansions[i];
+    const Row& w = rows[i];
+    CHECK(e.serial == w.serial && e.macro == w.macro && e.parent == w.parent && e.depth == w.depth &&
+          e.callLine == w.callLine && e.callText == w.callText && e.outputFrom == w.from && e.outputTo == w.to);
+  }
+}
+
+TEST(serial_in_nested_expansions) {   // spec 4.3: .SER is the serial of the expansion that outputs the line
+  auto r = MacroProcessor().process(
+      "MCDEFN\nOUTER\nMCDEFN\nGEN V\nH.SER LDA V\nMCEND\nJ.SER LDA X\nGEN L.SER\nMCEND\nOUTER\nGEN Z\n");
+  CHECK(r.ok());
+  CHECK((outputLines(r, LineKind::Expanded) == std::vector<std::string>{"J001 LDA X", "H002 LDA L001",
+        "H003 LDA Z"}));
+  CHECK((outputLines(r, LineKind::Call) == std::vector<std::string>{".OUTER", ".GEN L001", ".GEN Z"}));
+  const MacroDefinition* gen = activeDefinition(r, "GEN");   // a stored line keeps .SER
+  CHECK(gen != nullptr);
+  if (gen) CHECK((display(*gen) == std::vector<std::string>{"GEN V", "H.SER LDA #1", "MCEND"}));
+}
+
+TEST(redefinition_inside_expansion) {   // same rule as in the source
+  auto r = MacroProcessor().process(
+      "MCDEFN\nM\n        LDA X\nMCEND\nMCDEFN\nREDEF\nMCDEFN\nM\n        LDA Y\nMCEND\nMCEND\n"
+      "        M\n        REDEF\n        M\n");
+  CHECK(r.ok());
+  CHECK((outputLines(r, LineKind::Expanded) == std::vector<std::string>{"LDA X", "LDA Y"}));
+  CHECK(r.definitions.size() == 3); CHECK(r.names.size() == 2);
+  if (r.definitions.size() != 3 || r.names.empty()) return;
+  CHECK(!r.definitions[0].active); CHECK(r.definitions[2].active); CHECK(r.definitions[2].originSerial == 2);
+  CHECK(r.names[0].name == "M" && r.names[0].definition == 2);
+}
+
+TEST(nested_crlf) {   // generated lines end like the outermost call line
+  const std::string src = "MCDEFN\r\nINNER V\r\n        LDA V\r\nMCEND\r\nMCDEFN\r\nOUTER W\r\n        INNER W\r\n"
+                          "MCEND\r\n        OUTER 5\r\n        OUTER 6\n";
+  auto r = MacroProcessor().process(src);
+  CHECK(r.ok());
+  CHECK(r.text == ".        OUTER 5\r\n.        INNER 5\r\n        LDA 5\r\n"
+                  ".        OUTER 6\n.        INNER 6\n        LDA 6\n");
+}
+
+// ---------------------------------------------------------------------------
+// Limits (spec 4.4): each one is an error that stops the processing
+TEST(recursion_limit) {
+  auto r = MacroProcessor().process("        MCDEFN\n        R\n        LDA X\n        R\n        MCEND\n"
+                                    "        R\n        END P\n");
+  CHECK(!r.ok()); CHECK(r.expansions.size() == 64);
+  CHECK(r.diagnostics.size() == 1);
+  if (!r.diagnostics.empty()) {   // at the macro name of the outermost call
+    const Diagnostic& d = r.diagnostics[0];
+    CHECK(d.message == "Macro expansion too deep (limit 64): R");
+    CHECK(d.line == 6 && d.column == 9 && d.length == 1);
+  }
+  CHECK(r.text.find("END P") == std::string::npos);
+}
+
+TEST(expansion_limit) {
+  MacroProcessorOptions o; o.maxExpansions = 5;
+  auto r = MacroProcessor(o).process("MCDEFN\nINNER\n        LDA X\nMCEND\nMCDEFN\nOUTER\n        INNER\n"
+                                     "        INNER\nMCEND\n        OUTER\n        OUTER\n        END P\n");
+  CHECK(!r.ok()); CHECK(r.expansions.size() == 5);   // OUTER, INNER, INNER, OUTER, INNER
+  CHECK(r.diagnostics.size() == 1);
+  if (!r.diagnostics.empty()) {   // the sixth is nested in the second OUTER, line 11
+    const Diagnostic& d = r.diagnostics[0];
+    CHECK(d.message == "Too many macro expansions (limit 5)");
+    CHECK(d.line == 11 && d.column == 9 && d.length == 5);
+  }
+  CHECK(r.text.find("END P") == std::string::npos);
+  if (r.expansions.size() == 5) CHECK(r.expansions[3].outputTo == static_cast<int>(r.lineMap.size()));
+}
+
+TEST(output_limit) {
+  MacroProcessorOptions o; o.maxOutputLines = 4;
+  auto r = MacroProcessor(o).process("P START 0\nMCDEFN\nM\n        LDA X\n        LDA Y\nMCEND\n        M\n"
+                                     "        M\n        END P\n");
+  CHECK(!r.ok());
+  CHECK(r.text == "P START 0\n.        M\n        LDA X\n        LDA Y");
+  CHECK(r.lineMap.size() == 4);
+  CHECK(r.diagnostics.size() == 1);
+  if (!r.diagnostics.empty()) {
+    const Diagnostic& d = r.diagnostics[0];
+    CHECK(d.message == "Macro output too long (limit 4 lines)");
+    CHECK(d.line == 8 && d.column == 9 && d.length == 1);
+  }
 }
 
 int main(int argc, char** argv) {
