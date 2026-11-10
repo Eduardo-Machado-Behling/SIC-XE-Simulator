@@ -289,6 +289,84 @@ void test_rename_refuses_synthetic_symbol() {
             "rename never edits a formal or the keyword of an argument");
 }
 
+json rename_at(language::AssemblerLanguageSession& session, int id, int line, int character, const char* newName) {
+    json params = cursor(line, character);
+    params["newName"] = newName;
+    return request(session, id, "textDocument/rename", params);
+}
+
+bool refused_with(const json& response, const char* message) {
+    return response.contains("error") && response.at("error").at("code") == -32602 &&
+           response.at("error").at("message") == message;
+}
+
+void test_rename_checks_the_expansion_again() {
+    constexpr const char* kUnsafe = "Cannot rename safely: a macro expansion would not follow the new name";
+
+    // The same symbol passed to two formals: both actuals are edited, and so are both references.
+    language::AssemblerLanguageSession twice;
+    open_document(twice,
+        "PROG    START 0\n        MCDEFN\n        SOMA    P1,P2,P3\n        LDA     P1\n        ADD     P2\n"
+        "        STA     P3\n        MCEND\n        SOMA    VA,VA,VB\nVA      WORD    1\nVB      RESW    1\n"
+        "        END     PROG\n");
+    const json twiceRename = rename_at(twice, 2, 8, 0, "VC");
+    require(twiceRename.contains("result"), "rename accepts a symbol passed twice to one call");
+    const json& twiceEdits = twiceRename.at("result").at("changes").at("sicxe://test/main.asm");
+    require(twiceEdits.size() == 3 && has_edit(twiceEdits, 8, 0, 2) && has_edit(twiceEdits, 7, 16, 18) &&
+                has_edit(twiceEdits, 7, 19, 21),
+            "rename edits each actual of a symbol passed twice to one call");
+    json referenceParams = cursor(8, 0);
+    referenceParams["context"] = {{"includeDeclaration", true}};
+    const json twiceReferences = request(twice, 3, "textDocument/references", referenceParams).at("result");
+    require(twiceReferences.size() == 3 && starts_at(twiceReferences.at(1).at("range"), 7, 16) &&
+                starts_at(twiceReferences.at(2).at("range"), 7, 19),
+            "references list each actual of a symbol passed twice to one call");
+
+    // A formal and a literal on one body line: the search finds the body's TOTAL and never the
+    // call's, so the renamed document would still expand to TOTAL.
+    language::AssemblerLanguageSession literal;
+    open_document(literal,
+        "PROG    START 0\n        MCDEFN\n        TAB     P\n        WORD    P,TOTAL\n        MCEND\n"
+        "        TAB     TOTAL\nTOTAL   WORD    0\n        END     PROG\n");
+    require(refused_with(rename_at(literal, 4, 6, 0, "SUM"), kUnsafe),
+            "rename refuses edits that leave the old name in an expansion");
+
+    // A default value: R=MAIOR is not on the call line, which names MAIOR only through P.
+    language::AssemblerLanguageSession defaults;
+    open_document(defaults,
+        "PROG    START 0\n        MCDEFN\n        MAXIMO  P=,R=MAIOR\n        LDA     P\n        STA     R\n"
+        "        MCEND\n        MAXIMO  P=MAIOR\nMAIOR   WORD    0\n        END     PROG\n");
+    require(refused_with(rename_at(defaults, 5, 7, 0, "MAX"), kUnsafe),
+            "rename refuses a symbol that a default value also writes");
+
+    // A new name equal to a formal would be replaced by the actual in every expansion.
+    language::AssemblerLanguageSession formal;
+    open_document(formal,
+        "PROG    START 0\n        MCDEFN\n        SOMA    P\n        LDA     P\n        ADD     TOTAL\n"
+        "        MCEND\n        SOMA    UM\nTOTAL   WORD    0\nUM      WORD    1\n        END     PROG\n");
+    require(refused_with(rename_at(formal, 6, 7, 0, "P"), kUnsafe),
+            "rename refuses a new name that a macro reads as its formal");
+    const json renamed = rename_at(formal, 7, 7, 0, "SUM");
+    require(renamed.contains("result") && renamed.at("result").at("changes").at("sicxe://test/main.asm").size() == 2,
+            "a rename that keeps every expansion is accepted");
+
+    // Without macros nothing is expanded again: even a rename onto an existing name answers as before.
+    language::AssemblerLanguageSession plain;
+    open_document(plain, "MAIN START 0\nLOOP RSUB\n J LOOP\n END LOOP\n");
+    const json plainRename = rename_at(plain, 9, 1, 0, "MAIN");
+    require(plainRename.contains("result") &&
+                plainRename.at("result").at("changes").at("sicxe://test/main.asm").size() == 3,
+            "a document without macros renames as before");
+
+    // An unclosed MCDEFN swallows the rest of the document, and LDA VALOR with it.
+    language::AssemblerLanguageSession unclosed;
+    open_document(unclosed,
+        "PROG    START 0\nVALOR   WORD    1\n        MCDEFN\n        M\n        LDA     VALOR\n        END     PROG\n");
+    require(refused_with(rename_at(unclosed, 8, 1, 0, "NOVO"),
+                         "Cannot rename while the macro processor reports an error"),
+            "rename refuses while the macro processor reports an error");
+}
+
 } // namespace
 
 int main() {
@@ -299,5 +377,6 @@ int main() {
     test_error_in_expansion_lands_on_call_line();
     test_verbatim_line_after_definition_keeps_position();
     test_rename_refuses_synthetic_symbol();
+    test_rename_checks_the_expansion_again();
     std::cout << "Language server protocol and feature checks passed\n";
 }
