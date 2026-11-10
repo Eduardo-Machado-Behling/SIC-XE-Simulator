@@ -230,4 +230,33 @@ describe("EditorPage with the macro processor", () => {
             expect(screen.queryByRole("alertdialog")).toBeNull();
         });
     });
+
+    describe("accessibility (F9)", () => {
+        it("tells whether the MASMAPRG.ASM split view is shown", async () => {
+            const user = await openPage();
+            fake.loadFile.mockResolvedValueOnce([expanded(demo)]);
+            await run(user);
+
+            const hide = screen.getByRole("button", { name: "Hide MASMAPRG.ASM" });
+            expect(hide.getAttribute("aria-expanded")).toBe("true");
+            await user.click(hide);
+            const show = screen.getByRole("button", { name: "Show MASMAPRG.ASM" });
+            expect(show.getAttribute("aria-expanded")).toBe("false");
+        });
+
+        it("names each expansion row and keeps it focusable", async () => {
+            const user = await openPage();
+            fake.loadFile.mockResolvedValueOnce([expanded(demo)]);
+            await run(user);
+            await user.click(screen.getByRole("tab", { name: "Macros" }));
+
+            const row = within(expansionTable()).getByRole("row", { name: "Expansion #001 DOBRA, output lines 3-7" });
+            expect(row.tabIndex).toBe(0);
+            expect(within(expansionTable()).getByRole("row", { name: "Expansion #004 ESCALA, output line 14" })).toBeTruthy();
+
+            row.focus();
+            await user.keyboard("{Enter}");
+            expect(row.getAttribute("aria-selected")).toBe("true");
+        });
+    });
 });

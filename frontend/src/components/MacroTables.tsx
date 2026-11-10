@@ -2,7 +2,7 @@
 
 import type { KeyboardEvent } from "react";
 
-import type { MacroActual, MacroDefinition, MacroReport } from "@/lib/simulator/ExecutionEvent";
+import type { MacroActual, MacroDefinition, MacroExpansion, MacroReport } from "@/lib/simulator/ExecutionEvent";
 
 // ============================================================
 // Types
@@ -23,6 +23,13 @@ export type MacroTablesProps = {
 // `#0=INICIO #1=N`: the index of each actual, `#0` being the label formal.
 function formatArguments(actuals: MacroActual[]): string {
     return actuals.map((actual) => `#${actual.index}=${actual.value}`).join(" ");
+}
+
+// Accessible name of an expansion row: "Expansion #001 DOBRA, output lines 3-7".
+function expansionLabel(expansion: MacroExpansion): string {
+    const { from, to } = expansion.output;
+    const lines = from === to ? `output line ${from}` : `output lines ${from}-${to}`;
+    return `Expansion #${String(expansion.serial).padStart(3, "0")} ${expansion.macro}, ${lines}`;
 }
 
 function definitionHeader(definition: MacroDefinition): string {
@@ -130,6 +137,7 @@ export function MacroTables({ report, onSelectExpansion, selectedExpansion = nul
                         <tr
                             key={expansion.serial}
                             tabIndex={0}
+                            aria-label={expansionLabel(expansion)}
                             aria-selected={expansion.serial === selectedExpansion}
                             onClick={() => onSelectExpansion(expansion.serial)}
                             onKeyDown={(event) => onRowKey(event, expansion.serial)}
