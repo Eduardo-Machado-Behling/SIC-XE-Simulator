@@ -11,8 +11,10 @@
 
 #include "DecodedInstruction.hpp"
 #include "InstructionSet.hpp"
+#include "MacroReportJson.hpp"
 #include "architecture/ExecutionEvent.hpp"
 #include "architecture/RegisterDescription.hpp"
+#include "architecture/events/MacrosExpanded.hpp"
 #include "architecture/events/ProgramAssembled.hpp"
 #include "architecture/events/ProgramCleared.hpp"
 #include "common/Byte.hpp"
@@ -160,25 +162,32 @@ std::vector<ExecutionEvent> SICXE::load_file(std::string& content) {
         m_memoryAccessor.write(0, buff);
         m_registerAccessor.write("PC", Word(0).to_bytes());
     } else {
-        CodeMemory image;
-        try {
-            image = m_assembler.assemble(content);
-        } catch (...) {
-            m_assembler.clear();
-            throw;
-        }
-        const auto entry_point = m_assembler.lastInfo().entryPoint;
-        for (const auto& source : m_assembler.lastInfo().instructionSourceMap) {
+        // The macro processor runs first and the assembler assembles its output,
+        // MASMAPRG.ASM. The report is emitted before assembling so a failed load
+        // still sends it; source_line values below are lines of MASMAPRG.ASM.
+        const sicxe::MacroResult macros = sicxe::MacroProcessor().process(content);
+        m_instructionExecutor.execute(std::make_unique<architecture::events::MacrosExpanded>(
+            sicxe::macroReportJson(macros)));
+        if (!macros.ok())
+            throw std::runtime_error(sicxe::formatDiagnostics(macros.diagnostics));
+
+        const sicxe::AssemblyResult assembled = m_assembler.assembleDetailed(macros.text);
+        if (!assembled.ok())
+            throw std::runtime_error(sicxe::formatDiagnostics(
+                sicxe::remapAssemblyDiagnostics(macros, content, assembled.info.diagnostics)));
+
+        const auto entry_point = assembled.info.entryPoint;
+        for (const auto& source : assembled.info.instructionSourceMap) {
             m_instructionSourceLines.emplace(static_cast<std::uint32_t>(source.address),
                                              static_cast<std::size_t>(source.line));
         }
         m_programStart = static_cast<std::uint32_t>(entry_point);
-        m_memoryAccessor.write(0, image);
+        m_memoryAccessor.write(0, assembled.memory);
         m_registerAccessor.write("PC", Word(m_programStart).to_bytes());
 
         // Report the symbol table to the editor's Assembler tab.
         nlohmann::json symbols = nlohmann::json::array();
-        for (const auto& [name, value] : m_assembler.lastInfo().symbols) {
+        for (const auto& [name, value] : assembled.info.symbols) {
             symbols.push_back({{"name", name}, {"value", value}});
         }
         m_instructionExecutor.execute(std::make_unique<architecture::events::ProgramAssembled>(

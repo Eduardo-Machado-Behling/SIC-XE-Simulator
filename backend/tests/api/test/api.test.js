@@ -26,6 +26,7 @@ import sessions from './suites/sessions.js';
 import startup from './suites/startup.js';
 import storageLimits from './suites/storage-limits.js';
 import sync from './suites/sync.js';
+import wsMacros from './suites/ws-macros.js';
 
 const ctx = { server: null, api: null };
 
@@ -68,6 +69,7 @@ errorsAndLimits(ctx);
 contract(ctx);
 startup(ctx);
 storageLimits();
+wsMacros(ctx);
 
 describe('coverage of the OpenAPI document', () => {
   it('every documented response except 500 was exercised and validated', () => {
