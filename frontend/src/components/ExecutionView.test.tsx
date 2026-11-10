@@ -5,6 +5,7 @@ import { Group, Panel } from "react-resizable-panels";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ExecutionView, type ArchProps } from "@/components/ExecutionView";
+import { macroReportFixture } from "@/lib/simulator/macroFixtures";
 import type { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
 
 const ARCH: ArchitectureInfo = {
@@ -175,5 +176,26 @@ describe("ExecutionView", () => {
         // Row 48 (0x300): 48 * 30 + 15 - 150.
         rerender(inLayout(<ExecutionView {...props({ pc: 0x300, changeRevision: 3 })} />));
         expect(memoryRegion().scrollTop).toBe(1305);
+    });
+
+    it("shows the macro tables on the Macros tab and forwards row selection", async () => {
+        const user = userEvent.setup();
+        const onSelectExpansion = vi.fn();
+        render(inLayout(<ExecutionView {...props({ macros: macroReportFixture, onSelectExpansion })} />));
+
+        await user.click(screen.getByRole("tab", { name: "Macros" }));
+        const panel = screen.getByRole("tabpanel", { name: "Macros" });
+        expect(within(panel).getByRole("table", { name: "Macro name table" })).toBeTruthy();
+
+        await user.click(within(within(panel).getByRole("table", { name: "Macro expansion table" })).getAllByRole("row")[1]);
+        expect(onSelectExpansion).toHaveBeenCalledWith(1);
+    });
+
+    it("shows the empty state on the Macros tab without a report", async () => {
+        const user = userEvent.setup();
+        render(inLayout(<ExecutionView {...props()} />));
+
+        await user.click(screen.getByRole("tab", { name: "Macros" }));
+        expect(within(screen.getByRole("tabpanel", { name: "Macros" })).getByRole("status")).toBeTruthy();
     });
 });

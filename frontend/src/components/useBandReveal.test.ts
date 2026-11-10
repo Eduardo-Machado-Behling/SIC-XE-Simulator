@@ -43,6 +43,20 @@ describe("useBandReveal", () => {
         expect(source.editor.revealLineInCenter).toHaveBeenCalledWith(14);
     });
 
+    it("scrolls an editor to a given line", () => {
+        const source = fakeEditor();
+        const output = fakeEditor();
+        const { result } = renderHook(() => useBandReveal(null));
+        result.current.trackSource(source.mounted, monaco);
+        result.current.trackOutput(output.mounted, monaco);
+
+        result.current.revealSourceLine(13);
+        result.current.revealOutputLine(4);
+
+        expect(source.editor.revealLineInCenter).toHaveBeenCalledWith(13);
+        expect(output.editor.revealLineInCenter).toHaveBeenCalledWith(4);
+    });
+
     it("does nothing once the other editor is gone or there are no bands", () => {
         const output = fakeEditor();
         const { result, rerender } = renderHook(({ current }) => useBandReveal(current), {

@@ -33,6 +33,7 @@ import {
 import {
     clearMacroViewOnEdit,
     editorDecorations,
+    expansionReveal,
     macroViewForRun,
     NO_MACRO_VIEW,
     type MacroViewState,
@@ -406,6 +407,33 @@ export default function EditorPage({ projectId }: PageProps) {
     const outputDecorations = editorDecorations(MACRO_OUTPUT_FILE, decorationContext);
     const canShowMacroOutput = Boolean(macroReport?.hasMacros) && !isGeneratedFile(activeFile);
     const macroOutput = canShowMacroOutput && showMacroOutput ? macroReport : null;
+
+    // A click on an expansion row reveals it in both panes, opening the split
+    // view first when it is hidden. The reveal itself runs after the render, so
+    // that a pane opened by the click is mounted when it scrolls. It does
+    // nothing once the entry file was edited (the line numbers are stale) or
+    // when another file than the entry file is open in the source pane.
+    const pendingExpansion = useRef<number | null>(null);
+    const [, setRevealRequests] = useState(0);
+    const selectExpansion = (serial: number) => {
+        pendingExpansion.current = serial;
+        setShowMacroOutput(true);
+        setRevealRequests((count) => count + 1); // renders even when the split view is already open
+    };
+    useEffect(() => {
+        const serial = pendingExpansion.current;
+        if (serial === null) return;
+        pendingExpansion.current = null;
+        const reveal = macroReport && macroView.bands ? expansionReveal(macroReport, serial) : null;
+        if (!reveal) return;
+        if (reveal.bandIndex !== null) {
+            bandReveal.showOutputBand(reveal.bandIndex);
+            if (activeFile === macroView.sourceFile) bandReveal.showSourceBand(reveal.bandIndex);
+            return;
+        }
+        bandReveal.revealOutputLine(reveal.outputLine);
+        if (activeFile === macroView.sourceFile) bandReveal.revealSourceLine(reveal.sourceLine);
+    });
 
     useEffect(() => {
         if (project && project.id === projectId && !loading) {
@@ -931,7 +959,7 @@ export default function EditorPage({ projectId }: PageProps) {
                                     transition-colors
                                 "
                         />
-                        <ExecutionView arch={arch} memory={memory} registers={registers} memorySize={arch?.memory.address_space_size} pc={pc} changedMemory={changedMemory} changedRegisters={changedRegisters} changeRevision={changeRevision} consumedMemory={consumedMemory} symbols={symbols} />
+                        <ExecutionView arch={arch} memory={memory} registers={registers} memorySize={arch?.memory.address_space_size} pc={pc} changedMemory={changedMemory} changedRegisters={changedRegisters} changeRevision={changeRevision} consumedMemory={consumedMemory} symbols={symbols} macros={macroReport} onSelectExpansion={selectExpansion} />
                     </Panel>
                 </Group>
             </div>
