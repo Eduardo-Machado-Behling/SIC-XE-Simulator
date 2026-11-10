@@ -186,6 +186,10 @@ if(BUILD_TESTING)
     target_link_libraries(sicxe_language_server_tests
         PRIVATE sicxe_language_server
     )
+    # The macro demo program of the macro processor spec, section 7.
+    target_compile_definitions(sicxe_language_server_tests PRIVATE
+        SICXE_DEMO_ASM="${CMAKE_CURRENT_SOURCE_DIR}/lib/sic-xe/test/data/macro_demo.asm"
+    )
     add_test(NAME language-server.protocol-and-features COMMAND sicxe_language_server_tests)
 endif()
 

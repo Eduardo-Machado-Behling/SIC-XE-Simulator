@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "assembler/assembler.hpp"
+#include "assembler/macro_processor.hpp"
 #include "pch/JSON.hpp"
 
 namespace language {
@@ -22,6 +23,9 @@ private:
         int version = 0;
         bool saved = false;
         bool analyzed = false;
+        // The text is expanded first; `analysis` is of `macros.text` (MASMAPRG.ASM), so
+        // its positions are mapped back to `text` before they are shown.
+        sicxe::MacroResult macros;
         sicxe::AssemblyResult analysis;
     };
 

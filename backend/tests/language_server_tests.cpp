@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 
 #include "language/LanguageServer.hpp"
@@ -123,11 +125,179 @@ void test_hover_definition_references_and_rename() {
     require(rejected.contains("error"), "rename rejects reserved instruction names");
 }
 
+// ---- macros (spec 5): the document is expanded before it is assembled ----
+
+std::string demo_source() {
+    std::ifstream in(SICXE_DEMO_ASM, std::ios::binary);
+    require(in.good(), "the macro demo program can be read");
+    std::ostringstream text;
+    text << in.rdbuf();
+    return text.str();
+}
+
+json request(language::AssemblerLanguageSession& session, int id, const std::string& method, json params) {
+    return send(session, {{"jsonrpc", "2.0"}, {"id", id}, {"method", method}, {"params", std::move(params)}});
+}
+
+json cursor(int line, int character) {
+    return {{"textDocument", {{"uri", "sicxe://test/main.asm"}}},
+            {"position", {{"line", line}, {"character", character}}}};
+}
+
+bool starts_at(const json& range, int line, int character) {
+    return range.at("start").at("line") == line && range.at("start").at("character") == character;
+}
+
+bool has_edit(const json& edits, int line, int character, int end) {
+    return std::any_of(edits.begin(), edits.end(), [&](const json& edit) {
+        return starts_at(edit.at("range"), line, character) && edit.at("range").at("end").at("line") == line &&
+               edit.at("range").at("end").at("character") == end;
+    });
+}
+
+void test_macro_source_has_no_false_errors() {
+    language::AssemblerLanguageSession session;
+    const json initialized = send(session, {{"jsonrpc", "2.0"}, {"id", 1}, {"method", "initialize"}});
+    require(initialized.at("result").at("capabilities").at("experimental").at("sicxe").at("macroDirectives") ==
+                json::array({"MCDEFN", "MCEND"}),
+            "initialize advertises the macro directives");
+
+    const json diagnostics = open_document(session, demo_source()).at("diagnostics");
+    require(std::none_of(diagnostics.begin(), diagnostics.end(), [](const json& item) {
+        return item.at("severity") == 1;
+    }), "the macro demo program publishes no errors");
+
+    // An unclosed MCDEFN swallows VALOR: as in a Run, the assembler's errors are not shown.
+    const json unclosed = open_document(session,
+        "PROG    START 0\n        LDA     VALOR\n        MCDEFN\n        M\nVALOR   WORD    1\n        END     PROG\n",
+        2).at("diagnostics");
+    require(unclosed.size() == 1 && unclosed.front().at("message") == "MCDEFN without MCEND" &&
+                unclosed.front().at("source") == "SIC/XE macro processor" &&
+                starts_at(unclosed.front().at("range"), 2, 8),
+            "a macro processor error is published alone, at its place in the document");
+}
+
+void test_error_in_expansion_lands_on_call_line() {
+    language::AssemblerLanguageSession session;
+    const json diagnostics = open_document(session,
+        "PROG    START 0\n        MCDEFN\n        CARREGA\n        LDA NAOEXISTE\n        MCEND\n"
+        "        LDA #1\nAQUI    CARREGA\n        END PROG\n").at("diagnostics");
+    require(diagnostics.size() == 1, "only the error of the expanded body is reported");
+    const json& error = diagnostics.front();
+    const std::string message = error.at("message").get<std::string>();
+    require(message.rfind("In expansion of CARREGA (#001, MASMAPRG.ASM:5): ", 0) == 0,
+            "an expansion error names the expansion and its MASMAPRG.ASM line");
+    require(message.find("Undefined symbol 'NAOEXISTE'") != std::string::npos,
+            "an expansion error keeps the assembler message");
+    require(error.at("severity") == 1, "an expansion error is an error");
+    require(starts_at(error.at("range"), 6, 8) && error.at("range").at("end").at("character") == 15,
+            "an expansion error lands on the macro name of the call line");
+}
+
+void test_verbatim_line_after_definition_keeps_position() {
+    language::AssemblerLanguageSession session;
+    const json diagnostics = open_document(session,
+        "PROG    START 0\n        MCDEFN\n        M\n        LDA #1\n        MCEND\n        M\n"
+        "        LDA     NAOEXISTE\nVALOR   WORD    1\n        LDA     VALOR\n        END     PROG\n").at("diagnostics");
+    require(diagnostics.size() == 1, "a definition and its call add no diagnostics");
+    require(diagnostics.front().at("message").get<std::string>().find("Undefined symbol 'NAOEXISTE'") == 0,
+            "a verbatim line keeps the assembler message");
+    require(starts_at(diagnostics.front().at("range"), 6, 16),
+            "a verbatim line after a definition keeps its line and column");
+
+    const json definition = request(session, 2, "textDocument/definition", cursor(8, 18));
+    require(starts_at(definition.at("result").at("range"), 7, 0),
+            "a symbol defined after a definition is found on its own line");
+    json referenceParams = cursor(8, 18);
+    referenceParams["context"] = {{"includeDeclaration", true}};
+    const json references = request(session, 3, "textDocument/references", referenceParams).at("result");
+    require(references.size() == 2 && starts_at(references.at(1).at("range"), 8, 16),
+            "a reference after a definition keeps its line and column");
+}
+
+void test_rename_refuses_synthetic_symbol() {
+    // FIM003 exists only in the third expansion (MAXIMO's FIM.SER): the verbatim J gives the
+    // cursor something to point at.
+    std::string demo = demo_source();
+    const std::size_t halt = demo.find("        HALT\n");
+    require(halt != std::string::npos, "the demo program has a HALT line");
+    demo.insert(halt, "        J       FIM003\n");
+
+    language::AssemblerLanguageSession session;
+    open_document(session, demo);
+    const json definition = request(session, 2, "textDocument/definition", cursor(33, 17));
+    require(starts_at(definition.at("result").at("range"), 30, 8) &&
+                definition.at("result").at("range").at("end").at("character") == 14,
+            "a symbol produced by an expansion is defined at the macro name of its call");
+
+    json renameParams = cursor(33, 17);
+    renameParams["newName"] = "FIM";
+    const json refused = request(session, 3, "textDocument/rename", renameParams);
+    require(refused.contains("error") && refused.at("error").at("code") == -32602,
+            "renaming a symbol produced by an expansion is an invalid-params error");
+    require(refused.at("error").at("message") == "Cannot rename a symbol produced by a macro expansion",
+            "the refusal says why");
+
+    // N is written on the call lines: every expansion occurrence is edited there, once.
+    renameParams = cursor(35, 0);
+    renameParams["newName"] = "NUM";
+    const json edits = request(session, 4, "textDocument/rename", renameParams)
+                           .at("result").at("changes").at("sicxe://test/main.asm");
+    require(edits.size() == 4 && has_edit(edits, 35, 0, 1) && has_edit(edits, 29, 14, 15) &&
+                has_edit(edits, 30, 17, 18) && has_edit(edits, 32, 14, 15),
+            "rename edits the declaration and each call line that passes the symbol");
+
+    // A body line that names a symbol is edited once, however many times it was expanded.
+    language::AssemblerLanguageSession bodySession;
+    open_document(bodySession,
+        "PROG    START 0\n        MCDEFN\n        SOMA    X\n        LDA     X\n        ADD     TOTAL\n"
+        "        STA     TOTAL\n        MCEND\n        SOMA    VALOR\n        SOMA    VALOR\n"
+        "TOTAL   WORD    0\nVALOR   WORD    1\n        END     PROG\n");
+    renameParams = cursor(9, 0);
+    renameParams["newName"] = "SUM";
+    const json bodyEdits = request(bodySession, 5, "textDocument/rename", renameParams)
+                               .at("result").at("changes").at("sicxe://test/main.asm");
+    require(bodyEdits.size() == 3 && has_edit(bodyEdits, 9, 0, 5) && has_edit(bodyEdits, 4, 16, 21) &&
+                has_edit(bodyEdits, 5, 16, 21),
+            "rename edits the definition body line, not each expansion of it");
+    renameParams = cursor(10, 0);
+    renameParams["newName"] = "VAL";
+    const json callEdits = request(bodySession, 6, "textDocument/rename", renameParams)
+                               .at("result").at("changes").at("sicxe://test/main.asm");
+    require(callEdits.size() == 3 && has_edit(callEdits, 10, 0, 5) && has_edit(callEdits, 7, 16, 21) &&
+                has_edit(callEdits, 8, 16, 21),
+            "a symbol passed to a formal is edited on each call line, not in the body");
+
+    for (const char* reserved : {"MCDEFN", "mcend", "SOMA"}) {
+        renameParams["newName"] = reserved;
+        const json rejected = request(bodySession, 7, "textDocument/rename", renameParams);
+        require(rejected.contains("error") && rejected.at("error").at("code") == -32602 &&
+                    rejected.at("error").at("message") == "newName is reserved by the macro processor",
+                "rename rejects MCDEFN, MCEND and macro names");
+    }
+
+    // A symbol named like a formal: the body's V is the parameter, and the V of "V=" is the keyword.
+    language::AssemblerLanguageSession formalSession;
+    open_document(formalSession,
+        "PROG    START 0\n        MCDEFN\n        CARGA   V=\n        LDA     V\n        MCEND\n"
+        "        CARGA   V=V\nV       WORD    1\n        END     PROG\n");
+    renameParams = cursor(6, 0);
+    renameParams["newName"] = "W";
+    const json formalEdits = request(formalSession, 8, "textDocument/rename", renameParams)
+                                 .at("result").at("changes").at("sicxe://test/main.asm");
+    require(formalEdits.size() == 2 && has_edit(formalEdits, 6, 0, 1) && has_edit(formalEdits, 5, 18, 19),
+            "rename never edits a formal or the keyword of an argument");
+}
+
 } // namespace
 
 int main() {
     test_initialize_and_diagnostics();
     test_completion_and_versioned_changes();
     test_hover_definition_references_and_rename();
+    test_macro_source_has_no_false_errors();
+    test_error_in_expansion_lands_on_call_line();
+    test_verbatim_line_after_definition_keeps_position();
+    test_rename_refuses_synthetic_symbol();
     std::cout << "Language server protocol and feature checks passed\n";
 }
