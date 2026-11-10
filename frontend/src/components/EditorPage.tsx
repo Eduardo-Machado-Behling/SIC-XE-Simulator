@@ -12,6 +12,7 @@ import { TopBar } from "@/components/TopBar";
 import { StatusBar } from "@/components/StatusBar";
 import { ExecutionView } from "@/components/ExecutionView";
 import { ErrorModal } from "@/components/ErrorModal";
+import { resolvePendingReveal } from "@/components/pendingReveal";
 import { useBandReveal } from "@/components/useBandReveal";
 
 import { Simulator } from "@/lib/simulator/Simulator";
@@ -33,7 +34,6 @@ import {
 import {
     clearMacroViewOnEdit,
     editorDecorations,
-    expansionReveal,
     macroViewForRun,
     NO_MACRO_VIEW,
     type MacroViewState,
@@ -409,30 +409,38 @@ export default function EditorPage({ projectId }: PageProps) {
     const macroOutput = canShowMacroOutput && showMacroOutput ? macroReport : null;
 
     // A click on an expansion row reveals it in both panes, opening the split
-    // view first when it is hidden. The reveal itself runs after the render, so
-    // that a pane opened by the click is mounted when it scrolls. It does
-    // nothing once the entry file was edited (the line numbers are stale) or
-    // when another file than the entry file is open in the source pane.
+    // view first when it is hidden. The request stays pending until the editors
+    // it needs are mounted (the output editor mounts after the click's render),
+    // and runs once. When MASMAPRG.ASM is itself the active file there is no
+    // split view: the request reveals the expansion in that editor, and leaves
+    // no deferred "open" behind. Nothing happens once the entry file was edited
+    // (the line numbers are stale) or when another file than the entry file is
+    // open in the source pane.
     const pendingExpansion = useRef<number | null>(null);
-    const [, setRevealRequests] = useState(0);
+    const [, setRevealTick] = useState(0);
     const selectExpansion = (serial: number) => {
         pendingExpansion.current = serial;
-        setShowMacroOutput(true);
-        setRevealRequests((count) => count + 1); // renders even when the split view is already open
+        if (canShowMacroOutput) setShowMacroOutput(true);
+        setRevealTick((count) => count + 1); // renders even when the split view is already open
     };
     useEffect(() => {
-        const serial = pendingExpansion.current;
-        if (serial === null) return;
-        pendingExpansion.current = null;
-        const reveal = macroReport && macroView.bands ? expansionReveal(macroReport, serial) : null;
-        if (!reveal) return;
-        if (reveal.bandIndex !== null) {
-            bandReveal.showOutputBand(reveal.bandIndex);
-            if (activeFile === macroView.sourceFile) bandReveal.showSourceBand(reveal.bandIndex);
-            return;
+        const { actions, pending } = resolvePendingReveal(pendingExpansion.current, {
+            report: macroReport,
+            bands: macroView.bands,
+            splitPossible: canShowMacroOutput,
+            splitShown: macroOutput !== null,
+            outputMounted: bandReveal.outputMounted(),
+            generatedActive: isGeneratedFile(activeFile),
+            sourceActive: activeFile === macroView.sourceFile,
+        });
+        pendingExpansion.current = pending;
+        for (const action of actions) {
+            if (action.kind === "band") {
+                if (action.editor === "output") bandReveal.showOutputBand(action.index);
+                else bandReveal.showSourceBand(action.index);
+            } else if (action.editor === "output") bandReveal.revealOutputLine(action.line);
+            else bandReveal.revealSourceLine(action.line);
         }
-        bandReveal.revealOutputLine(reveal.outputLine);
-        if (activeFile === macroView.sourceFile) bandReveal.revealSourceLine(reveal.sourceLine);
     });
 
     useEffect(() => {
@@ -920,7 +928,10 @@ export default function EditorPage({ projectId }: PageProps) {
                                                     executingAddress={executingAddress}
                                                     bands={outputDecorations.bands}
                                                     onBandClick={activeDecorations.bands.length > 0 ? bandReveal.showSourceBand : undefined}
-                                                    onMount={bandReveal.trackOutput}
+                                                    onMount={(instance, monaco) => {
+                                                        bandReveal.trackOutput(instance, monaco);
+                                                        setRevealTick((count) => count + 1); // runs a reveal that waited for this editor
+                                                    }}
                                                     documentUri={languageDocumentUri(project.id, MACRO_OUTPUT_FILE)}
                                                     languageClient={languageClient}
                                                     onChange={() => {}}

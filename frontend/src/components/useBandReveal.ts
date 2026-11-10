@@ -33,5 +33,6 @@ export function useBandReveal(bands: MacroBands | null) {
         showOutputBand: (index: number) => reveal(outputEditor.current, bands?.output[index]),
         revealSourceLine: (line: number) => revealLine(sourceEditor.current, line),
         revealOutputLine: (line: number) => revealLine(outputEditor.current, line),
+        outputMounted: () => outputEditor.current !== null,
     }), [bands]);
 }
