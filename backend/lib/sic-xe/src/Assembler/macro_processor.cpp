@@ -281,8 +281,9 @@ class OnePass {
     traceAs(d() == 1 ? TraceAction::DefineEnd : TraceAction::Store);
     while (!formals_.empty() && formals_.back().level == d()) formals_.pop_back();
     store(asRead(line), line);
+    const SourceRange opened = levels_.back();
     levels_.pop_back();
-    if (d() == 0) closeDefinition();
+    if (d() == 0) closeDefinition(opened);
   }
 
   void missingPrototype() {
@@ -377,14 +378,16 @@ class OnePass {
   }
 
   // Level 1 closed: the definition enters the definition table and the name table.
-  // A redefinition leaves the previous definition in the table, inactive.
-  void closeDefinition() {
+  // A redefinition leaves the previous definition in the table, inactive. `opened` is
+  // where its MCDEFN was read: the outermost call when an expansion created it.
+  void closeDefinition(const SourceRange& opened) {
     DefinitionInProgress done = std::move(current_);
     current_ = {};
     if (done.failed) {
       untarget(done.traceSteps);
       return;
     }
+    checkMarkers(done, opened);
 
     MacroDefinition def;
     def.index = static_cast<int>(result_.definitions.size());
@@ -410,6 +413,27 @@ class OnePass {
     }
     result_.definitions.push_back(std::move(def));
     bodies_.push_back(std::move(done.lines));
+  }
+
+  // A definition created by an expansion keeps the markers its lines got in the source,
+  // where its prototype was parsed with the outer formals' names; an actual can make the
+  // substituted prototype parse with fewer formals (C'A quotes the comma, =X takes the
+  // name's place, MCDEFN opens a definition early). A marker of its own level that the
+  // prototype no longer has is reported once, at `at`, and expands to "".
+  void checkMarkers(const DefinitionInProgress& done, const SourceRange& at) {
+    for (const PieceLine& line : done.lines)
+      for (const Piece& p : line) {
+        if (p.kind != Piece::Kind::Param || p.level != 1) continue;
+        const std::string uses = "Body of " + done.name + " uses parameter #" + std::to_string(p.index);
+        if (p.index == 0 && done.labelFormal.empty()) {
+          error(at, uses + " but its prototype has no label formal");
+          return;
+        }
+        if (p.index > static_cast<int>(done.formals.size())) {
+          error(at, uses + " but its prototype has " + std::to_string(done.formals.size()));
+          return;
+        }
+      }
   }
 
   // A call (spec 4.2, 4.5), in the source or nested in an expansion: a new frame on the
