@@ -113,5 +113,22 @@ describe("MacroView", () => {
             const cells = within(row).getAllByRole("cell");
             expect(cells[2].textContent).toBe("#004");
         });
+
+        // From the MCDEFN line to the MCEND line, as in "SOMA — defined at line 2".
+        it("runs the Lines column from the MCDEFN line to the MCEND line", () => {
+            renderView(demo);
+            const table = screen.getByRole("table", { name: "Macro name table" });
+            const lines = Object.fromEntries(within(table).getAllByRole("row").slice(1).map((row) => {
+                const cells = within(row).getAllByRole("cell");
+                return [cells[0].textContent, cells[2].textContent];
+            }));
+            expect(lines).toEqual({
+                SOMA: "2-7",
+                DOBRA: "8-11",
+                MAXIMO: "12-19",
+                ESCALA: "20-28",
+                MULTK: "#004",
+            });
+        });
     });
 });
