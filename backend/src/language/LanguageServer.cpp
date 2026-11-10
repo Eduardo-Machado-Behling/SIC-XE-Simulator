@@ -432,6 +432,22 @@ bool rename_keeps_program(std::string_view text, const sicxe::AssemblyInfo& befo
     return symbol_counts(after.info) == expected;
 }
 
+// A definition no expansion read whose body names `name` as a whole token, formals aside:
+// a macro never called, or one an expansion made and nothing called. The place search and
+// the second expansion both follow expansions, so neither can see the name there.
+const sicxe::MacroDefinition* uncalled_definition_naming(const sicxe::MacroResult& macros, std::string_view name) {
+    const std::string target = upper(name);
+    for (const sicxe::MacroDefinition& definition : macros.definitions) {
+        if (std::any_of(macros.expansions.begin(), macros.expansions.end(),
+                        [&](const sicxe::Expansion& expansion) { return expansion.definition == definition.index; }))
+            continue;
+        for (const std::string& line : definition.displayBody)
+            for (const Identifier& word : identifiers(line))
+                if (upper(word.text) == target && !is_formal(definition, word.text)) return &definition;
+    }
+    return nullptr;
+}
+
 std::string directive_detail(std::string_view name) {
     const std::string directive = upper(name);
     if (directive == "START") return "Set the program start address.\n\n`START expression`";
@@ -763,11 +779,16 @@ json AssemblerLanguageSession::rename(Document& document, const json& params) {
     const std::vector<sicxe::SourceSpan> spans = occurrences(positions, document.analysis.info, *definition, true);
     if (std::any_of(spans.begin(), spans.end(), [](const sicxe::SourceSpan& at) { return at.synthetic; }))
         throw std::invalid_argument("Cannot rename a symbol produced by a macro expansion");
-    // Without macros every place is exact, as before. With them, the edits are checked by
-    // expanding and assembling the renamed document.
-    if (document.macros.hasMacros &&
-        !rename_keeps_program(document.text, document.analysis.info, spans, definition->name, newName))
-        throw std::invalid_argument("Cannot rename safely: a macro expansion would not follow the new name");
+    // Without macros every place is exact, as before. With them, a body no expansion read
+    // is out of reach, and the edits are checked by expanding and assembling the renamed
+    // document.
+    if (document.macros.hasMacros) {
+        if (const sicxe::MacroDefinition* uncalled = uncalled_definition_naming(document.macros, definition->name))
+            throw std::invalid_argument("'" + definition->name + "' also appears in macro " + uncalled->name +
+                                        ", which is never called; rename it there by hand");
+        if (!rename_keeps_program(document.text, document.analysis.info, spans, definition->name, newName))
+            throw std::invalid_argument("Cannot rename safely: a macro expansion would not follow the new name");
+    }
     json edits = json::array();
     for (const sicxe::SourceSpan& at : spans)
         edits.push_back({{"range", lsp_range(at.line, at.column, at.length)}, {"newText", newName}});
