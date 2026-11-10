@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+    macroReportFromEvents,
     normalizeExecutionEvent,
     normalizeExecutionEvents,
     symbolsFromEvents,
 } from "@/lib/simulator/ExecutionEvent";
+import { macroReportFixture, rawMacroReportFixture } from "@/lib/simulator/macroFixtures";
 
 const assembled = (symbols: unknown) => ({ type: "ProgramAssembled", details: { symbols } });
 
@@ -40,5 +42,44 @@ describe("symbolsFromEvents", () => {
         const events = normalizeExecutionEvents([{ type: "InstructionExecuted", instruction: null }]);
 
         expect(symbolsFromEvents(events)).toBeNull();
+    });
+});
+
+const macrosExpanded = (details: unknown) => ({ type: "MacrosExpanded", details });
+
+describe("MacrosExpanded events", () => {
+    it("are accepted with their full report", () => {
+        const event = normalizeExecutionEvent(macrosExpanded(rawMacroReportFixture));
+
+        expect(event).toEqual({ type: "MacrosExpanded", details: macroReportFixture });
+    });
+
+    it("are rejected when the UI-read fields have the wrong shape", () => {
+        const bad = (patch: Record<string, unknown>) =>
+            () => normalizeExecutionEvent(macrosExpanded({ ...rawMacroReportFixture, ...patch }));
+
+        expect(bad({ text: 5 })).toThrow(TypeError);
+        expect(bad({ lineMap: "x" })).toThrow(TypeError);
+        expect(bad({ lineMap: [{ output: 1 }] })).toThrow(TypeError);
+        expect(bad({ expansions: {} })).toThrow(TypeError);
+        expect(bad({ definitions: [null] })).toThrow(TypeError);
+        expect(bad({ names: [{ name: 1 }] })).toThrow(TypeError);
+        expect(bad({ trace: { truncated: false, steps: 3 } })).toThrow(TypeError);
+        expect(bad({ hasMacros: "yes" })).toThrow(TypeError);
+        expect(() => normalizeExecutionEvent({ type: "MacrosExpanded" })).toThrow(TypeError);
+    });
+});
+
+describe("macroReportFromEvents", () => {
+    it("returns the last report in the batch, or null", () => {
+        const first = { ...rawMacroReportFixture, text: "first\n" };
+        const events = normalizeExecutionEvents([
+            macrosExpanded(first),
+            macrosExpanded(rawMacroReportFixture),
+            { type: "MemoryCleared" },
+        ]);
+
+        expect(macroReportFromEvents(events)).toEqual(macroReportFixture);
+        expect(macroReportFromEvents(normalizeExecutionEvents([{ type: "MemoryCleared" }]))).toBeNull();
     });
 });
