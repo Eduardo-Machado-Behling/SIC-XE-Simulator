@@ -12,6 +12,7 @@ set(ASSEMBLER_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/assembler.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/expression.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/isa.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/macro_processor.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/parser.cpp"
 )
 
@@ -63,6 +64,8 @@ if(BUILD_TESTING)
     )
 
     list(FILTER TEST_SOURCES EXCLUDE REGEX "/demo\\.cpp$")
+    # The macro processor has its own test runner (sicxe_macro_tests).
+    list(FILTER TEST_SOURCES EXCLUDE REGEX "/test_macro_processor\\.cpp$")
 
     message(STATUS
         "${LIB_NAME}: found ${TEST_SOURCES}"
@@ -87,6 +90,22 @@ if(BUILD_TESTING)
                 COMMAND ${TEST_TARGET} "${CASE_NAME}"
             )
         endfunction()
+
+        # Macro processor tests: own executable, linked against the static assembler only.
+        add_executable(sicxe_macro_tests
+            "${CMAKE_CURRENT_SOURCE_DIR}/test/test_macro_processor.cpp"
+        )
+        target_link_libraries(sicxe_macro_tests PRIVATE sicxe_assembler)
+
+        function(add_sicxe_macro_test CASE_NAME DESCRIPTION)
+            add_test(
+                NAME "sicxe.macro.${DESCRIPTION}"
+                COMMAND sicxe_macro_tests "${CASE_NAME}"
+            )
+        endfunction()
+
+        add_sicxe_macro_test(identity_for_source_without_macros "identity.source-without-macros")
+        add_sicxe_macro_test(identity_preserves_crlf "identity.preserves-crlf")
 
         add_sicxe_test(code_memory_is_sparse_and_merges "code-memory.sparse-segment-merging")
         add_sicxe_test(spec_example_style_program "assembly.example-program-encoding")
