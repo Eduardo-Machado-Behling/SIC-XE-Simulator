@@ -16,6 +16,10 @@ function reveal(instance: MountedEditor | null, band: EditorBand | undefined): v
     if (instance && band) instance.revealLineInCenter(band.from);
 }
 
+function revealLine(instance: MountedEditor | null, line: number): void {
+    instance?.revealLineInCenter(line);
+}
+
 // Links the source and MASMAPRG.ASM editors of the side-by-side view: a click
 // on band i on one side scrolls the other side to its band i.
 export function useBandReveal(bands: MacroBands | null) {
@@ -27,5 +31,7 @@ export function useBandReveal(bands: MacroBands | null) {
         trackOutput: ((instance) => track(outputEditor, instance)) as OnMount,
         showSourceBand: (index: number) => reveal(sourceEditor.current, bands?.source[index]),
         showOutputBand: (index: number) => reveal(outputEditor.current, bands?.output[index]),
+        revealSourceLine: (line: number) => revealLine(sourceEditor.current, line),
+        revealOutputLine: (line: number) => revealLine(outputEditor.current, line),
     }), [bands]);
 }
