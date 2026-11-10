@@ -209,4 +209,25 @@ describe("EditorPage with the macro processor", () => {
             ]);
         });
     });
+
+    describe("a new folder (F8)", () => {
+        it("cannot take the generated file's name at the project root, in any case", async () => {
+            const user = await openPage();
+            vi.spyOn(window, "prompt").mockReturnValueOnce("masmaprg.asm");
+            await user.click(screen.getByRole("button", { name: "New folder in project" }));
+
+            const dialog = await screen.findByRole("alertdialog");
+            expect(within(dialog).getByText("Reserved name")).toBeTruthy();
+            expect(screen.queryByText("masmaprg.asm")).toBeNull();
+        });
+
+        it("can take any other name", async () => {
+            const user = await openPage();
+            vi.spyOn(window, "prompt").mockReturnValueOnce("lib");
+            await user.click(screen.getByRole("button", { name: "New folder in project" }));
+
+            expect(await screen.findByText("lib")).toBeTruthy();
+            expect(screen.queryByRole("alertdialog")).toBeNull();
+        });
+    });
 });
