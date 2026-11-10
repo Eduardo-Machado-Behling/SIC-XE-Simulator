@@ -1,0 +1,1588 @@
+{
+  "definitions": [
+    {
+      "active": true,
+      "body": [
+        {
+          "line": 3,
+          "text": "L       SOMA X,Y,Z           ; Z = X + Y"
+        },
+        {
+          "line": 4,
+          "text": "#0       LDA #1"
+        },
+        {
+          "line": 5,
+          "text": "        ADD #2"
+        },
+        {
+          "line": 6,
+          "text": "        STA #3"
+        },
+        {
+          "line": 7,
+          "text": "        MCEND"
+        }
+      ],
+      "formals": [
+        {
+          "default": null,
+          "name": "X"
+        },
+        {
+          "default": null,
+          "name": "Y"
+        },
+        {
+          "default": null,
+          "name": "Z"
+        }
+      ],
+      "index": 0,
+      "labelFormal": "L",
+      "name": "SOMA",
+      "origin": {
+        "kind": "source",
+        "line": 2
+      },
+      "prototype": "L       SOMA X,Y,Z"
+    },
+    {
+      "active": true,
+      "body": [
+        {
+          "line": 9,
+          "text": "L       DOBRA V              ; V = 2 * V   (chamada aninhada de SOMA)"
+        },
+        {
+          "line": 10,
+          "text": "#0       SOMA #1,#1,#1"
+        },
+        {
+          "line": 11,
+          "text": "        MCEND"
+        }
+      ],
+      "formals": [
+        {
+          "default": null,
+          "name": "V"
+        }
+      ],
+      "index": 1,
+      "labelFormal": "L",
+      "name": "DOBRA",
+      "origin": {
+        "kind": "source",
+        "line": 8
+      },
+      "prototype": "L       DOBRA V"
+    },
+    {
+      "active": true,
+      "body": [
+        {
+          "line": 13,
+          "text": "        MAXIMO P=,Q=,R=MAIOR ; R = max(P, Q)   (palavra-chave com padrao e .SER)"
+        },
+        {
+          "line": 14,
+          "text": "        LDA #1"
+        },
+        {
+          "line": 15,
+          "text": "        COMP #2"
+        },
+        {
+          "line": 16,
+          "text": "        JGT FIM.SER"
+        },
+        {
+          "line": 17,
+          "text": "        LDA #2"
+        },
+        {
+          "line": 18,
+          "text": "FIM.SER STA #3"
+        },
+        {
+          "line": 19,
+          "text": "        MCEND"
+        }
+      ],
+      "formals": [
+        {
+          "default": "",
+          "name": "P"
+        },
+        {
+          "default": "",
+          "name": "Q"
+        },
+        {
+          "default": "MAIOR",
+          "name": "R"
+        }
+      ],
+      "index": 2,
+      "labelFormal": null,
+      "name": "MAXIMO",
+      "origin": {
+        "kind": "source",
+        "line": 12
+      },
+      "prototype": "MAXIMO P=,Q=,R=MAIOR"
+    },
+    {
+      "active": true,
+      "body": [
+        {
+          "line": 21,
+          "text": "        ESCALA K             ; define MULTK com a constante K   (definicao aninhada)"
+        },
+        {
+          "line": 22,
+          "text": "        MCDEFN"
+        },
+        {
+          "line": 23,
+          "text": "        MULTK A,C            ; C = A * K"
+        },
+        {
+          "line": 24,
+          "text": "        LDA #(2,1)"
+        },
+        {
+          "line": 25,
+          "text": "        MUL ##(1,1)"
+        },
+        {
+          "line": 26,
+          "text": "        STA #(2,2)"
+        },
+        {
+          "line": 27,
+          "text": "        MCEND"
+        },
+        {
+          "line": 28,
+          "text": "        MCEND"
+        }
+      ],
+      "formals": [
+        {
+          "default": null,
+          "name": "K"
+        }
+      ],
+      "index": 3,
+      "labelFormal": null,
+      "name": "ESCALA",
+      "origin": {
+        "kind": "source",
+        "line": 20
+      },
+      "prototype": "ESCALA K"
+    },
+    {
+      "active": true,
+      "body": [
+        {
+          "line": null,
+          "text": "        MULTK A,C            ; C = A * K"
+        },
+        {
+          "line": null,
+          "text": "        LDA #1"
+        },
+        {
+          "line": null,
+          "text": "        MUL #3"
+        },
+        {
+          "line": null,
+          "text": "        STA #2"
+        },
+        {
+          "line": null,
+          "text": "        MCEND"
+        }
+      ],
+      "formals": [
+        {
+          "default": null,
+          "name": "A"
+        },
+        {
+          "default": null,
+          "name": "C"
+        }
+      ],
+      "index": 4,
+      "labelFormal": null,
+      "name": "MULTK",
+      "origin": {
+        "kind": "expansion",
+        "serial": 4
+      },
+      "prototype": "MULTK A,C"
+    }
+  ],
+  "diagnostics": [],
+  "expansions": [
+    {
+      "actuals": [
+        {
+          "formal": "L",
+          "index": 0,
+          "value": "INICIO"
+        },
+        {
+          "formal": "V",
+          "index": 1,
+          "value": "N"
+        }
+      ],
+      "callLine": 30,
+      "callText": "INICIO  DOBRA N              ; N = 10",
+      "definition": 1,
+      "depth": 1,
+      "macro": "DOBRA",
+      "output": {
+        "from": 3,
+        "to": 7
+      },
+      "parent": null,
+      "serial": 1
+    },
+    {
+      "actuals": [
+        {
+          "formal": "L",
+          "index": 0,
+          "value": "INICIO"
+        },
+        {
+          "formal": "X",
+          "index": 1,
+          "value": "N"
+        },
+        {
+          "formal": "Y",
+          "index": 2,
+          "value": "N"
+        },
+        {
+          "formal": "Z",
+          "index": 3,
+          "value": "N"
+        }
+      ],
+      "callLine": 30,
+      "callText": "INICIO       SOMA N,N,N",
+      "definition": 0,
+      "depth": 2,
+      "macro": "SOMA",
+      "output": {
+        "from": 4,
+        "to": 7
+      },
+      "parent": 1,
+      "serial": 2
+    },
+    {
+      "actuals": [
+        {
+          "formal": "P",
+          "index": 1,
+          "value": "N"
+        },
+        {
+          "formal": "Q",
+          "index": 2,
+          "value": "M"
+        },
+        {
+          "formal": "R",
+          "index": 3,
+          "value": "MAIOR"
+        }
+      ],
+      "callLine": 31,
+      "callText": "        MAXIMO P=N,Q=M       ; MAIOR = 10",
+      "definition": 2,
+      "depth": 1,
+      "macro": "MAXIMO",
+      "output": {
+        "from": 8,
+        "to": 13
+      },
+      "parent": null,
+      "serial": 3
+    },
+    {
+      "actuals": [
+        {
+          "formal": "K",
+          "index": 1,
+          "value": "3"
+        }
+      ],
+      "callLine": 32,
+      "callText": "        ESCALA 3             ; cria MULTK com K = 3",
+      "definition": 3,
+      "depth": 1,
+      "macro": "ESCALA",
+      "output": {
+        "from": 14,
+        "to": 14
+      },
+      "parent": null,
+      "serial": 4
+    },
+    {
+      "actuals": [
+        {
+          "formal": "A",
+          "index": 1,
+          "value": "N"
+        },
+        {
+          "formal": "C",
+          "index": 2,
+          "value": "TRIPLO"
+        }
+      ],
+      "callLine": 33,
+      "callText": "        MULTK N,TRIPLO       ; TRIPLO = 30",
+      "definition": 4,
+      "depth": 1,
+      "macro": "MULTK",
+      "output": {
+        "from": 15,
+        "to": 18
+      },
+      "parent": null,
+      "serial": 5
+    }
+  ],
+  "file": "MASMAPRG.ASM",
+  "hasMacros": true,
+  "lineMap": [
+    {
+      "kind": "verbatim",
+      "output": 1,
+      "serial": null,
+      "source": 1
+    },
+    {
+      "kind": "verbatim",
+      "output": 2,
+      "serial": null,
+      "source": 29
+    },
+    {
+      "kind": "call",
+      "output": 3,
+      "serial": 1,
+      "source": 30
+    },
+    {
+      "kind": "call",
+      "output": 4,
+      "serial": 2,
+      "source": 30
+    },
+    {
+      "kind": "expanded",
+      "output": 5,
+      "serial": 2,
+      "source": 30
+    },
+    {
+      "kind": "expanded",
+      "output": 6,
+      "serial": 2,
+      "source": 30
+    },
+    {
+      "kind": "expanded",
+      "output": 7,
+      "serial": 2,
+      "source": 30
+    },
+    {
+      "kind": "call",
+      "output": 8,
+      "serial": 3,
+      "source": 31
+    },
+    {
+      "kind": "expanded",
+      "output": 9,
+      "serial": 3,
+      "source": 31
+    },
+    {
+      "kind": "expanded",
+      "output": 10,
+      "serial": 3,
+      "source": 31
+    },
+    {
+      "kind": "expanded",
+      "output": 11,
+      "serial": 3,
+      "source": 31
+    },
+    {
+      "kind": "expanded",
+      "output": 12,
+      "serial": 3,
+      "source": 31
+    },
+    {
+      "kind": "expanded",
+      "output": 13,
+      "serial": 3,
+      "source": 31
+    },
+    {
+      "kind": "call",
+      "output": 14,
+      "serial": 4,
+      "source": 32
+    },
+    {
+      "kind": "call",
+      "output": 15,
+      "serial": 5,
+      "source": 33
+    },
+    {
+      "kind": "expanded",
+      "output": 16,
+      "serial": 5,
+      "source": 33
+    },
+    {
+      "kind": "expanded",
+      "output": 17,
+      "serial": 5,
+      "source": 33
+    },
+    {
+      "kind": "expanded",
+      "output": 18,
+      "serial": 5,
+      "source": 33
+    },
+    {
+      "kind": "verbatim",
+      "output": 19,
+      "serial": null,
+      "source": 34
+    },
+    {
+      "kind": "verbatim",
+      "output": 20,
+      "serial": null,
+      "source": 35
+    },
+    {
+      "kind": "verbatim",
+      "output": 21,
+      "serial": null,
+      "source": 36
+    },
+    {
+      "kind": "verbatim",
+      "output": 22,
+      "serial": null,
+      "source": 37
+    },
+    {
+      "kind": "verbatim",
+      "output": 23,
+      "serial": null,
+      "source": 38
+    },
+    {
+      "kind": "verbatim",
+      "output": 24,
+      "serial": null,
+      "source": 39
+    },
+    {
+      "kind": "verbatim",
+      "output": 25,
+      "serial": null,
+      "source": 40
+    }
+  ],
+  "names": [
+    {
+      "definition": 0,
+      "line": 3,
+      "name": "SOMA"
+    },
+    {
+      "definition": 1,
+      "line": 9,
+      "name": "DOBRA"
+    },
+    {
+      "definition": 2,
+      "line": 13,
+      "name": "MAXIMO"
+    },
+    {
+      "definition": 3,
+      "line": 21,
+      "name": "ESCALA"
+    },
+    {
+      "definition": 4,
+      "line": 0,
+      "name": "MULTK"
+    }
+  ],
+  "ok": true,
+  "text": ". Demo do processador de macros\nPROG    START 0x0000\n.INICIO  DOBRA N              ; N = 10\n.INICIO       SOMA N,N,N\nINICIO       LDA N\n        ADD N\n        STA N\n.        MAXIMO P=N,Q=M       ; MAIOR = 10\n        LDA N\n        COMP M\n        JGT FIM003\n        LDA M\nFIM003 STA MAIOR\n.        ESCALA 3             ; cria MULTK com K = 3\n.        MULTK N,TRIPLO       ; TRIPLO = 30\n        LDA N\n        MUL #3\n        STA TRIPLO\n        HALT\nN       WORD 5\nM       WORD 7\nMAIOR   RESW 1\nTRIPLO  RESW 1\n        END INICIO\n",
+  "trace": {
+    "steps": [
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 1
+        },
+        "step": 1,
+        "target": {
+          "output": 1
+        },
+        "text": ". Demo do processador de macros"
+      },
+      {
+        "action": "define-start",
+        "d": 0,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 2
+        },
+        "step": 2,
+        "target": null,
+        "text": "        MCDEFN"
+      },
+      {
+        "action": "prototype",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 3
+        },
+        "step": 3,
+        "target": {
+          "bodyLine": 1,
+          "definition": 0
+        },
+        "text": "L       SOMA X,Y,Z           ; Z = X + Y"
+      },
+      {
+        "action": "store",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 4
+        },
+        "step": 4,
+        "target": {
+          "bodyLine": 2,
+          "definition": 0
+        },
+        "text": "L       LDA X"
+      },
+      {
+        "action": "store",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 5
+        },
+        "step": 5,
+        "target": {
+          "bodyLine": 3,
+          "definition": 0
+        },
+        "text": "        ADD Y"
+      },
+      {
+        "action": "store",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 6
+        },
+        "step": 6,
+        "target": {
+          "bodyLine": 4,
+          "definition": 0
+        },
+        "text": "        STA Z"
+      },
+      {
+        "action": "define-end",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 7
+        },
+        "step": 7,
+        "target": {
+          "bodyLine": 5,
+          "definition": 0
+        },
+        "text": "        MCEND"
+      },
+      {
+        "action": "define-start",
+        "d": 0,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 8
+        },
+        "step": 8,
+        "target": null,
+        "text": "        MCDEFN"
+      },
+      {
+        "action": "prototype",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 9
+        },
+        "step": 9,
+        "target": {
+          "bodyLine": 1,
+          "definition": 1
+        },
+        "text": "L       DOBRA V              ; V = 2 * V   (chamada aninhada de SOMA)"
+      },
+      {
+        "action": "store",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 10
+        },
+        "step": 10,
+        "target": {
+          "bodyLine": 2,
+          "definition": 1
+        },
+        "text": "L       SOMA V,V,V"
+      },
+      {
+        "action": "define-end",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 11
+        },
+        "step": 11,
+        "target": {
+          "bodyLine": 3,
+          "definition": 1
+        },
+        "text": "        MCEND"
+      },
+      {
+        "action": "define-start",
+        "d": 0,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 12
+        },
+        "step": 12,
+        "target": null,
+        "text": "        MCDEFN"
+      },
+      {
+        "action": "prototype",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 13
+        },
+        "step": 13,
+        "target": {
+          "bodyLine": 1,
+          "definition": 2
+        },
+        "text": "        MAXIMO P=,Q=,R=MAIOR ; R = max(P, Q)   (palavra-chave com padrao e .SER)"
+      },
+      {
+        "action": "store",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 14
+        },
+        "step": 14,
+        "target": {
+          "bodyLine": 2,
+          "definition": 2
+        },
+        "text": "        LDA P"
+      },
+      {
+        "action": "store",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 15
+        },
+        "step": 15,
+        "target": {
+          "bodyLine": 3,
+          "definition": 2
+        },
+        "text": "        COMP Q"
+      },
+      {
+        "action": "store",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 16
+        },
+        "step": 16,
+        "target": {
+          "bodyLine": 4,
+          "definition": 2
+        },
+        "text": "        JGT FIM.SER"
+      },
+      {
+        "action": "store",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 17
+        },
+        "step": 17,
+        "target": {
+          "bodyLine": 5,
+          "definition": 2
+        },
+        "text": "        LDA Q"
+      },
+      {
+        "action": "store",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 18
+        },
+        "step": 18,
+        "target": {
+          "bodyLine": 6,
+          "definition": 2
+        },
+        "text": "FIM.SER STA R"
+      },
+      {
+        "action": "define-end",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 19
+        },
+        "step": 19,
+        "target": {
+          "bodyLine": 7,
+          "definition": 2
+        },
+        "text": "        MCEND"
+      },
+      {
+        "action": "define-start",
+        "d": 0,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 20
+        },
+        "step": 20,
+        "target": null,
+        "text": "        MCDEFN"
+      },
+      {
+        "action": "prototype",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 21
+        },
+        "step": 21,
+        "target": {
+          "bodyLine": 1,
+          "definition": 3
+        },
+        "text": "        ESCALA K             ; define MULTK com a constante K   (definicao aninhada)"
+      },
+      {
+        "action": "store",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 22
+        },
+        "step": 22,
+        "target": {
+          "bodyLine": 2,
+          "definition": 3
+        },
+        "text": "        MCDEFN"
+      },
+      {
+        "action": "store",
+        "d": 2,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 23
+        },
+        "step": 23,
+        "target": {
+          "bodyLine": 3,
+          "definition": 3
+        },
+        "text": "        MULTK A,C            ; C = A * K"
+      },
+      {
+        "action": "store",
+        "d": 2,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 24
+        },
+        "step": 24,
+        "target": {
+          "bodyLine": 4,
+          "definition": 3
+        },
+        "text": "        LDA A"
+      },
+      {
+        "action": "store",
+        "d": 2,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 25
+        },
+        "step": 25,
+        "target": {
+          "bodyLine": 5,
+          "definition": 3
+        },
+        "text": "        MUL #K"
+      },
+      {
+        "action": "store",
+        "d": 2,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 26
+        },
+        "step": 26,
+        "target": {
+          "bodyLine": 6,
+          "definition": 3
+        },
+        "text": "        STA C"
+      },
+      {
+        "action": "store",
+        "d": 2,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 27
+        },
+        "step": 27,
+        "target": {
+          "bodyLine": 7,
+          "definition": 3
+        },
+        "text": "        MCEND"
+      },
+      {
+        "action": "define-end",
+        "d": 1,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 28
+        },
+        "step": 28,
+        "target": {
+          "bodyLine": 8,
+          "definition": 3
+        },
+        "text": "        MCEND"
+      },
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 29
+        },
+        "step": 29,
+        "target": {
+          "output": 2
+        },
+        "text": "PROG    START 0x0000"
+      },
+      {
+        "action": "call",
+        "d": 0,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 30
+        },
+        "step": 30,
+        "target": {
+          "serial": 1
+        },
+        "text": "INICIO  DOBRA N              ; N = 10"
+      },
+      {
+        "action": "read-prototype",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 1,
+          "from": "expansion",
+          "serial": 1
+        },
+        "step": 31,
+        "target": null,
+        "text": "L       DOBRA V              ; V = 2 * V   (chamada aninhada de SOMA)"
+      },
+      {
+        "action": "call",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 2,
+          "from": "expansion",
+          "serial": 1
+        },
+        "step": 32,
+        "target": {
+          "serial": 2
+        },
+        "text": "INICIO       SOMA N,N,N"
+      },
+      {
+        "action": "read-prototype",
+        "d": 0,
+        "depth": 2,
+        "e": true,
+        "read": {
+          "bodyLine": 1,
+          "from": "expansion",
+          "serial": 2
+        },
+        "step": 33,
+        "target": null,
+        "text": "L       SOMA X,Y,Z           ; Z = X + Y"
+      },
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 2,
+        "e": true,
+        "read": {
+          "bodyLine": 2,
+          "from": "expansion",
+          "serial": 2
+        },
+        "step": 34,
+        "target": {
+          "output": 5
+        },
+        "text": "INICIO       LDA N"
+      },
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 2,
+        "e": true,
+        "read": {
+          "bodyLine": 3,
+          "from": "expansion",
+          "serial": 2
+        },
+        "step": 35,
+        "target": {
+          "output": 6
+        },
+        "text": "        ADD N"
+      },
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 2,
+        "e": true,
+        "read": {
+          "bodyLine": 4,
+          "from": "expansion",
+          "serial": 2
+        },
+        "step": 36,
+        "target": {
+          "output": 7
+        },
+        "text": "        STA N"
+      },
+      {
+        "action": "expansion-end",
+        "d": 0,
+        "depth": 2,
+        "e": true,
+        "read": {
+          "bodyLine": 5,
+          "from": "expansion",
+          "serial": 2
+        },
+        "step": 37,
+        "target": null,
+        "text": "        MCEND"
+      },
+      {
+        "action": "expansion-end",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 3,
+          "from": "expansion",
+          "serial": 1
+        },
+        "step": 38,
+        "target": null,
+        "text": "        MCEND"
+      },
+      {
+        "action": "call",
+        "d": 0,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 31
+        },
+        "step": 39,
+        "target": {
+          "serial": 3
+        },
+        "text": "        MAXIMO P=N,Q=M       ; MAIOR = 10"
+      },
+      {
+        "action": "read-prototype",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 1,
+          "from": "expansion",
+          "serial": 3
+        },
+        "step": 40,
+        "target": null,
+        "text": "        MAXIMO P=,Q=,R=MAIOR ; R = max(P, Q)   (palavra-chave com padrao e .SER)"
+      },
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 2,
+          "from": "expansion",
+          "serial": 3
+        },
+        "step": 41,
+        "target": {
+          "output": 9
+        },
+        "text": "        LDA N"
+      },
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 3,
+          "from": "expansion",
+          "serial": 3
+        },
+        "step": 42,
+        "target": {
+          "output": 10
+        },
+        "text": "        COMP M"
+      },
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 4,
+          "from": "expansion",
+          "serial": 3
+        },
+        "step": 43,
+        "target": {
+          "output": 11
+        },
+        "text": "        JGT FIM003"
+      },
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 5,
+          "from": "expansion",
+          "serial": 3
+        },
+        "step": 44,
+        "target": {
+          "output": 12
+        },
+        "text": "        LDA M"
+      },
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 6,
+          "from": "expansion",
+          "serial": 3
+        },
+        "step": 45,
+        "target": {
+          "output": 13
+        },
+        "text": "FIM003 STA MAIOR"
+      },
+      {
+        "action": "expansion-end",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 7,
+          "from": "expansion",
+          "serial": 3
+        },
+        "step": 46,
+        "target": null,
+        "text": "        MCEND"
+      },
+      {
+        "action": "call",
+        "d": 0,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 32
+        },
+        "step": 47,
+        "target": {
+          "serial": 4
+        },
+        "text": "        ESCALA 3             ; cria MULTK com K = 3"
+      },
+      {
+        "action": "read-prototype",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 1,
+          "from": "expansion",
+          "serial": 4
+        },
+        "step": 48,
+        "target": null,
+        "text": "        ESCALA K             ; define MULTK com a constante K   (definicao aninhada)"
+      },
+      {
+        "action": "define-start",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 2,
+          "from": "expansion",
+          "serial": 4
+        },
+        "step": 49,
+        "target": null,
+        "text": "        MCDEFN"
+      },
+      {
+        "action": "prototype",
+        "d": 1,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 3,
+          "from": "expansion",
+          "serial": 4
+        },
+        "step": 50,
+        "target": {
+          "bodyLine": 1,
+          "definition": 4
+        },
+        "text": "        MULTK A,C            ; C = A * K"
+      },
+      {
+        "action": "store",
+        "d": 1,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 4,
+          "from": "expansion",
+          "serial": 4
+        },
+        "step": 51,
+        "target": {
+          "bodyLine": 2,
+          "definition": 4
+        },
+        "text": "        LDA #(1,1)"
+      },
+      {
+        "action": "store",
+        "d": 1,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 5,
+          "from": "expansion",
+          "serial": 4
+        },
+        "step": 52,
+        "target": {
+          "bodyLine": 3,
+          "definition": 4
+        },
+        "text": "        MUL #3"
+      },
+      {
+        "action": "store",
+        "d": 1,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 6,
+          "from": "expansion",
+          "serial": 4
+        },
+        "step": 53,
+        "target": {
+          "bodyLine": 4,
+          "definition": 4
+        },
+        "text": "        STA #(1,2)"
+      },
+      {
+        "action": "define-end",
+        "d": 1,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 7,
+          "from": "expansion",
+          "serial": 4
+        },
+        "step": 54,
+        "target": {
+          "bodyLine": 5,
+          "definition": 4
+        },
+        "text": "        MCEND"
+      },
+      {
+        "action": "expansion-end",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 8,
+          "from": "expansion",
+          "serial": 4
+        },
+        "step": 55,
+        "target": null,
+        "text": "        MCEND"
+      },
+      {
+        "action": "call",
+        "d": 0,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 33
+        },
+        "step": 56,
+        "target": {
+          "serial": 5
+        },
+        "text": "        MULTK N,TRIPLO       ; TRIPLO = 30"
+      },
+      {
+        "action": "read-prototype",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 1,
+          "from": "expansion",
+          "serial": 5
+        },
+        "step": 57,
+        "target": null,
+        "text": "        MULTK A,C            ; C = A * K"
+      },
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 2,
+          "from": "expansion",
+          "serial": 5
+        },
+        "step": 58,
+        "target": {
+          "output": 16
+        },
+        "text": "        LDA N"
+      },
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 3,
+          "from": "expansion",
+          "serial": 5
+        },
+        "step": 59,
+        "target": {
+          "output": 17
+        },
+        "text": "        MUL #3"
+      },
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 4,
+          "from": "expansion",
+          "serial": 5
+        },
+        "step": 60,
+        "target": {
+          "output": 18
+        },
+        "text": "        STA TRIPLO"
+      },
+      {
+        "action": "expansion-end",
+        "d": 0,
+        "depth": 1,
+        "e": true,
+        "read": {
+          "bodyLine": 5,
+          "from": "expansion",
+          "serial": 5
+        },
+        "step": 61,
+        "target": null,
+        "text": "        MCEND"
+      },
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 34
+        },
+        "step": 62,
+        "target": {
+          "output": 19
+        },
+        "text": "        HALT"
+      },
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 35
+        },
+        "step": 63,
+        "target": {
+          "output": 20
+        },
+        "text": "N       WORD 5"
+      },
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 36
+        },
+        "step": 64,
+        "target": {
+          "output": 21
+        },
+        "text": "M       WORD 7"
+      },
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 37
+        },
+        "step": 65,
+        "target": {
+          "output": 22
+        },
+        "text": "MAIOR   RESW 1"
+      },
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 38
+        },
+        "step": 66,
+        "target": {
+          "output": 23
+        },
+        "text": "TRIPLO  RESW 1"
+      },
+      {
+        "action": "copy",
+        "d": 0,
+        "depth": 0,
+        "e": false,
+        "read": {
+          "from": "source",
+          "line": 39
+        },
+        "step": 67,
+        "target": {
+          "output": 24
+        },
+        "text": "        END INICIO"
+      }
+    ],
+    "truncated": false
+  }
+}

@@ -63,12 +63,16 @@ export function MacroTables({ report, onSelectExpansion }: MacroTablesProps) {
                     {report.names.map((entry) => {
                         const definition = report.definitions[entry.definition];
                         const last = definition?.body.at(-1)?.line;
+                        // Line 0: the macro was created by an expansion, not written in the source.
+                        const lines = entry.line === 0
+                            ? (definition?.origin.kind === "expansion" ? `#${String(definition.origin.serial).padStart(3, "0")}` : "")
+                            : last != null && last !== entry.line ? `${entry.line}-${last}` : entry.line;
                         return (
                             <tr key={entry.name} className="border-t border-zinc-800">
                                 <td className="py-1 text-zinc-300">{entry.name}</td>
                                 <td className="py-1 text-zinc-400">{definition?.prototype}</td>
                                 <td className="py-1 text-zinc-400">
-                                    {last != null && last !== entry.line ? `${entry.line}-${last}` : entry.line}
+                                    {lines}
                                 </td>
                             </tr>
                         );
