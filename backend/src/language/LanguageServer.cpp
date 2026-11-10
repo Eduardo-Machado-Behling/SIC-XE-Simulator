@@ -5,6 +5,8 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdint>
+#include <functional>
+#include <map>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -299,27 +301,39 @@ public:
         }
     }
 
-    sicxe::SourceSpan symbol(std::string_view name, int line, int column, int length) const {
+    // Every place on the first line where the search finds the name. The output column
+    // cannot tell apart two places on that line (SOMA VA,VA,VB, or WORD TOTAL,TOTAL in a
+    // body), so each is given; `symbol` answers the first. The search can still miss a
+    // place of another line, which is why rename expands the edited document again.
+    std::vector<sicxe::SourceSpan> symbols(std::string_view name, int line, int column, int length) const {
         const sicxe::SourceSpan call = sicxe::mapToSource(m_macros, m_text, line, column, length);
-        if (!call.synthetic) return call;
+        if (!call.synthetic) return {call};
         const std::string target = upper(name);
+        std::vector<sicxe::SourceSpan> found;
         if (line >= 1 && static_cast<std::size_t>(line) <= m_bodies.size()) {
             const Body& body = m_bodies[static_cast<std::size_t>(line) - 1];
             if (body.sourceLine > 0) {
                 const sicxe::MacroDefinition& definition = m_macros.definitions[static_cast<std::size_t>(body.definition)];
                 for (const Identifier& word : identifiers(text_line(m_text, body.sourceLine))) {
                     if (upper(word.text) == target && !is_formal(definition, word.text))
-                        return {body.sourceLine, static_cast<int>(word.offset) + 1, static_cast<int>(word.text.size()),
-                                false};
+                        found.push_back({body.sourceLine, static_cast<int>(word.offset) + 1,
+                                         static_cast<int>(word.text.size()), false});
                 }
+                if (!found.empty()) return found;
             }
         }
         // On the call line, the macro name and the formals of keyword arguments are not actuals.
         for (const Identifier& word : identifiers(text_line(m_text, call.line))) {
             if (upper(word.text) == target && !word.keyword && static_cast<int>(word.offset) + 1 != call.column)
-                return {call.line, static_cast<int>(word.offset) + 1, static_cast<int>(word.text.size()), false};
+                found.push_back({call.line, static_cast<int>(word.offset) + 1, static_cast<int>(word.text.size()),
+                                 false});
         }
-        return call;
+        if (!found.empty()) return found;
+        return {call};
+    }
+
+    sicxe::SourceSpan symbol(std::string_view name, int line, int column, int length) const {
+        return symbols(name, line, column, length).front();
     }
 
 private:
@@ -339,17 +353,83 @@ std::vector<sicxe::SourceSpan> occurrences(const SourcePositions& positions, con
                                            const sicxe::SymbolLocation& definition, bool includeDeclaration) {
     std::vector<sicxe::SourceSpan> spans;
     std::set<std::tuple<int, int, int, bool>> seen;
-    auto add = [&](const sicxe::SourceSpan& span) {
-        if (seen.emplace(span.line, span.column, span.length, span.synthetic).second) spans.push_back(span);
+    auto add = [&](const std::vector<sicxe::SourceSpan>& places) {
+        for (const sicxe::SourceSpan& span : places)
+            if (seen.emplace(span.line, span.column, span.length, span.synthetic).second) spans.push_back(span);
     };
     if (includeDeclaration)
-        add(positions.symbol(definition.name, definition.line, definition.column, definition.length));
+        add(positions.symbols(definition.name, definition.line, definition.column, definition.length));
     const std::string target = upper(definition.name);
     for (const sicxe::SymbolReference& reference : info.symbolReferences) {
         if (upper(reference.name) == target)
-            add(positions.symbol(reference.name, reference.line, reference.column, reference.length));
+            add(positions.symbols(reference.name, reference.line, reference.column, reference.length));
     }
     return spans;
+}
+
+// How many times each symbol is defined and referenced, by upper-case name.
+std::map<std::string, std::pair<int, int>> symbol_counts(const sicxe::AssemblyInfo& info) {
+    std::map<std::string, std::pair<int, int>> counts;
+    for (const sicxe::SymbolLocation& symbol : info.symbolDefinitions) ++counts[upper(symbol.name)].first;
+    for (const sicxe::SymbolReference& reference : info.symbolReferences) ++counts[upper(reference.name)].second;
+    return counts;
+}
+
+// `text` with every span replaced by `replacement`; nothing if a span is not inside its
+// line or two spans overlap.
+std::optional<std::string> apply_edits(std::string_view text, const std::vector<sicxe::SourceSpan>& spans,
+                                       std::string_view replacement) {
+    std::vector<std::size_t> lineStarts{0};
+    for (std::size_t i = 0; i < text.size(); ++i)
+        if (text[i] == '\n') lineStarts.push_back(i + 1);
+    std::vector<std::pair<std::size_t, std::size_t>> ranges;  // offset, length
+    for (const sicxe::SourceSpan& span : spans) {
+        if (span.line < 1 || static_cast<std::size_t>(span.line) > lineStarts.size() || span.column < 1 ||
+            span.length < 1)
+            return std::nullopt;
+        const std::size_t line = static_cast<std::size_t>(span.line) - 1;
+        std::size_t lineEnd = line + 1 < lineStarts.size() ? lineStarts[line + 1] - 1 : text.size();
+        if (lineEnd > lineStarts[line] && text[lineEnd - 1] == '\r') --lineEnd;
+        const std::size_t offset = lineStarts[line] + static_cast<std::size_t>(span.column) - 1;
+        if (offset + static_cast<std::size_t>(span.length) > lineEnd) return std::nullopt;
+        ranges.emplace_back(offset, static_cast<std::size_t>(span.length));
+    }
+    std::sort(ranges.begin(), ranges.end(), std::greater<>());
+    std::string edited(text);
+    std::size_t limit = edited.size();  // where the edit applied before this one starts
+    for (const auto& [offset, length] : ranges) {
+        if (offset + length > limit) return std::nullopt;
+        edited.replace(offset, length, replacement);
+        limit = offset;
+    }
+    return edited;
+}
+
+// Whether editing `spans` of `text` renames the symbol and changes nothing else (spec 5,
+// "rename seguro"): the edited text expands without a macro processor error, and its
+// program defines and references every symbol as many times as `before` does, with the
+// counts of `oldName` now under `newName`. The places come from a name search, which can
+// miss one (WORD P,TOTAL called as TAB TOTAL finds only the body's TOTAL) or let a new
+// name be read as a formal; either way the expanded program would not follow the rename.
+bool rename_keeps_program(std::string_view text, const sicxe::AssemblyInfo& before,
+                          const std::vector<sicxe::SourceSpan>& spans, std::string_view oldName,
+                          std::string_view newName) {
+    const std::optional<std::string> edited = apply_edits(text, spans, newName);
+    if (!edited) return false;
+    const sicxe::MacroResult macros = sicxe::MacroProcessor().process(*edited);
+    if (!macros.ok()) return false;
+    const sicxe::AssemblyResult after = sicxe::Assembler().assembleDetailed(macros.text);
+
+    std::map<std::string, std::pair<int, int>> expected = symbol_counts(before);
+    const auto renamed = expected.find(upper(oldName));
+    if (renamed != expected.end()) {
+        const std::pair<int, int> moved = renamed->second;
+        expected.erase(renamed);
+        std::pair<int, int>& counts = expected[upper(newName)];
+        counts.first += moved.first;
+        counts.second += moved.second;
+    }
+    return symbol_counts(after.info) == expected;
 }
 
 std::string directive_detail(std::string_view name) {
@@ -673,6 +753,9 @@ json AssemblerLanguageSession::rename(Document& document, const json& params) {
                                              return upper(symbol.name) == target;
                                          });
     if (definition == document.analysis.info.symbolDefinitions.end()) return nullptr;
+    // A macro processor error leaves part of the document unexpanded (an unclosed MCDEFN
+    // swallows the rest), so the places found would not be all of them.
+    if (!document.macros.ok()) throw std::invalid_argument("Cannot rename while the macro processor reports an error");
 
     // A synthetic place is the macro name of a call, not the symbol: editing it would
     // rename the call, and the text that made the symbol is not in the document.
@@ -680,6 +763,11 @@ json AssemblerLanguageSession::rename(Document& document, const json& params) {
     const std::vector<sicxe::SourceSpan> spans = occurrences(positions, document.analysis.info, *definition, true);
     if (std::any_of(spans.begin(), spans.end(), [](const sicxe::SourceSpan& at) { return at.synthetic; }))
         throw std::invalid_argument("Cannot rename a symbol produced by a macro expansion");
+    // Without macros every place is exact, as before. With them, the edits are checked by
+    // expanding and assembling the renamed document.
+    if (document.macros.hasMacros &&
+        !rename_keeps_program(document.text, document.analysis.info, spans, definition->name, newName))
+        throw std::invalid_argument("Cannot rename safely: a macro expansion would not follow the new name");
     json edits = json::array();
     for (const sicxe::SourceSpan& at : spans)
         edits.push_back({{"range", lsp_range(at.line, at.column, at.length)}, {"newText", newName}});
