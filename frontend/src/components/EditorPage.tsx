@@ -180,6 +180,11 @@ export default function EditorPage({ projectId }: PageProps) {
     const [activeFile, setActiveFile] = useState("");
     const [macroReport, setMacroReport] = useState<MacroReport | null>(null);
     const [macroView, setMacroView] = useState<MacroViewState>(NO_MACRO_VIEW);
+    // The expansion last clicked in the Expansions table, with the report it
+    // belongs to: a new Run, Clear or project load replaces the report and so
+    // drops the selection.
+    const [expansionPick, setExpansionPick] = useState<{ report: MacroReport; serial: number } | null>(null);
+    const selectedExpansion = expansionPick !== null && expansionPick.report === macroReport ? expansionPick.serial : null;
     const [showMacroOutput, setShowMacroOutput] = useState(true);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -403,7 +408,7 @@ export default function EditorPage({ projectId }: PageProps) {
         : undefined;
 
     // After a Run with macros, MASMAPRG.ASM opens next to the active file.
-    const decorationContext = { report: macroReport, view: macroView, executingLine, executionSourceFile };
+    const decorationContext = { report: macroReport, view: macroView, executingLine, executionSourceFile, selectedExpansion };
     const activeDecorations = editorDecorations(activeFile, decorationContext);
     const outputDecorations = editorDecorations(MACRO_OUTPUT_FILE, decorationContext);
     const canShowMacroOutput = Boolean(macroReport?.hasMacros) && !isGeneratedFile(activeFile);
@@ -420,6 +425,7 @@ export default function EditorPage({ projectId }: PageProps) {
     const pendingExpansion = useRef<number | null>(null);
     const [, setRevealTick] = useState(0);
     const selectExpansion = (serial: number) => {
+        if (macroReport) setExpansionPick({ report: macroReport, serial });
         pendingExpansion.current = serial;
         if (canShowMacroOutput) setShowMacroOutput(true);
         setRevealTick((count) => count + 1); // renders even when the split view is already open
@@ -906,6 +912,7 @@ export default function EditorPage({ projectId }: PageProps) {
                                             executingAddress={executingAddress}
                                             bands={activeDecorations.bands}
                                             secondaryLine={activeDecorations.secondaryLine}
+                                            selectedLines={activeDecorations.selectedLines}
                                             onBandClick={macroOutput ? bandReveal.showOutputBand : undefined}
                                             onMount={bandReveal.trackSource}
                                             headerActions={canShowMacroOutput ? (
@@ -938,6 +945,7 @@ export default function EditorPage({ projectId }: PageProps) {
                                                     executingLine={outputDecorations.executingLine}
                                                     executingAddress={executingAddress}
                                                     bands={outputDecorations.bands}
+                                                    selectedLines={outputDecorations.selectedLines}
                                                     onBandClick={activeDecorations.bands.length > 0 ? bandReveal.showSourceBand : undefined}
                                                     onMount={(instance, monaco) => {
                                                         bandReveal.trackOutput(instance, monaco);
@@ -981,7 +989,7 @@ export default function EditorPage({ projectId }: PageProps) {
                                     transition-colors
                                 "
                         />
-                        <ExecutionView arch={arch} memory={memory} registers={registers} memorySize={arch?.memory.address_space_size} pc={pc} changedMemory={changedMemory} changedRegisters={changedRegisters} changeRevision={changeRevision} consumedMemory={consumedMemory} symbols={symbols} macros={macroReport} onSelectExpansion={selectExpansion} onSelectLine={selectTraceLine} />
+                        <ExecutionView arch={arch} memory={memory} registers={registers} memorySize={arch?.memory.address_space_size} pc={pc} changedMemory={changedMemory} changedRegisters={changedRegisters} changeRevision={changeRevision} consumedMemory={consumedMemory} symbols={symbols} macros={macroReport} onSelectExpansion={selectExpansion} selectedExpansion={selectedExpansion} onSelectLine={selectTraceLine} />
                     </Panel>
                 </Group>
             </div>

@@ -133,6 +133,13 @@ body {
   cursor: pointer;
 }
 
+/* The expansion clicked in the Expansions table: a white wash and edge that
+   stand out over every band colour. */
+.monaco-editor .macro-band-selected {
+  background: rgb(255 255 255 / 9%);
+  box-shadow: inset 3px 0 0 rgb(255 255 255 / 75%);
+}
+
 /* Source line of the executing MASMAPRG.ASM line: a fainter echo of
    .sicxe-executing-line, with a dashed outline. */
 .monaco-editor .sicxe-secondary-line {

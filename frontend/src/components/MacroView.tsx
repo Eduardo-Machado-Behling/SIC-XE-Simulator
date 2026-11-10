@@ -14,6 +14,8 @@ export type MacroViewProps = {
     // null before the first run, or after a run whose events carried none.
     report: MacroReport | null;
     onSelectExpansion: (serial: number) => void;
+    // Serial of the expansion last clicked in the Expansions table.
+    selectedExpansion?: number | null;
     onSelectLine?: (target: TraceLine) => void;
 };
 
@@ -21,7 +23,7 @@ export type MacroViewProps = {
 // MacroView
 // ============================================================
 
-export function MacroView({ report, onSelectExpansion, onSelectLine }: MacroViewProps) {
+export function MacroView({ report, onSelectExpansion, selectedExpansion = null, onSelectLine }: MacroViewProps) {
     // The processor stopped before it saw a definition (a lone MCEND): there
     // are no tables, but the failure is the processor's, so say why.
     if (report && !report.ok && !report.hasMacros) {
@@ -54,7 +56,7 @@ export function MacroView({ report, onSelectExpansion, onSelectLine }: MacroView
         {
             id: "tables",
             label: "Tables",
-            content: <MacroTables report={report} onSelectExpansion={onSelectExpansion} />,
+            content: <MacroTables report={report} onSelectExpansion={onSelectExpansion} selectedExpansion={selectedExpansion} />,
         },
         {
             id: "trace",
