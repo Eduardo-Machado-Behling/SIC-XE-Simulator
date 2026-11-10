@@ -367,6 +367,38 @@ void test_rename_checks_the_expansion_again() {
             "rename refuses while the macro processor reports an error");
 }
 
+void test_rename_refuses_names_in_uncalled_macros() {
+    // SOMA is never called: its TOTAL is in no expansion, so neither the place search nor
+    // the second expansion can see it.
+    language::AssemblerLanguageSession uncalled;
+    open_document(uncalled,
+        "PROG    START 0\n        MCDEFN\n        SOMA    P\n        LDA     P\n        ADD     TOTAL\n"
+        "        MCEND\nTOTAL   WORD    0\n        END     PROG\n");
+    require(refused_with(rename_at(uncalled, 2, 6, 0, "SUM"),
+                         "'TOTAL' also appears in macro SOMA, which is never called; rename it there by hand"),
+            "rename refuses a symbol named in the body of a macro that is never called");
+
+    // The same for a macro made by an expansion: FAZ is called, USA never is.
+    language::AssemblerLanguageSession created;
+    open_document(created,
+        "PROG    START 0\n        MCDEFN\n        FAZ\n        MCDEFN\n        USA\n        LDA     TOTAL\n"
+        "        MCEND\n        MCEND\n        FAZ\nTOTAL   WORD    0\n        END     PROG\n");
+    require(refused_with(rename_at(created, 3, 9, 0, "SUM"),
+                         "'TOTAL' also appears in macro USA, which is never called; rename it there by hand"),
+            "rename refuses a symbol named in a macro created by an expansion and never called");
+
+    // A formal of an uncalled macro named like the symbol is a parameter, not the symbol.
+    language::AssemblerLanguageSession formal;
+    open_document(formal,
+        "PROG    START 0\n        MCDEFN\n        CARGA   V\n        LDA     V\n        MCEND\n"
+        "V       WORD    1\n        LDA     V\n        END     PROG\n");
+    const json renamed = rename_at(formal, 4, 5, 0, "W");
+    require(renamed.contains("result"), "rename accepts a symbol named like a formal of an uncalled macro");
+    const json& edits = renamed.at("result").at("changes").at("sicxe://test/main.asm");
+    require(edits.size() == 2 && has_edit(edits, 5, 0, 1) && has_edit(edits, 6, 16, 17),
+            "rename leaves the formal of an uncalled macro alone");
+}
+
 } // namespace
 
 int main() {
@@ -378,5 +410,6 @@ int main() {
     test_verbatim_line_after_definition_keeps_position();
     test_rename_refuses_synthetic_symbol();
     test_rename_checks_the_expansion_again();
+    test_rename_refuses_names_in_uncalled_macros();
     std::cout << "Language server protocol and feature checks passed\n";
 }
