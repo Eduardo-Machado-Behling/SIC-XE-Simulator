@@ -864,6 +864,53 @@ TEST(remapped_message_line_numbers) {   // "first defined on line N" follows; "M
   // No END: the warning sits on the last statement, an expansion line, and keeps its exact message.
   CHECK(assembled[2].severity == Severity::Warning && assembled[2].line == 7);
   CHECK(mapped[2].message == "Missing END directive" && mapped[2].line == 9);
+  // The last output line is an expansion line, so the position is the call's macro name (W ROTULA #2).
+  CHECK(r.lineMap[static_cast<std::size_t>(assembled[2].line) - 1].kind != LineKind::Verbatim);
+  CHECK(mapped[2].column == 9 && mapped[2].length == 6);
+  CHECK(mapped[2].message.size() == assembled[2].message.size());
+}
+
+TEST(remapped_diagnostic_on_a_call_label_line) {   // the "X EQU *" of a labelled call, prototype without label formal
+  const std::string src = "PROG    START 0\n        MCDEFN\n        M\n        LDA #1\n        MCEND\n"
+                          "DUP     WORD 1\nDUP     M\n        END PROG\n";
+  auto r = MacroProcessor().process(src);
+  CHECK(r.ok());
+  const std::vector<Diagnostic> assembled = Assembler().assembleDetailed(r.text).info.diagnostics;
+  CHECK(assembled.size() == 1);
+  if (assembled.size() != 1) {
+    dump("assembled", assembled);
+    return;
+  }
+  CHECK(r.lineMap[static_cast<std::size_t>(assembled[0].line) - 1].kind == LineKind::Label);
+  const std::vector<Diagnostic> mapped = remapAssemblyDiagnostics(r, src, assembled);
+  CHECK(mapped.size() == 1);
+  if (mapped.size() != 1) return;
+  CHECK(mapped[0].line == 7 && mapped[0].column == 9 && mapped[0].length == 1);   // M on the call line
+  CHECK(mapped[0].message == "In expansion of M (#001, MASMAPRG.ASM:" + std::to_string(assembled[0].line) +
+                                 "): Duplicate symbol 'DUP' (first defined on line 6)");
+}
+
+TEST(remap_passes_through_lines_outside_the_output) {
+  const std::string src = "PROG    START 0\n        MCDEFN\n        M\n        LDA #1\n        MCEND\n"
+                          "        M\n        END PROG\n";
+  auto r = MacroProcessor().process(src);
+  CHECK(r.ok());
+  std::vector<Diagnostic> assembled;
+  for (const int line : {0, static_cast<int>(r.lineMap.size()) + 1, 999}) {
+    Diagnostic d;
+    d.line = line;
+    d.column = 3;
+    d.length = 4;
+    d.severity = Severity::Error;
+    d.message = "Something went wrong";
+    assembled.push_back(d);
+  }
+  const std::vector<Diagnostic> mapped = remapAssemblyDiagnostics(r, src, assembled);
+  CHECK(mapped.size() == assembled.size());
+  for (std::size_t i = 0; i < mapped.size() && i < assembled.size(); ++i) {
+    CHECK(mapped[i].line == assembled[i].line && mapped[i].column == 3 && mapped[i].length == 4);
+    CHECK(mapped[i].message == assembled[i].message && mapped[i].severity == Severity::Error);
+  }
 }
 
 TEST(demo_program_expands_and_assembles) {   // spec 7: label formal, keywords, .SER, nested call and definition
