@@ -95,9 +95,11 @@ describe("Monaco SIC/XE registration", () => {
                 && rule[0].test(word) && rule[0].source.toLowerCase().includes(word.toLowerCase())) as unknown[];
         for (const state of ["root", "macroBody"]) {
             expect(find(state, "MCDEFN")?.[1]).toBe("sicxe-directive");
-            expect(find(state, "MCDEFN")?.[2]).toBe("@push");
-            expect(find(state, "MCEND")?.[2]).toBe("@pop");
-        }
+            expect(find(state, "MCDEFN")?.[2]).toBe("@macroBody");
+            }
+        // Only macroBody pops; a root MCEND has no next state (popping an empty stack throws in Monarch).
+        expect(find("macroBody", "MCEND")?.[2]).toBe("@pop");
+        expect(find("root", "MCEND")?.[2]).toBeUndefined();
         // Reserved even when the catalog lacks the field.
         expect(definition.macroDirectives).toEqual(expect.arrayContaining(["MCDEFN", "MCEND"]));
 
@@ -126,6 +128,90 @@ describe("Monaco SIC/XE registration", () => {
         expect(theme).toHaveBeenCalledWith("sicxe-dark", expect.objectContaining({
             rules: expect.arrayContaining([expect.objectContaining({ token: "sicxe-macro-marker" })]),
         }));
+
+        // Minimal Monarch-semantics stepper: first matching rule wins, "@name" pushes and enters
+        // name, "@pop" pops and throws on an empty stack, like monarchLexer.
+        const lex = (text: string) => {
+            const stack = ["root"];
+            const out: [string, string][] = [];
+            for (const line of text.split("\n")) {
+                let pos = 0;
+                while (pos < line.length) {
+                    const rest = line.slice(pos);
+                    let hit = false;
+                    for (const rule of states[stack[stack.length - 1]] as [RegExp, unknown, string?][]) {
+                        const re = new RegExp(`^(?:${rule[0].source})`, rule[0].flags.replace("g", ""));
+                        const m = re.exec(rest);
+                        if (!m || (m[0].length === 0)) continue;
+                        // Mirror Monarch's ^ handling: anchored rules only match at line start.
+                        if (rule[0].source.startsWith("^") && pos !== 0) continue;
+                        const action = rule[1] as string | { cases: Record<string, string> };
+                        let token: string;
+                        if (typeof action === "string") token = action;
+                        else {
+                            const word = m[0];
+                            const key = Object.keys(action.cases).find((k) => k !== "@default"
+                                && definition[k.slice(1)].some((w: string) => w.toLowerCase() === word.toLowerCase()));
+                            token = action.cases[key ?? "@default"];
+                        }
+                        out.push([m[0], token]);
+                        const next = rule[2];
+                        if (next === "@pop") {
+                            if (stack.length <= 1) throw new Error("trying to pop an empty stack");
+                            stack.pop();
+                        } else if (next) stack.push(next.slice(1));
+                        pos += m[0].length;
+                        hit = true;
+                        break;
+                    }
+                    if (!hit) pos += 1;
+                }
+            }
+            return { out, depth: stack.length };
+        };
+        const tokenOf = (out: [string, string][], text: string) => out.find(([t]) => t === text)?.[1];
+
+        const body = lex("M MCDEFN\n LDA A\n MCEND\n LDA A");
+        const bodyA = body.out.filter(([t]) => t === "A");
+        expect(bodyA[0][1]).toBe("sicxe-symbol"); // inside the body
+        expect(bodyA[1][1]).toBe("sicxe-missing-register-prefix"); // after MCEND
+        expect(body.depth).toBe(1);
+        // Nested definitions balance.
+        expect(lex("M MCDEFN\nN MCDEFN\n MCEND\n LDA A\n MCEND").out.filter(([t]) => t === "A")[0][1])
+            .toBe("sicxe-symbol");
+        expect(lex("M MCDEFN\nN MCDEFN\n MCEND\n MCEND\n").depth).toBe(1);
+        // A stray MCEND does not throw.
+        expect(() => lex(" MCEND\n LDA A")).not.toThrow();
+        expect(tokenOf(lex(" MCEND").out, "MCEND")).toBe("sicxe-directive");
+
+        setAssemblerLanguageClient(null);
+    });
+
+    it("highlights catalog-provided macroDirectives as directives", () => {
+        const tokenizer = vi.fn();
+        const noop = vi.fn();
+        setAssemblerLanguageClient({
+            onCatalog: (listener: (value: LanguageCatalog) => void) => {
+                listener({ instructions: ["LDA"], directives: ["START"], registers: ["A"], macroDirectives: ["MCFOO"] });
+                return () => {};
+            },
+        } as unknown as AssemblerLanguageClient);
+        registerSicxeLanguage({
+            editor: { defineTheme: noop },
+            languages: {
+                getLanguages: () => [{ id: "sicxe" }],
+                register: noop,
+                setMonarchTokensProvider: tokenizer,
+                setLanguageConfiguration: noop,
+            },
+        } as unknown as Monaco);
+        const definition = tokenizer.mock.calls[0][1];
+        expect(definition.macroDirectives).toEqual(expect.arrayContaining(["MCFOO", "MCDEFN", "MCEND"]));
+        for (const state of ["root", "macroBody"]) {
+            const referenced = (definition.tokenizer[state] as unknown[]).some(
+                (rule) => JSON.stringify(Array.isArray(rule) ? rule[1] : "").includes("@macroDirectives"));
+            expect(referenced).toBe(true);
+        }
         setAssemblerLanguageClient(null);
     });
 });
