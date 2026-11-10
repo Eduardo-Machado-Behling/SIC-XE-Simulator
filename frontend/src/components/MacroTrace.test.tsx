@@ -58,6 +58,18 @@ describe("MacroTrace", () => {
         expect(screen.getAllByRole("row")[1].getAttribute("aria-current")).toBe("step");
     });
 
+    it("goes back to the first step when a new report arrives", async () => {
+        const user = userEvent.setup();
+        const { rerender } = render(<MacroTrace report={report} onSelectLine={vi.fn()} />);
+        await user.click(screen.getByRole("button", { name: "Next step" }));
+        await user.click(screen.getByRole("button", { name: "Next step" }));
+        expect(screen.getAllByRole("row")[3].getAttribute("aria-current")).toBe("step");
+
+        rerender(<MacroTrace report={{ ...report }} onSelectLine={vi.fn()} />);
+        expect(screen.getAllByRole("row")[1].getAttribute("aria-current")).toBe("step");
+        expect(screen.getByText("1 / 20")).toBeTruthy();
+    });
+
     it("lights Expansion for e without definition, and Normal otherwise", () => {
         renderTrace();
         fireEvent.change(screen.getByRole("slider", { name: "Trace step" }), { target: { value: "9" } });

@@ -164,3 +164,6 @@ export function editorDecorations(path: string, context: DecorationContext): Edi
     }
     return { bands: NO_BANDS, executingLine: null, secondaryLine: null };
 }
+
+// A line of the source or of MASMAPRG.ASM that a trace step points at.
+export type TraceLine = { file: "source" | "output"; line: number };

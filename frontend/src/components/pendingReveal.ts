@@ -1,5 +1,4 @@
-import { expansionReveal, type MacroBands } from "@/lib/simulator/macroBands";
-import type { TraceLine } from "@/components/MacroTrace";
+import { expansionReveal, type MacroBands, type TraceLine } from "@/lib/simulator/macroBands";
 import type { MacroReport } from "@/lib/simulator/ExecutionEvent";
 
 export type RevealAction =

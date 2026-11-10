@@ -1,7 +1,8 @@
 "use client";
 
 import { MacroTables } from "@/components/MacroTables";
-import { MacroTrace, type TraceLine } from "@/components/MacroTrace";
+import { MacroTrace } from "@/components/MacroTrace";
+import type { TraceLine } from "@/lib/simulator/macroBands";
 import { Tabs, type TabDefinition } from "@/components/Tabs";
 import type { MacroReport } from "@/lib/simulator/ExecutionEvent";
 
