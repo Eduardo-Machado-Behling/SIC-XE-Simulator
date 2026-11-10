@@ -7,6 +7,7 @@ import RegisterTable, { RegisterState } from "@/components/RegisterTable";
 import MemoryTable from "@/components/MemoryTable";
 import SymbolTable from "@/components/SymbolTable";
 import { MacroView } from "@/components/MacroView";
+import type { TraceLine } from "@/components/MacroTrace";
 import { Tabs, type TabDefinition } from "@/components/Tabs";
 import { Separator } from "react-resizable-panels";
 import { useState } from "react";
@@ -24,9 +25,10 @@ export interface ArchProps {
     symbols: AssemblySymbol[] | null;
     macros?: MacroReport | null;
     onSelectExpansion?: (serial: number) => void;
+    onSelectLine?: (target: TraceLine) => void;
 }
 
-export function ExecutionView({ arch, registers, memory, memorySize, pc, changedMemory, changedRegisters, changeRevision, consumedMemory, symbols, macros = null, onSelectExpansion }: ArchProps) {
+export function ExecutionView({ arch, registers, memory, memorySize, pc, changedMemory, changedRegisters, changeRevision, consumedMemory, symbols, macros = null, onSelectExpansion, onSelectLine }: ArchProps) {
     const [selectedTab, setSelectedTab] = useState("cpu");
 
     // The memory table scrolls to the PC on every execution update, but a
@@ -77,7 +79,7 @@ export function ExecutionView({ arch, registers, memory, memorySize, pc, changed
         {
             id: "macros",
             label: "Macros",
-            content: <MacroView report={macros} onSelectExpansion={onSelectExpansion ?? (() => {})} />,
+            content: <MacroView report={macros} onSelectExpansion={onSelectExpansion ?? (() => {})} onSelectLine={onSelectLine} />,
         },
     ];
 

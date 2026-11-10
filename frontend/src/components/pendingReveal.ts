@@ -1,4 +1,5 @@
 import { expansionReveal, type MacroBands } from "@/lib/simulator/macroBands";
+import type { TraceLine } from "@/components/MacroTrace";
 import type { MacroReport } from "@/lib/simulator/ExecutionEvent";
 
 export type RevealAction =
@@ -44,4 +45,28 @@ export function resolvePendingReveal(
             : { editor: "source", kind: "line", line: reveal.sourceLine });
     }
     return { actions, pending: null };
+}
+
+// Decides what a pending "reveal this trace line" request does now. Same rules
+// as an expansion reveal: an output line waits for the split view to be shown
+// and its editor mounted; nothing happens once the entry file was edited
+// (`bands` is cleared then, and the line numbers are stale).
+export function resolvePendingLine(
+    pending: TraceLine | null,
+    state: RevealState,
+): { actions: RevealAction[]; pending: TraceLine | null } {
+    const done = { actions: [], pending: null };
+    if (pending === null || state.bands === null) return done;
+
+    if (pending.file === "source") {
+        return state.sourceActive && !state.generatedActive
+            ? { actions: [{ editor: "source", kind: "line", line: pending.line }], pending: null }
+            : done;
+    }
+    if (state.generatedActive) {
+        return { actions: [{ editor: "source", kind: "line", line: pending.line }], pending: null };
+    }
+    if (!state.splitPossible) return done;
+    if (!state.splitShown || !state.outputMounted) return { actions: [], pending };
+    return { actions: [{ editor: "output", kind: "line", line: pending.line }], pending: null };
 }
