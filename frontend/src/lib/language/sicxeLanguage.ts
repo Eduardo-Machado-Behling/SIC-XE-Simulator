@@ -65,7 +65,7 @@ function monarchDefinition(catalog: LanguageCatalog): MonarchLanguage {
         registersPrefixed: available.registers.map((register) => `$${register}`),
         tokenizer: {
             root: tokenRules(false),
-            // Pushed on every MCDEFN and popped on every MCEND, so nested definitions balance.
+            // Entered (pushed) on every MCDEFN and popped on every MCEND in this state.
             macroBody: tokenRules(true),
         },
     };
@@ -78,8 +78,12 @@ function tokenRules(inMacroBody: boolean): languages.IMonarchLanguageRule[] {
         [/[ \t]+/, "white"],
         [/C'[^']*'/i, "sicxe-string"],
         [/X'[0-9a-fA-F]*'/i, "sicxe-hex"],
-        [/MCDEFN\b/i, "sicxe-directive", "@push"],
-        [/MCEND\b/i, "sicxe-directive", "@pop"],
+        // "@macroBody" pushes the current state and enters macroBody, so nesting balances.
+        [/MCDEFN\b/i, "sicxe-directive", "@macroBody"],
+        // A stray MCEND at the root must not pop an empty stack (the lexer would throw).
+        inMacroBody
+            ? [/MCEND\b/i, "sicxe-directive", "@pop"]
+            : [/MCEND\b/i, "sicxe-directive"],
         [/[A-Za-z_][A-Za-z0-9_]*\.SER\b/i, "sicxe-macro-marker"],
         [/\.[A-Za-z_][A-Za-z0-9_]*/, "sicxe-macro-marker"],
         [/\$[A-Za-z_][A-Za-z0-9_]*/, {
@@ -93,6 +97,7 @@ function tokenRules(inMacroBody: boolean): languages.IMonarchLanguageRule[] {
             cases: {
                 "@instructions": "sicxe-instruction",
                 "@directives": "sicxe-directive",
+                "@macroDirectives": "sicxe-directive",
                 "@default": "sicxe-label",
             },
         }],
@@ -100,6 +105,7 @@ function tokenRules(inMacroBody: boolean): languages.IMonarchLanguageRule[] {
             cases: {
                 "@instructions": "sicxe-instruction",
                 "@directives": "sicxe-directive",
+                "@macroDirectives": "sicxe-directive",
                 // Inside a macro body a bare register name is a formal parameter.
                 ...(inMacroBody ? {} : { "@registers": "sicxe-missing-register-prefix" }),
                 "@default": "sicxe-symbol",
