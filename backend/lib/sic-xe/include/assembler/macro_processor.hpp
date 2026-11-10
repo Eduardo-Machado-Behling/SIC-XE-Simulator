@@ -76,17 +76,22 @@ enum class TraceAction {
   Error
 };
 
+// One line read (spec 4.4, Figure 4.12). The empty segment after a final newline is not a line.
 struct TraceStep {
   int step = 0;
   bool fromExpansion = false;
-  int line = 0;    // source line, or body line in the expansion's definition
+  int line = 0;    // source line, or body line in the expansion's definition (1 = prototype)
   int serial = 0;  // expansion read from, 0 if source
-  int d = 0;
-  bool e = false;
-  int depth = 0;
-  std::string text;
+  int d = 0;       // definition level before the line
+  bool e = false;  // expansion stack not empty
+  int depth = 0;   // expansion stack depth, 0 for a source line
+  std::string text;  // source line without '\r', or the expansion line after substitution
   TraceAction action = TraceAction::Copy;
-  int targetOutput = 0;  // 0 = n/a for the four targets
+  // Copy -> targetOutput; Store, Prototype, DefineEnd -> targetDefinition (index) and
+  // targetBodyLine; Call -> targetSerial. 0 = n/a, but targetDefinition counts only
+  // when targetBodyLine > 0 (a definition never entered in the tables has neither).
+  // Error steps have no target.
+  int targetOutput = 0;
   int targetDefinition = 0;
   int targetBodyLine = 0;
   int targetSerial = 0;

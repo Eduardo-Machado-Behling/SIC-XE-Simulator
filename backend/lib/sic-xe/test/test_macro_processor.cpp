@@ -446,10 +446,13 @@ TEST(exercise2_nested_definition_keywords) {   // SOLUCAO_MACRO2 ex.2, column 1 
         "STORE *+4", "BR *+3", "SPACE", "LOAD BRAVO", "MULT BRAVO", "SUB *-5", "MCEND"}));
 }
 
+// Figure 4.12, lines 1-10.
+static const char FIGURE_4_12_INPUT[] =
+    "MCDEFN\nA FORMAL1\nLOAD FORMAL1\nMCDEFN\nB FORMAL2\nSTORE FORMAL2\nMCEND\nMCEND\nA ACTUAL1\nB ACTUAL2\n";
+
 TEST(figure_4_12_outputs) {
   MacroProcessorOptions o; o.isOperation = calingaertOps();
-  auto r = MacroProcessor(o).process(
-      "MCDEFN\nA FORMAL1\nLOAD FORMAL1\nMCDEFN\nB FORMAL2\nSTORE FORMAL2\nMCEND\nMCEND\nA ACTUAL1\nB ACTUAL2\n");
+  auto r = MacroProcessor(o).process(FIGURE_4_12_INPUT);
   CHECK(r.ok());
   CHECK((outputLines(r, LineKind::Expanded) == std::vector<std::string>{"LOAD ACTUAL1", "STORE ACTUAL2"}));
   CHECK(r.definitions.size() == 2); CHECK(r.names.size() == 2);
@@ -611,6 +614,109 @@ TEST(output_limit) {
     CHECK(d.message == "Macro output too long (limit 4 lines)");
     CHECK(d.line == 8 && d.column == 9 && d.length == 1);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Trace (spec 4.4, Figure 4.12): one step per line read
+
+// "s9" for source line 9, "x2" for body line 2 of an expansion's definition.
+static std::string readTag(const TraceStep& s) { return (s.fromExpansion ? "x" : "s") + std::to_string(s.line); }
+
+TEST(figure_4_12_trace) {
+  MacroProcessorOptions o; o.isOperation = calingaertOps();
+  auto r = MacroProcessor(o).process(FIGURE_4_12_INPUT);
+  CHECK(r.ok()); CHECK(!r.trace.truncated);
+  const std::vector<TraceStep>& steps = r.trace.steps;
+  std::vector<std::string> reads;
+  std::vector<int> ds;
+  std::vector<bool> es;
+  for (const TraceStep& s : steps) {
+    reads.push_back(readTag(s));
+    ds.push_back(s.d);
+    es.push_back(s.e);
+  }
+  CHECK((reads == std::vector<std::string>{"s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "x1", "x2", "x3",
+        "x4", "x5", "x6", "x7", "s10", "x1", "x2", "x3"}));
+  CHECK((ds == std::vector<int>{0, 1, 1, 1, 2, 2, 2, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0}));
+  for (std::size_t i = 0; i < es.size(); ++i) CHECK(es[i] == !(i < 9 || i == 16));
+  if (steps.size() != 20) return;
+  CHECK(steps[9].action == TraceAction::ReadPrototype);
+  CHECK(steps[10].action == TraceAction::Copy);
+  CHECK(steps[16].action == TraceAction::Call);
+
+  // Every action and its target. A nested definition is stored as text: its MCDEFN,
+  // prototype and MCEND are Store into A (definition 0) until A is expanded.
+  struct Row { TraceAction action; int output, definition, bodyLine, serial; };
+  using A = TraceAction;
+  const Row rows[] = {{A::DefineStart, 0, 0, 0, 0},   {A::Prototype, 0, 0, 1, 0},   {A::Store, 0, 0, 2, 0},
+                      {A::Store, 0, 0, 3, 0},         {A::Store, 0, 0, 4, 0},       {A::Store, 0, 0, 5, 0},
+                      {A::Store, 0, 0, 6, 0},         {A::DefineEnd, 0, 0, 7, 0},   {A::Call, 0, 0, 0, 1},
+                      {A::ReadPrototype, 0, 0, 0, 0}, {A::Copy, 2, 0, 0, 0},        {A::DefineStart, 0, 0, 0, 0},
+                      {A::Prototype, 0, 1, 1, 0},     {A::Store, 0, 1, 2, 0},       {A::DefineEnd, 0, 1, 3, 0},
+                      {A::ExpansionEnd, 0, 0, 0, 0},  {A::Call, 0, 0, 0, 2},        {A::ReadPrototype, 0, 0, 0, 0},
+                      {A::Copy, 4, 0, 0, 0},          {A::ExpansionEnd, 0, 0, 0, 0}};
+  for (std::size_t i = 0; i < 20; ++i) {
+    const TraceStep& s = steps[i];
+    const Row& w = rows[i];
+    CHECK(s.step == static_cast<int>(i) + 1);
+    CHECK(s.action == w.action && s.targetOutput == w.output && s.targetDefinition == w.definition &&
+          s.targetBodyLine == w.bodyLine && s.targetSerial == w.serial);
+  }
+
+  // A source line as written; an expansion line as substituted, which is what the algorithm processes.
+  CHECK(steps[2].text == "LOAD FORMAL1"); CHECK(steps[9].text == "A FORMAL1");
+  CHECK(steps[10].text == "LOAD ACTUAL1"); CHECK(steps[13].text == "STORE #(1,1)");
+  CHECK(steps[18].text == "STORE ACTUAL2"); CHECK(steps[19].text == "MCEND");
+  CHECK(steps[9].serial == 1 && steps[9].depth == 1); CHECK(steps[17].serial == 2 && steps[17].depth == 1);
+  CHECK(steps[16].serial == 0 && steps[16].depth == 0);
+
+  // The empty segment after the final newline is not a line of the figure.
+  const std::string noFinalNewline(FIGURE_4_12_INPUT, sizeof(FIGURE_4_12_INPUT) - 2);
+  CHECK(MacroProcessor(o).process(noFinalNewline).trace.steps.size() == 20);
+}
+
+TEST(scale_level_sequence) {   // slides 40-41: d before each MCDEFN / MCEND of the source
+  MacroProcessorOptions o; o.isOperation = calingaertOps();
+  auto r = MacroProcessor(o).process(std::string(SCALE_DEFINITION) + "SCALE 3\n");
+  CHECK(r.ok());
+  std::vector<int> levels;
+  for (const TraceStep& s : r.trace.steps)
+    if (!s.fromExpansion && (squash(s.text) == "MCDEFN" || squash(s.text) == "MCEND")) levels.push_back(s.d);
+  CHECK((levels == std::vector<int>{0, 1, 2, 1, 2, 1}));
+}
+
+TEST(trace_truncation) {   // past maxTraceSteps the trace stops growing, with no error
+  MacroProcessorOptions o; o.isOperation = calingaertOps(); o.maxTraceSteps = 3;
+  auto r = MacroProcessor(o).process(FIGURE_4_12_INPUT);
+  CHECK(r.trace.steps.size() == 3); CHECK(r.trace.truncated); CHECK(r.ok());
+  MacroProcessorOptions full; full.isOperation = calingaertOps();
+  CHECK(r.text == MacroProcessor(full).process(FIGURE_4_12_INPUT).text);
+}
+
+TEST(trace_error_steps) {   // the line that causes an error is an Error step, with no target
+  MacroProcessorOptions o; o.maxDepth = 2;
+  auto r = MacroProcessor(o).process(
+      "        MCEND\n"                                                       // 1: MCEND without MCDEFN
+      "        MCDEFN\n        LDA X\n        ADD X\n        MCEND\n"          // 2-5: LDA cannot be a name
+      "        MCDEFN\n        R\n        LDA X\n        R\n        MCEND\n"   // 6-10
+      "        R\n        END P\n");                                          // 11: too deep at depth 3
+  CHECK(!r.ok());
+  const std::vector<TraceStep>& steps = r.trace.steps;
+  CHECK(steps.size() == 17);   // 11 source lines and 6 read from expansions; line 12 is never read
+  if (steps.size() != 17) return;
+  using A = TraceAction;
+  const A actions[] = {A::Error,     A::DefineStart, A::Error,         A::Store,     A::DefineEnd, A::DefineStart,
+                       A::Prototype, A::Store,       A::Store,         A::DefineEnd, A::Call,      A::ReadPrototype,
+                       A::Copy,      A::Call,        A::ReadPrototype, A::Copy,      A::Error};
+  for (std::size_t i = 0; i < 17; ++i) CHECK(steps[i].action == actions[i]);
+  for (const TraceStep* s : {&steps[0], &steps[2], &steps[16]})
+    CHECK(s->targetOutput == 0 && s->targetDefinition == 0 && s->targetBodyLine == 0 && s->targetSerial == 0);
+  // LDA was not entered in the tables, so lines stored in it have no target, and R is definition 0.
+  CHECK(steps[3].targetBodyLine == 0 && steps[4].targetBodyLine == 0);
+  CHECK(steps[6].targetDefinition == 0 && steps[6].targetBodyLine == 1);
+  CHECK(steps[9].targetDefinition == 0 && steps[9].targetBodyLine == 4);
+  CHECK(steps[13].targetSerial == 2 && steps[15].targetOutput == 4);
+  CHECK(readTag(steps[16]) == "x3" && steps[16].serial == 2 && steps[16].depth == 2 && steps[16].e);
 }
 
 int main(int argc, char** argv) {
