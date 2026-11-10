@@ -1,7 +1,7 @@
 "use client";
 
 import Editor, { type OnMount } from "@monaco-editor/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { editor } from "monaco-editor";
 import { File, X } from "lucide-react";
 
@@ -10,6 +10,13 @@ import type {
 } from "@/lib/language/LanguageClient";
 import { toMonacoMarker } from "@/lib/language/monacoDiagnostics";
 import { registerSicxeLanguage } from "@/lib/language/sicxeLanguage";
+import {
+    bandAt,
+    bandDecorations,
+    NO_BANDS,
+    secondaryLineDecoration,
+    type EditorBand,
+} from "@/lib/simulator/macroBands";
 
 // ============================================================
 // Types
@@ -30,6 +37,14 @@ export type CodeEditorProps = {
     executingLine?: number | null;
     /** Address of the fetched instruction, shown in the marker tooltip. */
     executingAddress?: number | null;
+    /** Coloured macro expansion bands (see macroBands). */
+    bands?: EditorBand[];
+    /** 1-based line lit as the source of the executing MASMAPRG.ASM line. */
+    secondaryLine?: number | null;
+    /** Called with the index in `bands` of the band the user clicked. */
+    onBandClick?: (index: number) => void;
+    /** Extra controls at the right end of the tab bar. */
+    headerActions?: ReactNode;
     /** Called with the new content on every edit. */
     onChange: (value: string) => void;
     /** Called when the user closes the tab. Omit to hide the close button. */
@@ -55,6 +70,10 @@ export function CodeEditor({
     onChange,
     executingLine = null,
     executingAddress = null,
+    bands = NO_BANDS,
+    secondaryLine = null,
+    onBandClick,
+    headerActions,
     onCloseTab,
     onMount,
     readOnly = false,
@@ -123,6 +142,33 @@ export function CodeEditor({
         editorInstance.revealLineInCenterIfOutsideViewport(executingLine);
         return () => decorations.clear();
     }, [editorInstance, monacoInstance, executingAddress, executingLine, language]);
+
+    useEffect(() => {
+        if (!editorInstance || bands.length === 0) return;
+        const decorations = editorInstance.createDecorationsCollection(bandDecorations(bands));
+        return () => decorations.clear();
+    }, [bands, editorInstance]);
+
+    useEffect(() => {
+        if (!editorInstance || !secondaryLine) return;
+        const model = editorInstance.getModel();
+        if (!model || model.isDisposed() || secondaryLine > model.getLineCount()) return;
+
+        const decorations = editorInstance.createDecorationsCollection([secondaryLineDecoration(secondaryLine)]);
+        editorInstance.revealLineInCenterIfOutsideViewport(secondaryLine);
+        return () => decorations.clear();
+    }, [editorInstance, secondaryLine]);
+
+    useEffect(() => {
+        if (!editorInstance || !onBandClick || bands.length === 0) return;
+        const listener = editorInstance.onMouseDown((event) => {
+            const line = event.target.position?.lineNumber;
+            if (!event.event.leftButton || line === undefined) return;
+            const index = bandAt(bands, line);
+            if (index >= 0) onBandClick(index);
+        });
+        return () => listener.dispose();
+    }, [bands, editorInstance, onBandClick]);
     return (
         <section
             className="
@@ -181,6 +227,12 @@ export function CodeEditor({
                         />
                     )}
                 </div>
+
+                {headerActions && (
+                    <div className="ml-auto flex items-center gap-1 px-2">
+                        {headerActions}
+                    </div>
+                )}
             </div>
 
             {/* Monaco */}

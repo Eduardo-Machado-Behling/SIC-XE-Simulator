@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
-import { Eraser, Play, RotateCcw, Square, StepForward } from "lucide-react";
+import { Eraser, PanelRightClose, PanelRightOpen, Play, RotateCcw, Square, StepForward } from "lucide-react";
 
 import { FileExplorer, type FileNode } from "@/components/FileExplorer";
 import { CodeEditor } from "@/components/CodeEditor";
@@ -12,6 +12,7 @@ import { TopBar } from "@/components/TopBar";
 import { StatusBar } from "@/components/StatusBar";
 import { ExecutionView } from "@/components/ExecutionView";
 import { ErrorModal } from "@/components/ErrorModal";
+import { useBandReveal } from "@/components/useBandReveal";
 
 import { Simulator } from "@/lib/simulator/Simulator";
 import { SimulatorCommandError } from "@/lib/transport/SimulatorTransport";
@@ -27,7 +28,15 @@ import {
     canRename,
     entryPointFile,
     isGeneratedFile,
+    MACRO_OUTPUT_FILE,
 } from "@/lib/simulator/generatedFiles";
+import {
+    clearMacroViewOnEdit,
+    editorDecorations,
+    macroViewForRun,
+    NO_MACRO_VIEW,
+    type MacroViewState,
+} from "@/lib/simulator/macroBands";
 import {
     getStoredProject,
     saveStoredProject,
@@ -167,8 +176,9 @@ export default function EditorPage({ projectId }: PageProps) {
     const [files, setFiles] = useState<Record<string, string>>({});
     const [folders, setFolders] = useState<string[]>([]);
     const [activeFile, setActiveFile] = useState("");
-    // Read by the macro views (bands, Macros tab) added on top of this state.
-    const [, setMacroReport] = useState<MacroReport | null>(null);
+    const [macroReport, setMacroReport] = useState<MacroReport | null>(null);
+    const [macroView, setMacroView] = useState<MacroViewState>(NO_MACRO_VIEW);
+    const [showMacroOutput, setShowMacroOutput] = useState(true);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [pc, setPc] = useState<number>(0)
@@ -334,6 +344,7 @@ export default function EditorPage({ projectId }: PageProps) {
                 setPc(0);
                 setSymbols(null);
                 setMacroReport(null);
+                setMacroView(NO_MACRO_VIEW);
                 setExecutingLine(null);
                 setExecutingAddress(null);
                 setExecutionSourceFile(null);
@@ -377,6 +388,7 @@ export default function EditorPage({ projectId }: PageProps) {
     // --------------------------------------------------------
 
     const fileTree = useMemo(() => buildFileTree(files, folders), [files, folders]);
+    const bandReveal = useBandReveal(macroView.bands);
 
     // --------------------------------------------------------
     // Active file
@@ -387,6 +399,13 @@ export default function EditorPage({ projectId }: PageProps) {
     const activeDocumentUri = project && activeFile
         ? languageDocumentUri(project.id, activeFile)
         : undefined;
+
+    // After a Run with macros, MASMAPRG.ASM opens next to the active file.
+    const decorationContext = { report: macroReport, view: macroView, executingLine, executionSourceFile };
+    const activeDecorations = editorDecorations(activeFile, decorationContext);
+    const outputDecorations = editorDecorations(MACRO_OUTPUT_FILE, decorationContext);
+    const canShowMacroOutput = Boolean(macroReport?.hasMacros) && !isGeneratedFile(activeFile);
+    const macroOutput = canShowMacroOutput && showMacroOutput ? macroReport : null;
 
     useEffect(() => {
         if (project && project.id === projectId && !loading) {
@@ -399,6 +418,7 @@ export default function EditorPage({ projectId }: PageProps) {
         (content: string) => {
             setExecutingLine(null);
             setExecutingAddress(null);
+            setMacroView((view) => clearMacroViewOnEdit(view, activeFile));
             setFiles((current) => ({
                 ...current,
                 [activeFile]: content,
@@ -540,8 +560,8 @@ export default function EditorPage({ projectId }: PageProps) {
     // --------------------------------------------------------
 
     const run = useCallback(async () => {
+        const startFile = entryPointFile(files, project?.architecture);
         try {
-            const startFile = entryPointFile(files, project?.architecture);
             if (!startFile) {
                 setActionError({ title: "No source file", detail: "Add an assembly source file before starting the simulator." });
                 return;
@@ -575,6 +595,7 @@ export default function EditorPage({ projectId }: PageProps) {
 
             const report = macroReportFromEvents(steps);
             setMacroReport(report);
+            setMacroView(macroViewForRun(report, startFile));
             setFiles((current) => applyMacroReport(current, report));
 
             setSymbols(symbolsFromEvents(steps));
@@ -591,6 +612,7 @@ export default function EditorPage({ projectId }: PageProps) {
                 ? macroReportFromEvents(error.events)
                 : null;
             setMacroReport(report);
+            setMacroView(macroViewForRun(report, startFile));
             if (report) setFiles((current) => applyMacroReport(current, report));
             reportCommandError(error);
             console.error("Run failed:", error);
@@ -637,6 +659,7 @@ export default function EditorPage({ projectId }: PageProps) {
             consoleHandleRef.current?.writeEvents(events);
             setSymbols(null);
             setMacroReport(null);
+            setMacroView(NO_MACRO_VIEW);
         } catch (error) {
             reportCommandError(error);
         }
@@ -825,18 +848,60 @@ export default function EditorPage({ projectId }: PageProps) {
                     <Panel>
                         <Group orientation="vertical" className="h-full">
                             <Panel defaultSize="75%" minSize="30%">
-                                <CodeEditor
-                                    key={activeDocumentUri ?? activeFile}
-                                    path={activeFile}
-                                    value={activeContent}
-                                    language={activeLanguage}
-                                    executingLine={executionSourceFile === activeFile ? executingLine : null}
-                                    executingAddress={executionSourceFile === activeFile ? executingAddress : null}
-                                    documentUri={activeLanguage === "sicxe" ? activeDocumentUri : undefined}
-                                    languageClient={activeLanguage === "sicxe" ? languageClient : null}
-                                    onChange={updateFile}
-                                    readOnly={isGeneratedFile(activeFile)}
-                                />
+                                <Group orientation="horizontal" className="h-full">
+                                    <Panel id="active-editor" minSize="20%">
+                                        <CodeEditor
+                                            key={activeDocumentUri ?? activeFile}
+                                            path={activeFile}
+                                            value={activeContent}
+                                            language={activeLanguage}
+                                            executingLine={activeDecorations.executingLine}
+                                            executingAddress={executingAddress}
+                                            bands={activeDecorations.bands}
+                                            secondaryLine={activeDecorations.secondaryLine}
+                                            onBandClick={macroOutput ? bandReveal.showOutputBand : undefined}
+                                            onMount={bandReveal.trackSource}
+                                            headerActions={canShowMacroOutput ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowMacroOutput((shown) => !shown)}
+                                                    className="flex items-center gap-1.5 rounded px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                                                >
+                                                    {showMacroOutput ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
+                                                    {showMacroOutput ? "Hide" : "Show"} {MACRO_OUTPUT_FILE}
+                                                </button>
+                                            ) : undefined}
+                                            documentUri={activeLanguage === "sicxe" ? activeDocumentUri : undefined}
+                                            languageClient={activeLanguage === "sicxe" ? languageClient : null}
+                                            onChange={updateFile}
+                                            readOnly={isGeneratedFile(activeFile)}
+                                        />
+                                    </Panel>
+
+                                    {macroOutput && (
+                                        <>
+                                            <Separator className="w-1 bg-zinc-900 hover:bg-blue-500 transition-colors" />
+
+                                            <Panel id="macro-output-editor" defaultSize="50%" minSize="20%">
+                                                <CodeEditor
+                                                    key="macro-output"
+                                                    path={MACRO_OUTPUT_FILE}
+                                                    value={macroOutput.text}
+                                                    language="sicxe"
+                                                    executingLine={outputDecorations.executingLine}
+                                                    executingAddress={executingAddress}
+                                                    bands={outputDecorations.bands}
+                                                    onBandClick={activeDecorations.bands.length > 0 ? bandReveal.showSourceBand : undefined}
+                                                    onMount={bandReveal.trackOutput}
+                                                    documentUri={languageDocumentUri(project.id, MACRO_OUTPUT_FILE)}
+                                                    languageClient={languageClient}
+                                                    onChange={() => {}}
+                                                    readOnly
+                                                />
+                                            </Panel>
+                                        </>
+                                    )}
+                                </Group>
                             </Panel>
 
                             <Separator

@@ -14,7 +14,9 @@ describe("Console eventLines for MacrosExpanded", () => {
     });
 
     it("uses the singular for one expansion", () => {
-        expect(eventLines({ type: "MacrosExpanded", details: macroReportFixture })).toEqual([
+        const details = { ...macroReportFixture, expansions: [macroReportFixture.expansions[0]] };
+
+        expect(eventLines({ type: "MacrosExpanded", details })).toEqual([
             { text: "Macro processor · 1 expansion · MASMAPRG.ASM", level: "success" },
         ]);
     });

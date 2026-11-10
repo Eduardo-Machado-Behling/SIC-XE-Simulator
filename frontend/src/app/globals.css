@@ -111,3 +111,33 @@ body {
   border-left: 8px solid rgb(250 204 21 / 95%);
   background: transparent !important;
 }
+
+/* Macro expansion bands (macroBands.ts): a top-level call line in the source
+   and its block in MASMAPRG.ASM share a colour. Translucent fills keep the
+   zinc theme readable; the gutter stripe carries the colour at full strength. */
+.monaco-editor .macro-band-0 { --macro-band: 56 189 248; }   /* sky */
+.monaco-editor .macro-band-1 { --macro-band: 251 113 133; }  /* rose */
+.monaco-editor .macro-band-2 { --macro-band: 52 211 153; }   /* emerald */
+.monaco-editor .macro-band-3 { --macro-band: 167 139 250; }  /* violet */
+.monaco-editor .macro-band-4 { --macro-band: 251 146 60; }   /* orange */
+.monaco-editor .macro-band-5 { --macro-band: 163 230 53; }   /* lime */
+
+.monaco-editor :is(.macro-band-0, .macro-band-1, .macro-band-2, .macro-band-3, .macro-band-4, .macro-band-5) {
+  background: rgb(var(--macro-band) / 9%);
+}
+
+.monaco-editor .margin-view-overlays .macro-band-stripe {
+  width: 4px !important;
+  margin-left: 4px;
+  background: rgb(var(--macro-band) / 80%);
+  cursor: pointer;
+}
+
+/* Source line of the executing MASMAPRG.ASM line: a fainter echo of
+   .sicxe-executing-line, with a dashed outline. */
+.monaco-editor .sicxe-secondary-line {
+  background: rgb(234 179 8 / 6%);
+  box-shadow: inset 3px 0 0 rgb(250 204 21 / 45%);
+  outline: 1px dashed rgb(250 204 21 / 35%);
+  outline-offset: -1px;
+}
