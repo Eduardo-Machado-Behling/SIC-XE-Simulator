@@ -97,6 +97,10 @@ if(BUILD_TESTING)
             "${CMAKE_CURRENT_SOURCE_DIR}/test/test_macro_processor.cpp"
         )
         target_link_libraries(sicxe_macro_tests PRIVATE sicxe_assembler)
+        # The demo program of spec section 7.
+        target_compile_definitions(sicxe_macro_tests PRIVATE
+            SICXE_DEMO_ASM="${CMAKE_CURRENT_SOURCE_DIR}/test/data/macro_demo.asm"
+        )
 
         function(add_sicxe_macro_test CASE_NAME DESCRIPTION)
             add_test(
@@ -147,6 +151,10 @@ if(BUILD_TESTING)
         add_sicxe_macro_test(trace_comment_before_prototype "trace.comment-before-prototype")
         add_sicxe_macro_test(trace_unclosed_definition_loses_targets "trace.unclosed-definition")
         add_sicxe_macro_test(trace_crlf_text "trace.crlf")
+        add_sicxe_macro_test(assembler_error_in_expansion_maps_to_call "remap.error-in-expansion-maps-to-call")
+        add_sicxe_macro_test(verbatim_error_keeps_column "remap.verbatim-error-keeps-column")
+        add_sicxe_macro_test(remapped_message_line_numbers "remap.message-line-numbers")
+        add_sicxe_macro_test(demo_program_expands_and_assembles "demo.expands-and-assembles")
 
         add_sicxe_test(code_memory_is_sparse_and_merges "code-memory.sparse-segment-merging")
         add_sicxe_test(spec_example_style_program "assembly.example-program-encoding")
