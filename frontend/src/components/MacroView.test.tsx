@@ -79,11 +79,14 @@ describe("MacroView", () => {
         expect(onSelect).toHaveBeenCalledWith(1);
     });
 
-    it("keeps Trace as a placeholder sub-tab", async () => {
-        renderView();
+    it("shows the trace in the Trace sub-tab and forwards line selections", async () => {
+        const onSelectLine = vi.fn();
+        render(<MacroView report={demoPayload as MacroReport} onSelectExpansion={vi.fn()} onSelectLine={onSelectLine} />);
         await userEvent.click(screen.getByRole("tab", { name: "Trace" }));
-        expect(screen.getByRole("tab", { name: "Tables" })).toBeTruthy();
-        expect(within(screen.getByRole("tabpanel", { name: "Trace" })).getByText("Trace")).toBeTruthy();
+        const panel = screen.getByRole("tabpanel", { name: "Trace" });
+        expect(within(panel).getByRole("table", { name: "Macro processor trace" })).toBeTruthy();
+        await userEvent.click(within(panel).getByRole("button", { name: "Next step" }));
+        expect(onSelectLine).toHaveBeenCalledWith(expect.objectContaining({ file: "source" }));
     });
 
     describe("with the real demo payload", () => {
