@@ -79,11 +79,11 @@ function tokenRules(inMacroBody: boolean): languages.IMonarchLanguageRule[] {
         [/C'[^']*'/i, "sicxe-string"],
         [/X'[0-9a-fA-F]*'/i, "sicxe-hex"],
         // "@macroBody" pushes the current state and enters macroBody, so nesting balances.
-        [/MCDEFN\b/i, "sicxe-directive", "@macroBody"],
+        [/MCDEFN(?=\s|;|$)/i, "sicxe-directive", "@macroBody"],
         // A stray MCEND at the root must not pop an empty stack (the lexer would throw).
         inMacroBody
-            ? [/MCEND\b/i, "sicxe-directive", "@pop"]
-            : [/MCEND\b/i, "sicxe-directive"],
+            ? [/MCEND(?=\s|;|$)/i, "sicxe-directive", "@pop"]
+            : [/MCEND(?=\s|;|$)/i, "sicxe-directive"],
         [/[A-Za-z_][A-Za-z0-9_]*\.SER\b/i, "sicxe-macro-marker"],
         [/\.[A-Za-z_][A-Za-z0-9_]*/, "sicxe-macro-marker"],
         [/\$[A-Za-z_][A-Za-z0-9_]*/, {

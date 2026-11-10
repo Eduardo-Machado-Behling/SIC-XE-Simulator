@@ -183,6 +183,14 @@ describe("Monaco SIC/XE registration", () => {
         // A stray MCEND does not throw.
         expect(() => lex(" MCEND\n LDA A")).not.toThrow();
         expect(tokenOf(lex(" MCEND").out, "MCEND")).toBe("sicxe-directive");
+        // MCEND.SER is a serial label, not MCEND: it neither pops nor pushes.
+        const serial = lex("M MCDEFN\nMCEND.SER LDA A\nMCDEFN.SER LDA A");
+        expect(serial.depth).toBe(2);
+        expect(serial.out.find(([t]) => t === "MCEND.SER")?.[1]).toBe("sicxe-macro-marker");
+        expect(serial.out.filter(([t]) => t === "A").map(([, k]) => k)).toEqual(["sicxe-symbol", "sicxe-symbol"]);
+        // A whole-token MCEND still pops when followed by a comment or end of line.
+        expect(lex("M MCDEFN\n MCEND;done").depth).toBe(1);
+        expect(lex("M MCDEFN\n MCEND").depth).toBe(1);
 
         setAssemblerLanguageClient(null);
     });
