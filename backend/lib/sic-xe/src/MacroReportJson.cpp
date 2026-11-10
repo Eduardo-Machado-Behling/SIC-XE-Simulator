@@ -11,7 +11,6 @@ namespace {
 
 using nlohmann::json;
 
-constexpr char kOutputFile[] = "MASMAPRG.ASM";
 constexpr char kReplacement[] = "\xEF\xBF\xBD";  // U+FFFD
 
 // s with each ill-formed UTF-8 sequence replaced by U+FFFD, one per maximal subpart
@@ -180,7 +179,7 @@ json macroReportJson(const MacroResult& r) {
   json steps = json::array();
   for (const TraceStep& s : r.trace.steps) steps.push_back(stepJson(s));
 
-  return {{"file", kOutputFile},
+  return {{"file", std::string(kMacroOutputFile)},
           {"ok", r.ok()},
           {"hasMacros", r.hasMacros},
           {"text", utf8(r.text)},
