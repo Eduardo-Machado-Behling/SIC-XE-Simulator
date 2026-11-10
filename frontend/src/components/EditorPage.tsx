@@ -928,6 +928,7 @@ export default function EditorPage({ projectId }: PageProps) {
                                             headerActions={canShowMacroOutput ? (
                                                 <button
                                                     type="button"
+                                                    aria-expanded={showMacroOutput}
                                                     onClick={() => setShowMacroOutput((shown) => !shown)}
                                                     className="flex items-center gap-1.5 rounded px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
                                                 >
