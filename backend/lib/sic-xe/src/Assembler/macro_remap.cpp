@@ -16,7 +16,6 @@ using namespace macro_text;
 
 namespace {
 
-constexpr char kOutputFile[] = "MASMAPRG.ASM";
 
 // The lineMap entry of a MASMAPRG.ASM line, null past the end.
 const LineOrigin* originOf(const MacroResult& r, int outputLine) {
@@ -77,7 +76,7 @@ std::string expansionPrefix(const MacroResult& r, int outputLine) {
   const int serial = origin->serial;
   const Expansion* e = expansionOf(r, serial);
   return "In expansion of " + (e ? e->macro : std::string()) + " (#" + serialText(serial) + ", " +
-         kOutputFile + ":" + std::to_string(outputLine) + "): ";
+         std::string(kMacroOutputFile) + ":" + std::to_string(outputLine) + "): ";
 }
 
 }  // namespace
