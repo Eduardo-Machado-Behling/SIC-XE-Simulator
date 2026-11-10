@@ -15,13 +15,6 @@ std::string markerText(const Piece& param, bool nested) {
                 : "#" + std::to_string(param.index);
 }
 
-// .SER value: the serial in at least three digits (HEAD.SER -> HEAD017).
-std::string serialText(int serial) {
-  std::string digits = std::to_string(serial);
-  if (digits.size() < 3) digits.insert(0, 3 - digits.size(), '0');
-  return digits;
-}
-
 }  // namespace
 
 // ---- text helpers -------------------------------------------------------------
@@ -118,6 +111,12 @@ PieceLine substitute(const PieceLine& line, const std::vector<std::string>& actu
       out.push_back({Piece::Kind::Param, {}, p.level - 1, p.index});
   }
   return out;
+}
+
+std::string serialText(int serial) {
+  std::string digits = std::to_string(serial);
+  if (digits.size() < 3) digits.insert(0, 3 - digits.size(), '0');
+  return digits;
 }
 
 std::string outputText(const PieceLine& line, int serial) {

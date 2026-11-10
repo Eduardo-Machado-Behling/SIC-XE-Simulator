@@ -136,4 +136,27 @@ class MacroProcessor {
   MacroProcessorOptions options_;
 };
 
+// A range of the source (1-based). synthetic: it came from an expansion and is the
+// macro name on the outermost call line, not the text that produced the position.
+struct SourceSpan {
+  int line = 0;
+  int column = 0;
+  int length = 0;
+  bool synthetic = false;
+};
+
+// Maps a position of r.text (MASMAPRG.ASM) to `source`, the text r was processed from:
+// a verbatim line keeps its column and length; an expansion line maps to the macro name
+// of the outermost call (synthetic).
+SourceSpan mapToSource(const MacroResult& r, std::string_view source, int outputLine, int outputColumn,
+                       int length);
+
+// Assembler diagnostics of r.text moved to `source` (spec 5). A diagnostic on an expansion
+// line gets the prefix "In expansion of NAME (#001, MASMAPRG.ASM:12): ", naming the
+// innermost expansion and the MASMAPRG.ASM line. "(first defined on line N)" is rewritten
+// to the source line. The message "Missing END directive" is never changed; only its
+// position moves.
+std::vector<Diagnostic> remapAssemblyDiagnostics(const MacroResult& r, std::string_view source,
+                                                 const std::vector<Diagnostic>& assembled);
+
 }  // namespace sicxe
