@@ -62,11 +62,13 @@ export function MacroTables({ report, onSelectExpansion }: MacroTablesProps) {
                 <tbody className="font-mono">
                     {report.names.map((entry) => {
                         const definition = report.definitions[entry.definition];
+                        // From the MCDEFN line to the MCEND line, like the definition header.
+                        const first = definition?.origin.kind === "source" ? definition.origin.line : entry.line;
                         const last = definition?.body.at(-1)?.line;
                         // Line 0: the macro was created by an expansion, not written in the source.
                         const lines = entry.line === 0
                             ? (definition?.origin.kind === "expansion" ? `#${String(definition.origin.serial).padStart(3, "0")}` : "")
-                            : last != null && last !== entry.line ? `${entry.line}-${last}` : entry.line;
+                            : last != null && last !== first ? `${first}-${last}` : first;
                         return (
                             <tr key={entry.name} className="border-t border-zinc-800">
                                 <td className="py-1 text-zinc-300">{entry.name}</td>
