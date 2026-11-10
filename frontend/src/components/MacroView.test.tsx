@@ -121,6 +121,16 @@ describe("MacroView", () => {
             expect(screen.getAllByRole("group").length).toBe(demo.definitions.length);
         });
 
+        // A long comment is cut with an ellipsis instead of widening the panel.
+        it("keeps the whole text of each body line in its title", () => {
+            renderView(demo);
+            const definition = demo.definitions[1];
+            const body = screen.getByRole("table", { name: "DOBRA definition 1 body" });
+            const titles = within(body).getAllByRole("row").map((row) =>
+                within(row).getAllByRole("cell")[1].querySelector("[title]")?.getAttribute("title"));
+            expect(titles).toEqual(definition.body.map((line) => line.text));
+        });
+
         it("heads MULTK's definition with the expansion that created it", () => {
             renderView(demo);
             expect(screen.getByText("MULTK — created by expansion #004")).toBeTruthy();
