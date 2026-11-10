@@ -28,4 +28,12 @@ describe("Console eventLines for MacrosExpanded", () => {
             { text: "Macro processor · no macros", level: "info" },
         ]);
     });
+
+    it("uses the error level when the macro processor failed", () => {
+        const details = { ...macroReportFixture, ok: false };
+
+        expect(eventLines({ type: "MacrosExpanded", details })).toEqual([
+            { text: "Macro processor failed · MASMAPRG.ASM", level: "error" },
+        ]);
+    });
 });

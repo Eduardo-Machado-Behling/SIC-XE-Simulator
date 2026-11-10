@@ -30,12 +30,15 @@ function bytesText(bytes: number[]): string {
     return bytes.map((byte) => hex(byte, 2)).join(" ");
 }
 
-export function eventLines(event: ExecutionEvent): { text: string; level: "info" | "success" | "warning" }[] {
+export function eventLines(event: ExecutionEvent): { text: string; level: "info" | "success" | "warning" | "error" }[] {
     switch (event.type) {
         case "ProgramAssembled":
             return [{ text: `Assembly complete · ${event.details.symbols.length} symbols`, level: "success" }];
         case "MacrosExpanded": {
             const count = event.details.expansions.length;
+            if (!event.details.ok) {
+                return [{ text: `Macro processor failed · ${event.details.file}`, level: "error" }];
+            }
             return event.details.hasMacros
                 ? [{
                     text: `Macro processor · ${count} ${count === 1 ? "expansion" : "expansions"} · ${event.details.file}`,
@@ -93,7 +96,9 @@ function attachHandle(terminal: XTerminal): ConsoleHandle {
                         ? colors.success
                         : line.level === "warning"
                             ? colors.warning
-                            : colors.info;
+                            : line.level === "error"
+                                ? colors.error
+                                : colors.info;
                     terminal.write(`${color}│\x1b[0m  ${line.text}\r\n`);
                 }
             }
