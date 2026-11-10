@@ -78,6 +78,11 @@ static const char EX1_DEFINITION[] =
     "HEAD.SER SUB           DIVISOR\n           BRPOS       HEAD.SER\n           BRZERO      HEAD.SER\n"
     "           ADD         DIVISOR\n           STORE       REMAINDR\nMCEND\n";
 
+// Figure 4.10: X defines Y, which defines Z (lines 1-15).
+static const char FIGURE_4_10_DEFINITION[] =
+    "MCDEFN\nX A,B,C,D\n        A,B,C,D\nMCDEFN\nY A,B,E,F\n        A,B,C,D\nMCDEFN\nZ A,C,E,G\n"
+    "        A,B,C,D\n        E,F,G,H\nMCEND\n        E,F,G,H\nMCEND\n        E,F,G,H\nMCEND\n";
+
 #define TEST(name) static void name(); static Registrar r_##name(#name, name); static void name()
 struct Registrar { Registrar(const char* n, void (*f)()); };
 static std::vector<std::pair<const char*, void (*)()>>& registry() { static std::vector<std::pair<const char*, void (*)()>> r; return r; }
@@ -118,9 +123,7 @@ TEST(exercise1_definition_table) {   // SOLUCAO_MACRO2 ex.1, column 1 as written
 
 TEST(figure_4_10_nested_formals) {
   MacroProcessorOptions o; o.isOperation = calingaertOps();
-  auto r = MacroProcessor(o).process(
-      "MCDEFN\nX A,B,C,D\n        A,B,C,D\nMCDEFN\nY A,B,E,F\n        A,B,C,D\nMCDEFN\nZ A,C,E,G\n"
-      "        A,B,C,D\n        E,F,G,H\nMCEND\n        E,F,G,H\nMCEND\n        E,F,G,H\nMCEND\n");
+  auto r = MacroProcessor(o).process(FIGURE_4_10_DEFINITION);
   CHECK(r.ok()); CHECK(r.definitions.size() == 1);
   if (r.definitions.empty()) return;
   auto& d = r.definitions[0];
@@ -458,6 +461,22 @@ TEST(figure_4_12_outputs) {
   CHECK((b.bodySourceLines == std::vector<int>{0, 0, 0}));   // not from the source
   CHECK(r.names[1].name == "B" && r.names[1].definition == 1 && r.names[1].line == 0);
   CHECK(r.definitions[0].originSerial == 0);
+}
+
+TEST(figure_4_10_three_level_expansion) {   // each expansion shifts #(k,i) to #(k-1,i): 3 -> 2 -> 1
+  MacroProcessorOptions o; o.isOperation = calingaertOps();
+  auto r = MacroProcessor(o).process(std::string(FIGURE_4_10_DEFINITION) + "X 1,2,3,4\nY 5,6,7,8\nZ 9,10,11,12\n");
+  CHECK(r.ok());
+  CHECK((outputLines(r, LineKind::Expanded) == std::vector<std::string>{"1,2,3,4", "E,F,G,H", "5,6,3,4", "7,8,G,H",
+        "9,6,10,4", "11,8,12,H"}));
+  const MacroDefinition* y = activeDefinition(r, "Y");
+  const MacroDefinition* z = activeDefinition(r, "Z");
+  CHECK(y != nullptr); CHECK(z != nullptr);
+  if (!y || !z) return;
+  CHECK(y->originSerial == 1 && z->originSerial == 2);
+  CHECK((display(*y) == std::vector<std::string>{"Y A,B,E,F", "#(1,1),#(1,2),3,4", "MCDEFN", "Z A,C,E,G",
+        "#(2,1),#(1,2),#(2,2),4", "#(2,3),#(1,4),#(2,4),H", "MCEND", "#(1,3),#(1,4),G,H", "MCEND"}));
+  CHECK((display(*z) == std::vector<std::string>{"Z A,C,E,G", "#1,6,#2,4", "#3,8,#4,H", "MCEND"}));
 }
 
 TEST(scale_defines_multsc_and_divsc) {   // slides 40-41
