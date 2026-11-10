@@ -21,11 +21,18 @@ describe("Console eventLines for MacrosExpanded", () => {
         ]);
     });
 
-    it("says there were no macros when the source had none", () => {
+    // Spec: a source without macros behaves exactly as before the processor existed.
+    it("writes nothing when the source had no macros", () => {
         const details = { ...macroReportFixture, hasMacros: false, expansions: [] };
 
+        expect(eventLines({ type: "MacrosExpanded", details })).toEqual([]);
+    });
+
+    it("still reports a failure of a source without macros", () => {
+        const details = { ...macroReportFixture, ok: false, hasMacros: false, expansions: [] };
+
         expect(eventLines({ type: "MacrosExpanded", details })).toEqual([
-            { text: "Macro processor · no macros", level: "info" },
+            { text: "Macro processor failed · MASMAPRG.ASM", level: "error" },
         ]);
     });
 
