@@ -10,6 +10,9 @@
 
 namespace sicxe {
 
+// The file the macro processor's output is reported and assembled as, at the project root.
+inline constexpr std::string_view kMacroOutputFile = "MASMAPRG.ASM";
+
 enum class LineKind { Verbatim, Call, Label, Expanded };
 
 // serial 0 = none; output/source are 1-based.
