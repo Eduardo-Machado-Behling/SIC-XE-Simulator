@@ -12,6 +12,8 @@ export type MacroTablesProps = {
     report: MacroReport;
     // Called with the serial of the expansion whose row was activated.
     onSelectExpansion: (serial: number) => void;
+    // Serial of the expansion last activated, marked in the Expansions table.
+    selectedExpansion?: number | null;
 };
 
 // ============================================================
@@ -40,7 +42,7 @@ function SectionTitle({ children }: { children: string }) {
 // MacroTables
 // ============================================================
 
-export function MacroTables({ report, onSelectExpansion }: MacroTablesProps) {
+export function MacroTables({ report, onSelectExpansion, selectedExpansion = null }: MacroTablesProps) {
     const onRowKey = (event: KeyboardEvent, serial: number) => {
         if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
@@ -128,9 +130,12 @@ export function MacroTables({ report, onSelectExpansion }: MacroTablesProps) {
                         <tr
                             key={expansion.serial}
                             tabIndex={0}
+                            aria-selected={expansion.serial === selectedExpansion}
                             onClick={() => onSelectExpansion(expansion.serial)}
                             onKeyDown={(event) => onRowKey(event, expansion.serial)}
-                            className="cursor-pointer border-t border-zinc-800 hover:bg-zinc-800 focus-visible:bg-zinc-800 focus-visible:outline-none"
+                            className={`cursor-pointer border-t border-zinc-800 focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-sky-400 ${
+                                expansion.serial === selectedExpansion ? "bg-sky-900/50" : "hover:bg-zinc-800 focus-visible:bg-zinc-800"
+                            }`}
                         >
                             <td className="py-1 text-zinc-500">{String(expansion.serial).padStart(3, "0")}</td>
                             <td className="py-1 text-zinc-300" style={{ paddingLeft: `${expansion.depth - 1}rem` }}>{expansion.macro}</td>

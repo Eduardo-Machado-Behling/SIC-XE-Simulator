@@ -5,13 +5,17 @@ import {
     bandDecorations,
     clearMacroViewOnEdit,
     editorDecorations,
+    expansionHighlight,
     expansionReveal,
     macroBands,
     macroViewForRun,
     NO_MACRO_VIEW,
     secondaryLineDecoration,
+    selectedExpansionDecoration,
     sourceLineForOutput,
 } from "@/lib/simulator/macroBands";
+import demoPayload from "@/lib/simulator/__fixtures__/macros-demo.json";
+import type { MacroReport } from "@/lib/simulator/ExecutionEvent";
 import { MACRO_OUTPUT_FILE } from "@/lib/simulator/generatedFiles";
 import { macroReportFixture as report } from "@/lib/simulator/macroFixtures";
 
@@ -135,13 +139,13 @@ describe("editorDecorations", () => {
 
     it("puts the executing line on MASMAPRG.ASM and its call line on the source when the Run had macros", () => {
         expect(editorDecorations(MACRO_OUTPUT_FILE, stepping)).toEqual({
-            bands: view.bands!.output, executingLine: 5, secondaryLine: null,
+            bands: view.bands!.output, executingLine: 5, secondaryLine: null, selectedLines: null,
         });
         expect(editorDecorations("main.asm", stepping)).toEqual({
-            bands: view.bands!.source, executingLine: null, secondaryLine: 13,
+            bands: view.bands!.source, executingLine: null, secondaryLine: 13, selectedLines: null,
         });
         expect(editorDecorations("other.asm", stepping)).toEqual({
-            bands: [], executingLine: null, secondaryLine: null,
+            bands: [], executingLine: null, secondaryLine: null, selectedLines: null,
         });
     });
 
@@ -156,7 +160,9 @@ describe("editorDecorations", () => {
         };
 
         expect(context.view).toEqual({ sourceFile: "main.asm", bands: null });
-        expect(editorDecorations("main.asm", context)).toEqual({ bands: [], executingLine: 7, secondaryLine: null });
+        expect(editorDecorations("main.asm", context)).toEqual({
+            bands: [], executingLine: 7, secondaryLine: null, selectedLines: null,
+        });
         expect(editorDecorations("other.asm", context).executingLine).toBeNull();
         expect(editorDecorations("main.asm", { ...context, report: null, view: NO_MACRO_VIEW }).executingLine).toBe(7);
     });
@@ -170,7 +176,9 @@ describe("clearMacroViewOnEdit (Review Focus 5)", () => {
         const context = { report, view: edited, executingLine: 5, executionSourceFile: "main.asm" };
 
         expect(edited).toEqual({ sourceFile: "main.asm", bands: null });
-        expect(editorDecorations("main.asm", context)).toEqual({ bands: [], executingLine: null, secondaryLine: null });
+        expect(editorDecorations("main.asm", context)).toEqual({
+            bands: [], executingLine: null, secondaryLine: null, selectedLines: null,
+        });
         expect(editorDecorations(MACRO_OUTPUT_FILE, context).bands).toEqual([]);
     });
 
@@ -197,5 +205,63 @@ describe("expansionReveal", () => {
 
     it("knows no expansion that is not in the report", () => {
         expect(expansionReveal(report, 99)).toBeNull();
+    });
+});
+
+// A click on an expansion row selects it until another row is clicked or the
+// report is replaced.
+describe("expansionHighlight", () => {
+    const demo = demoPayload as unknown as MacroReport;
+
+    it("marks a nested expansion's own output and the call line of its outermost call", () => {
+        // Demo: SOMA #002 runs inside DOBRA #001 (output 3-7), called on source line 30.
+        expect(expansionHighlight(demo, 2)).toEqual({ output: { from: 4, to: 7 }, source: { from: 30, to: 30 } });
+    });
+
+    it("marks a top-level expansion's whole block and its call line", () => {
+        expect(expansionHighlight(demo, 1)).toEqual({ output: { from: 3, to: 7 }, source: { from: 30, to: 30 } });
+        expect(expansionHighlight(demo, 3)).toEqual({ output: { from: 8, to: 13 }, source: { from: 31, to: 31 } });
+    });
+
+    it("skips an expansion whose output range is inverted, like the bands do", () => {
+        const inverted = {
+            ...demo,
+            expansions: demo.expansions.map((expansion) =>
+                expansion.serial === 3 ? { ...expansion, output: { from: 9, to: 8 } } : expansion),
+        };
+        expect(expansionHighlight(inverted, 3)).toBeNull();
+    });
+
+    it("knows no expansion that is not in the report", () => {
+        expect(expansionHighlight(demo, 99)).toBeNull();
+    });
+
+    it("paints the selection as whole lines with its own class", () => {
+        expect(selectedExpansionDecoration({ from: 4, to: 7 })).toEqual({
+            range: { startLineNumber: 4, startColumn: 1, endLineNumber: 7, endColumn: 1 },
+            options: { isWholeLine: true, className: "macro-band-selected" },
+        });
+    });
+});
+
+describe("editorDecorations with a selected expansion", () => {
+    const view = macroViewForRun(report, "main.asm");
+    const context = { report, view, executingLine: null, executionSourceFile: "main.asm", selectedExpansion: 2 };
+
+    it("marks the expansion's output in MASMAPRG.ASM and its call line in the entry file", () => {
+        expect(editorDecorations(MACRO_OUTPUT_FILE, context).selectedLines).toEqual({ from: 4, to: 7 });
+        expect(editorDecorations("main.asm", context).selectedLines).toEqual({ from: 13, to: 13 });
+        expect(editorDecorations("other.asm", context).selectedLines).toBeNull();
+    });
+
+    it("marks nothing without a selection", () => {
+        expect(editorDecorations(MACRO_OUTPUT_FILE, { ...context, selectedExpansion: null }).selectedLines).toBeNull();
+        expect(editorDecorations("main.asm", { ...context, selectedExpansion: null }).selectedLines).toBeNull();
+    });
+
+    it("drops the marks with the bands once the entry file is edited (Review Focus 5)", () => {
+        const edited = { ...context, view: clearMacroViewOnEdit(view, "main.asm") };
+        expect(editorDecorations(MACRO_OUTPUT_FILE, edited).selectedLines).toBeNull();
+        expect(editorDecorations("main.asm", edited).selectedLines).toBeNull();
     });
 });

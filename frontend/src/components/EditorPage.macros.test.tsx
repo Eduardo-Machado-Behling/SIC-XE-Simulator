@@ -1,0 +1,166 @@
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import EditorPage from "@/components/EditorPage";
+import type { CodeEditorProps } from "@/components/CodeEditor";
+import type { ConsoleHandle, ConsoleProps } from "@/components/Console";
+import demoPayload from "@/lib/simulator/__fixtures__/macros-demo.json";
+import type { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
+import type { ExecutionEvent, MacroReport } from "@/lib/simulator/ExecutionEvent";
+
+// The page with its backends faked: the simulator, the project store and the
+// language service. Nothing here opens a socket or a request.
+const fake = vi.hoisted(() => ({
+    loadProject: vi.fn(),
+    loadFile: vi.fn(),
+    step: vi.fn(),
+    reset: vi.fn(),
+    clear: vi.fn(),
+    resolve: vi.fn(),
+}));
+
+// Every call the page makes on the console handle, in order.
+const consoleCalls = vi.hoisted(() => [] as unknown[][]);
+
+// The last props each editor (by path) was rendered with.
+const editors = vi.hoisted(() => new Map<string, unknown>());
+
+vi.mock("@/lib/simulator/Simulator", () => ({
+    Simulator: { get: () => fake },
+}));
+
+vi.mock("@/lib/simulator/ProjectSessionSync", () => ({
+    getStoredProject: () => ({ id: "demo", name: "Demo", architecture: "SIC/XE", files: { "main.asm": "PROG START 0" } }),
+    saveStoredProject: () => [],
+    syncProjectToSession: async () => "session",
+}));
+
+vi.mock("@/lib/language/LanguageClient", () => ({
+    AssemblerLanguageClient: class {
+        saveDocument = async () => {};
+        onCatalog = () => () => {};
+        dispose() {}
+    },
+}));
+
+// Monaco and xterm need a real browser. The editor keeps its header actions,
+// where the Show/Hide MASMAPRG.ASM toggle lives.
+vi.mock("@/components/CodeEditor", () => ({
+    CodeEditor: (props: CodeEditorProps) => {
+        editors.set(props.path, props);
+        return <div>{props.headerActions}</div>;
+    },
+}));
+
+vi.mock("@/components/Console", () => ({
+    Console: ({ handleRef }: ConsoleProps) => {
+        const handle: ConsoleHandle = {
+            write: (text) => { consoleCalls.push(["write", text]); },
+            log: (text, level) => { consoleCalls.push(["log", text, level]); },
+            writeEvents: (events) => { consoleCalls.push(["writeEvents", events]); },
+            clear: () => { consoleCalls.push(["clear"]); },
+        };
+        if (handleRef) handleRef.current = handle;
+        return null;
+    },
+}));
+
+const ARCH: ArchitectureInfo = {
+    name: "SIC/XE",
+    description: "SIC/XE architecture",
+    memory: { address_space_size: 1 << 10, address_width: 4, word_size: 3, alignment: 1, endianness: "big" },
+    registers: [{ id: 0, name: "A", description: "Accumulator", width: 3, type: "special_purpose" }],
+    instructions: [],
+};
+
+const demo = demoPayload as unknown as MacroReport;
+
+function expanded(details: MacroReport): ExecutionEvent {
+    return { type: "MacrosExpanded", details };
+}
+
+function editorProps(path: string): CodeEditorProps {
+    return editors.get(path) as CodeEditorProps;
+}
+
+async function openPage() {
+    const user = userEvent.setup();
+    render(<EditorPage projectId="demo" />);
+    await screen.findByRole("button", { name: "Run" });
+    return user;
+}
+
+// Run is a toggle: after a run the button reads Stop.
+async function run(user: ReturnType<typeof userEvent.setup>) {
+    const stop = screen.queryByRole("button", { name: "Stop" });
+    if (stop) await user.click(stop);
+    await user.click(screen.getByRole("button", { name: "Run" }));
+    await screen.findByRole("button", { name: "Stop" }).catch(() => undefined);
+}
+
+function expansionTable(): HTMLElement {
+    return screen.getByRole("table", { name: "Macro expansion table" });
+}
+
+describe("EditorPage with the macro processor", () => {
+    beforeEach(() => {
+        fake.loadProject.mockResolvedValue({
+            project: { id: "demo", name: "Demo", architecture: "SIC/XE", files: {} },
+            arch: ARCH,
+        });
+        fake.step.mockResolvedValue([]);
+        fake.reset.mockResolvedValue([]);
+        fake.clear.mockResolvedValue([]);
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(console, "error").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+        for (const fn of Object.values(fake)) fn.mockReset();
+        consoleCalls.length = 0;
+        editors.clear();
+        localStorage.clear();
+    });
+
+    describe("a click on an expansion (F3)", () => {
+        it("marks that expansion in both editors and in its row, until the next Run", async () => {
+            const user = await openPage();
+            fake.loadFile.mockResolvedValueOnce([expanded(demo)]);
+            await run(user);
+            await user.click(screen.getByRole("tab", { name: "Macros" }));
+            expect(within(expansionTable()).queryAllByRole("row", { selected: true })).toHaveLength(0);
+            expect(editorProps("MASMAPRG.ASM").selectedLines).toBeNull();
+
+            // SOMA #002 runs inside DOBRA #001, which is called on source line 30.
+            await user.click(within(expansionTable()).getByText("002").closest("tr")!);
+            const [selected] = within(expansionTable()).getAllByRole("row", { selected: true });
+            expect(within(selected).getByText("002")).toBeTruthy();
+            expect(editorProps("MASMAPRG.ASM").selectedLines).toEqual({ from: 4, to: 7 });
+            expect(editorProps("main.asm").selectedLines).toEqual({ from: 30, to: 30 });
+
+            await user.click(within(expansionTable()).getByText("003").closest("tr")!);
+            expect(editorProps("MASMAPRG.ASM").selectedLines).toEqual({ from: 8, to: 13 });
+            expect(editorProps("main.asm").selectedLines).toEqual({ from: 31, to: 31 });
+
+            fake.loadFile.mockResolvedValueOnce([expanded({ ...demo })]);
+            await run(user);
+            expect(within(expansionTable()).queryAllByRole("row", { selected: true })).toHaveLength(0);
+            expect(editorProps("MASMAPRG.ASM").selectedLines).toBeNull();
+            expect(editorProps("main.asm").selectedLines).toBeNull();
+        });
+
+        it("is dropped by Clear", async () => {
+            const user = await openPage();
+            fake.loadFile.mockResolvedValueOnce([expanded(demo)]);
+            await run(user);
+            await user.click(screen.getByRole("tab", { name: "Macros" }));
+            await user.click(within(expansionTable()).getByText("001").closest("tr")!);
+            expect(editorProps("main.asm").selectedLines).toEqual({ from: 30, to: 30 });
+
+            await user.click(screen.getByTitle("Clear memory, assembly data, and registers"));
+            expect(editorProps("main.asm").selectedLines).toBeNull();
+        });
+    });
+});
