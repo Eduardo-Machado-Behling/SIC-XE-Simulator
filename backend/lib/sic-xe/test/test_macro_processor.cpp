@@ -719,6 +719,43 @@ TEST(trace_error_steps) {   // the line that causes an error is an Error step, w
   CHECK(readTag(steps[16]) == "x3" && steps[16].serial == 2 && steps[16].depth == 2 && steps[16].e);
 }
 
+TEST(trace_comment_before_prototype) {   // dropped at level 1 (no target), stored at level 2
+  auto r = MacroProcessor().process("        MCDEFN\n; before OUTER\n\n        OUTER\n        MCDEFN\n"
+                                    ". before INNER\n        INNER\n        LDA #1\n        MCEND\n        MCEND\n");
+  CHECK(r.ok());
+  const std::vector<TraceStep>& steps = r.trace.steps;
+  CHECK(steps.size() == 10);
+  if (steps.size() != 10) return;
+  for (const TraceStep* s : {&steps[1], &steps[2]})
+    CHECK(s->action == TraceAction::Store && s->targetDefinition == 0 && s->targetBodyLine == 0);
+  CHECK(steps[1].text == "; before OUTER" && steps[2].text.empty());
+  CHECK(steps[3].action == TraceAction::Prototype && steps[3].targetBodyLine == 1);
+  CHECK(steps[5].action == TraceAction::Store && steps[5].targetDefinition == 0 && steps[5].targetBodyLine == 3);
+  CHECK(steps[5].d == 2 && steps[5].text == ". before INNER");
+}
+
+TEST(trace_unclosed_definition_loses_targets) {   // never entered in the tables
+  auto r = MacroProcessor().process("        MCDEFN\n        M\n        LDA #1\n");
+  CHECK(!r.ok()); CHECK(r.definitions.empty());
+  const std::vector<TraceStep>& steps = r.trace.steps;
+  CHECK(steps.size() == 3);
+  if (steps.size() != 3) return;
+  CHECK(steps[0].action == TraceAction::DefineStart);
+  CHECK(steps[1].action == TraceAction::Prototype && steps[1].targetBodyLine == 0);
+  CHECK(steps[2].action == TraceAction::Store && steps[2].targetBodyLine == 0);
+}
+
+TEST(trace_crlf_text) {   // a step's text never carries the '\r' of a CRLF source
+  auto r = MacroProcessor().process("P START 0\r\n MCDEFN\r\n M\r\n LDA #1\r\n MCEND\r\n M\r\n END P\r\n");
+  CHECK(r.ok());
+  const std::vector<TraceStep>& steps = r.trace.steps;
+  CHECK(steps.size() == 10);   // 7 source lines and 3 read from the expansion
+  for (const TraceStep& s : steps) CHECK(s.text.find('\r') == std::string::npos);
+  if (steps.size() != 10) return;
+  CHECK(steps[0].text == "P START 0" && steps[5].text == " M");
+  CHECK(steps[7].fromExpansion && steps[7].text == " LDA #1");
+}
+
 int main(int argc, char** argv) {
   if (argc > 2) {
     std::fprintf(stderr, "Usage: %s [test_case]\n", argv[0]);
