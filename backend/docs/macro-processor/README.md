@@ -537,7 +537,8 @@ not start with `;` goes through these steps:
 2. The `MacrosExpanded` event with `macroReportJson(macros)`, emitted before
    assembling. The event is a non-mutating `IEvent`, in
    `include/architecture/events/MacrosExpanded.hpp`.
-3. If `!macros.ok()`: `throw std::runtime_error(formatDiagnostics(macros.diagnostics))`.
+3. If `!macros.ok()`:
+   `throw std::runtime_error(sicxe::formatDiagnostics(macros.diagnostics))`.
 4. `m_assembler.assembleDetailed(macros.text)`. On failure, it throws the
    diagnostics from `remapAssemblyDiagnostics`.
 5. On success, the image is loaded and the PC is set to the entry point.
