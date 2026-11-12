@@ -28,7 +28,8 @@ import {
     canCreate,
     canMove,
     canRename,
-    entryPointFile,
+    fileToOpen,
+    fileToRun,
     isGeneratedFile,
     MACRO_OUTPUT_FILE,
 } from "@/lib/simulator/generatedFiles";
@@ -361,7 +362,7 @@ export default function EditorPage({ projectId }: PageProps) {
                 setExecutingAddress(null);
                 setExecutionSourceFile(null);
 
-                const firstPath = entryPointFile(projectFiles, data.project.architecture);
+                const firstPath = fileToOpen(projectFiles, data.project.architecture);
                 setArch(data.arch)
 
                 setRegisters(data.arch.registers.map((reg) => {
@@ -534,7 +535,7 @@ export default function EditorPage({ projectId }: PageProps) {
         const nextFolders = folders.filter((path) => !removed(path));
         setFiles(nextFiles);
         setFolders(nextFolders);
-        if (removed(activeFile)) setActiveFile(entryPointFile(nextFiles, project?.architecture));
+        if (removed(activeFile)) setActiveFile(fileToOpen(nextFiles, project?.architecture));
     }, [activeFile, files, folders, project?.architecture]);
 
     const renamePath = useCallback((path: string, name: string) => {
@@ -623,7 +624,7 @@ export default function EditorPage({ projectId }: PageProps) {
     // --------------------------------------------------------
 
     const run = useCallback(async () => {
-        const startFile = entryPointFile(files, project?.architecture);
+        const startFile = fileToRun(files, activeFile, executionSourceFile, project?.architecture);
         try {
             if (!startFile) {
                 setActionError({ title: "No source file", detail: "Add an assembly source file before starting the simulator." });
@@ -680,7 +681,7 @@ export default function EditorPage({ projectId }: PageProps) {
             reportCommandError(error);
             console.error("Run failed:", error);
         }
-    }, [applyExecutionEvents, files, folders, languageClient, project, projectId, reportCommandError, simulator]);
+    }, [activeFile, applyExecutionEvents, executionSourceFile, files, folders, languageClient, project, projectId, reportCommandError, simulator]);
 
     const stop = useCallback(() => {
         setIsRunning(false);
@@ -738,7 +739,7 @@ export default function EditorPage({ projectId }: PageProps) {
                 case "help":
                     handle.log("Available commands", "success");
                     handle.write(
-                        "  \x1b[38;5;117mrun\x1b[0m            Assemble and load the entry file\r\n" +
+                        "  \x1b[38;5;117mrun\x1b[0m            Assemble and load the open file\r\n" +
                         "  \x1b[38;5;117mstep\x1b[0m           Execute one instruction\r\n" +
                         "  \x1b[38;5;117mreset\x1b[0m          Reset registers and PC\r\n" +
                         "  \x1b[38;5;117mclear machine\x1b[0m  Clear memory and registers\r\n" +
