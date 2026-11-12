@@ -425,9 +425,9 @@ export default function EditorPage({ projectId }: PageProps) {
     // it needs are mounted (the output editor mounts after the click's render),
     // and runs once. When MASMAPRG.ASM is itself the active file there is no
     // split view: the request reveals the expansion in that editor, and leaves
-    // no deferred "open" behind. Nothing happens once the entry file was edited
-    // (the line numbers are stale) or when another file than the entry file is
-    // open in the source pane.
+    // no deferred "open" behind. Nothing happens once the Run's source was
+    // edited (the line numbers are stale) or when another file than the Run's
+    // source is open in the source pane.
     const pendingExpansion = useRef<number | null>(null);
     const [, setRevealTick] = useState(0);
     const selectExpansion = (serial: number) => {

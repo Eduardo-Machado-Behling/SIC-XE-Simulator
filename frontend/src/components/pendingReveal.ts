@@ -14,7 +14,7 @@ export interface RevealState {
     outputMounted: boolean;
     // MASMAPRG.ASM is the active file: it sits in the main editor, with no split view.
     generatedActive: boolean;
-    // The entry file is open in the source pane.
+    // The Run's source is open in the source pane.
     sourceActive: boolean;
 }
 
@@ -48,7 +48,7 @@ export function resolvePendingReveal(
 
 // Decides what a pending "reveal this trace line" request does now. Same rules
 // as an expansion reveal: an output line waits for the split view to be shown
-// and its editor mounted; nothing happens once the entry file was edited
+// and its editor mounted; nothing happens once the Run's source was edited
 // (`bands` is cleared then, and the line numbers are stale).
 export function resolvePendingLine(
     pending: TraceLine | null,
