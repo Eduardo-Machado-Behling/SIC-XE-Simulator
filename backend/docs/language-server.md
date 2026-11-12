@@ -38,11 +38,12 @@ request does not mutate the machine.
 ## 2. How it relates to the two-pass assembler
 
 The language service does not implement a second assembler or a separate
-interpretation of the source grammar. It calls the same
-sicxe::Assembler::assembleDetailed() entry point used by the assembler
-library. That call parses the document, builds Statement records, performs
-pass 1 to assign addresses and symbols, then performs pass 2 to evaluate
-expressions and encode bytes.
+interpretation of the source grammar. It runs the document through the same
+pipeline as a Run: the macro processor first (sicxe::MacroProcessor), then
+the same sicxe::Assembler::assembleDetailed() entry point used by the
+assembler library, on the processor's output, MASMAPRG.ASM. That call parses
+the text, builds Statement records, performs pass 1 to assign addresses and
+symbols, then performs pass 2 to evaluate expressions and encode bytes.
 
 The language server then uses the returned AssemblyResult for editor features:
 
@@ -67,6 +68,60 @@ For the full source syntax accepted by the shared assembler, see the
 [assembler syntax set](assembler/implementation.md#3-source-syntax-set) and
 [grammar](assembler/grammar.ebnf).
 
+### Sources with macros
+
+AssemblerLanguageSession::analyze() runs MacroProcessor().process() on the
+document text and then assembleDetailed() on the result's text. The document
+keeps both results (macros and analysis). The
+[macro processor documentation](macro-processor/README.md) describes the
+language and the line map.
+
+- **Diagnostics.**
+  - The processor's diagnostics are already in document positions, with the
+    source "SIC/XE macro processor".
+  - The assembler's diagnostics are positions of MASMAPRG.ASM. They are moved
+    by sicxe::remapAssemblyDiagnostics(), with the source "SIC/XE assembler".
+    A verbatim line keeps its line and column. A line produced by an
+    expansion goes to the macro name on the outermost call line, and its
+    message gets the prefix "In expansion of NAME (#NNN, MASMAPRG.ASM:L): ".
+  - When the processor reports an error, only the processor's diagnostics are
+    published, as a Run would stop there. For example, an unclosed MCDEFN
+    swallows the rest of the program, and every symbol defined there would be
+    reported as undefined.
+- **Limit stop.** When a limit stopped the processing (MacroResult::stopped),
+  the assembler is not run on the partial text. The analysis is left empty, so
+  hover, definition, references and rename find no symbol, and completion
+  offers none. Only the processor's diagnostics are published.
+- **Positions of symbols.** Definition, references and hover map each place
+  back to the document:
+  - a verbatim line keeps its column;
+  - for an expansion line, the whole name is searched first in the definition
+    body line the line was expanded from (known from the trace), then in the
+    call line;
+  - failing both, the place is the macro name of the outermost call, marked
+    synthetic. Hover then says "(produced by the macro expansion on line N)".
+- **Rename** refuses:
+  - a symbol with a synthetic place: "Cannot rename a symbol produced by a
+    macro expansion";
+  - any symbol while the processor reports an error: "Cannot rename while the
+    macro processor reports an error";
+  - a name that also appears in the body of a definition that no expansion
+    read: "'NAME' also appears in macro M, which is never called; rename it
+    there by hand";
+  - an edit after which the expanded program would not define and reference
+    every symbol as before: "Cannot rename safely: a macro expansion would not
+    follow the new name";
+  - a new name that is MCDEFN, MCEND or a macro name: "newName is reserved by
+    the macro processor".
+- **Catalog.** initialize lists MCDEFN and MCEND in experimental.sicxe, under
+  macroDirectives. They are keywords of the processor, not assembler
+  directives.
+- **Sources without macros.** A source without MCDEFN, MCEND or macro calls
+  comes out of the processor byte for byte, with an identity line map. Its
+  diagnostics and features are the same as before.
+- **Not implemented.** Completion of macro names and hover with a macro's
+  prototype were optional and are not implemented.
+
 ## 3. Document and request lifecycle
 
 ### Connection and initialization
@@ -74,12 +129,14 @@ For the full source syntax accepted by the shared assembler, see the
 The frontend opens a WebSocket to /language. The Server creates one
 AssemblerLanguageSession for that connection. The session owns a map of open
 document URIs; each document stores its text, version, save state, and cached
-AssemblyResult. Separate WebSocket connections do not share document state.
+MacroResult and AssemblyResult. Separate WebSocket connections do not share
+document state.
 
 The client sends an initialize request. The server responds with capabilities
 for full document synchronization, completion, hover, definition, references,
-and rename, plus the instruction/directive/register vocabulary. The client
-then sends the initialized notification and opens documents.
+and rename, plus the instruction/directive/register vocabulary and the macro
+keywords. The client then sends the initialized notification and opens
+documents.
 
 ### Open, change, save, and close
 
@@ -146,9 +203,9 @@ updated.
 
 Completion, hover, definition, references, and rename providers send JSON-RPC
 requests to the same client. Initialization supplies an authoritative
-instruction/directive/register catalog for the tokenizer and editor features;
-a frontend fallback catalog keeps syntax coloring available before the
-handshake completes.
+instruction/directive/register catalog, plus the macro keywords, for the
+tokenizer and editor features; a frontend fallback catalog keeps syntax
+coloring available before the handshake completes.
 
 The end-to-end connection and request flow is shown in the
 [language server sequence diagram](uml/22_language_server_sequence.puml).
@@ -163,6 +220,7 @@ for HTTPS.
 | --- | --- |
 | WebSocket endpoint and per-connection session creation | src/Server.cpp, Server::setup_language_ws() |
 | Document state and JSON-RPC dispatch | include/language/LanguageServer.hpp and src/language/LanguageServer.cpp |
+| Macro expansion and position mapping | lib/sic-xe/include/assembler/macro_processor.hpp, lib/sic-xe/src/Assembler/macro_processor.cpp, macro_text.cpp, macro_remap.cpp |
 | Source parsing, two-pass analysis, and metadata | lib/sic-xe/src/Assembler/ and lib/sic-xe/include/assembler/ |
 | Monaco connection and document synchronization | frontend/src/lib/language/LanguageClient.ts |
 | Monaco language providers and tokenizer | frontend/src/lib/language/sicxeLanguage.ts |

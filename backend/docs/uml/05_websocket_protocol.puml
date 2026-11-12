@@ -44,13 +44,15 @@ WS -> Handler : dispatch command
 Handler -> Simulator : load_file(path)
 Simulator -> CPU : load_file(source)
 CPU -> CPU : clear current program state
-CPU -> Assembler : assemble(source)
-Assembler --> CPU : CodeMemory and AssemblyInfo
+CPU -> CPU : expand macros (MacroProcessor)
+CPU -> Events : MacrosExpanded
+CPU -> Assembler : assembleDetailed(MASMAPRG.ASM text)
+Assembler --> CPU : AssemblyResult
 CPU -> CPU : install source map and set PC
 CPU -> Events : memory, symbol and instruction-fetch events
 note right of CPU
 InstructionFetched may include:
-- source_line (1-based)
+- source_line (1-based line of MASMAPRG.ASM)
 - preview: true for debugger positioning
 end note
 Simulator --> Handler : EventBatch {from, to, events}

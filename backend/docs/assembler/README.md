@@ -29,6 +29,8 @@ input to a parser generator.
 - [Language server sequence UML](../uml/22_language_server_sequence.puml) —
   shows Monaco document synchronization, diagnostics, and feature requests
   over the `/language` WebSocket.
+- [Macro processor](../macro-processor/README.md) — the one-pass macro
+  processor that runs before the assembler and writes `MASMAPRG.ASM`.
 
 ## Implementation sources
 
@@ -36,7 +38,16 @@ input to a parser generator.
 - `lib/sic-xe/src/Assembler/expression.cpp`
 - `lib/sic-xe/src/Assembler/assembler.cpp`
 - `lib/sic-xe/src/Assembler/isa.cpp`
-- Public API: `lib/sic-xe/include/assembler/`
+- `lib/sic-xe/src/Assembler/macro_processor.cpp` — the one-pass macro
+  processor, `MacroProcessor`.
+- `lib/sic-xe/src/Assembler/macro_text.cpp`, `macro_text.hpp` — the macro
+  processor's text rules, stored body lines, and substitution.
+- `lib/sic-xe/src/Assembler/macro_remap.cpp` — moves assembler diagnostics
+  from `MASMAPRG.ASM` back to the macro source.
+- `lib/sic-xe/src/MacroReportJson.cpp` — the `MacrosExpanded` event details.
+- `lib/sic-xe/tools/sicxe_macro.cpp` — the `sicxe_macro` command-line tool.
+- Public API: `lib/sic-xe/include/assembler/` (the macro processor's is
+  `macro_processor.hpp`) and `lib/sic-xe/include/MacroReportJson.hpp`
 
 The implementation remains authoritative if these documents and the code ever
 disagree.

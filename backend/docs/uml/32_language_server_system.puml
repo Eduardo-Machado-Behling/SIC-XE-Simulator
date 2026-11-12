@@ -13,8 +13,8 @@ component "WebSocket /language" as WS
 component "Server WebSocket handler" as Handler
 component "AssemblerLanguageSession\none per connection" as Session
 component "Open documents\nURI, text, version,\nsaved flag, cached analysis" as Documents
-component "Assembler library\nassembleDetailed()" as Assembler
-component "AssemblyResult\nCodeMemory + AssemblyInfo" as Result
+component "Assembler library\nMacroProcessor::process(),\nthen assembleDetailed()" as Assembler
+component "MacroResult + AssemblyResult\nCodeMemory + AssemblyInfo" as Result
 
 Editor --> Providers
 Providers --> Client

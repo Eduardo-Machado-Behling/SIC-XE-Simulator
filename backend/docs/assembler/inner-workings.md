@@ -319,7 +319,7 @@ The instruction source map includes only valid emitted instructions with nonempt
 
 ### 9.1 Simulator load path
 
-For assembly source, `SICXE::load_file` clears program state, calls the throwing assembler interface, and clears assembler metadata if assembly throws. On success it reads entry point and instruction source mappings from `lastInfo()`, writes the sparse image into memory at base zero, sets PC to the entry point, and emits the symbol table to the UI (`lib/sic-xe/src/SICXE.cpp:132–189`). `MemoryAccessor::write(CodeMemory)` validates and captures every segment before committing writes, preventing an out-of-bounds segment from causing a partially loaded image (`src/memory/MemoryAccessor.cpp:29–66`).
+For assembly source, `SICXE::load_file` clears program state, then runs the macro processor (`MacroProcessor().process`) and emits its report as the `MacrosExpanded` event before assembling. If the processor reports an error, it throws those diagnostics and the assembler does not run. Otherwise it calls the detailed interface, `assembleDetailed`, on the processor's output, MASMAPRG.ASM, which is the source itself when there are no macros. If the result has errors, it throws them, remapped to the source by `remapAssemblyDiagnostics`. On success it reads the entry point and instruction source mappings from the `AssemblyResult`, writes the sparse image into memory at base zero, sets PC to the entry point, and emits the symbol table to the UI (`lib/sic-xe/src/SICXE.cpp:134–199`). Source lines in the instruction source map are MASMAPRG.ASM lines. See the [macro processor](../macro-processor/README.md). `MemoryAccessor::write(CodeMemory)` validates and captures every segment before committing writes, preventing an out-of-bounds segment from causing a partially loaded image (`src/memory/MemoryAccessor.cpp:29–66`).
 
 The current loader does not show a relocation application step. Assembly addresses are already absolute in this path. Relocation records are available to another consumer, but moving the image requires additional loader/linker behavior that is not present here.
 
@@ -334,8 +334,10 @@ participant "MemoryAccessor" as M
 participant "Event/Editor UI" as U
 S -> A : load_file(source)
 A -> A : clear memory/register state
-A -> C : assemble(source)
-C --> A : CodeMemory + AssemblyInfo
+A -> A : MacroProcessor().process(source)
+A -> U : MacrosExpanded(macro report)
+A -> C : assembleDetailed(MASMAPRG.ASM text)
+C --> A : AssemblyResult: CodeMemory + AssemblyInfo
 A -> A : read entryPoint and instructionSourceMap
 A -> M : write(base=0, CodeMemory segments)
 M -> M : validate all segments, capture old values
@@ -348,7 +350,7 @@ A --> S : execution events
 
 ### 9.2 Language service
 
-The language service runs `Assembler().assembleDetailed(document.text)` when it needs document analysis, caches that result for the unchanged document, and serves diagnostics/symbol requests from its `AssemblyInfo`. This means parser/assembler semantics are reused by editor features; the LSP has no separate code generator. It is a full-document reassembly after invalidation, not incremental assembly.
+The language service runs `MacroProcessor().process(document.text)` and then `Assembler().assembleDetailed(document.macros.text)` when it needs document analysis, caches both results for the unchanged document, and serves diagnostics/symbol requests from its `AssemblyInfo`, with positions mapped back to the document. When a macro limit stopped the processing (`MacroResult::stopped`), it does not assemble. This means parser/assembler semantics are reused by editor features; the LSP has no separate code generator. It is a full-document reassembly after invalidation, not incremental assembly.
 
 ## 10. Important invariants, limitations, and extension points
 
@@ -367,7 +369,7 @@ The language service runs `Assembler().assembleDetailed(document.text)` when it 
 2. **Relocations are metadata only in the inspected simulator path.** No object-module writer or relocation applier is used by `SICXE::load_file`.
 3. **Instruction size is not auto-relaxed.** A too-distant format-3 target is diagnosed with a suggestion to use `+`; following addresses are not silently shifted.
 4. **ORG saves only one restore point.** Nested regions are not independently stacked.
-5. **Detailed assembly can carry partial output with errors.** Callers must check `ok()`; the runtime’s throwing API does this conversion for its caller.
+5. **Detailed assembly can carry partial output with errors.** Callers must check `ok()`; `SICXE::load_file` does, and throws the remapped diagnostics instead of loading the image.
 6. **Runtime fetch uses a four-byte window.** SICXE declares address width 4 and fetches that many bytes before decode. A short instruction placed at the very end of memory may be encodable but fail fetch bounds.
 7. **Expression behavior is intentionally not explained here.** Only expression call boundaries and their layout/encoding effects are discussed; see the expression module and grammar docs for that separate concern.
 
@@ -401,6 +403,7 @@ The standalone diagrams are in `docs/uml/`:
 - [Pass-2 emission and encoding branches](../uml/27_assembler_pass2.puml)
 - [Format-3/4 selection sequence](../uml/28_assembler_encoding_sequence.puml)
 - [Runtime result consumption](../uml/29_assembler_runtime_sequence.puml)
+- [Source load with the macro processor](../uml/43_macro_load_sequence.puml)
 
 The expression service is shown only as a black-box collaborator in diagrams; none attempts to describe expression parsing or evaluation internals.
 
@@ -417,6 +420,6 @@ The expression service is shown only as a black-box collaborator in diagrams; no
 | Pass 2 and data emission | `lib/sic-xe/src/Assembler/assembler.cpp:258–367` |
 | SIC/XE addressing | `lib/sic-xe/src/Assembler/assembler.cpp:369–461` |
 | Sparse memory | `include/memory/CodeMemory.hpp:1–82` |
-| Simulator assembly load | `lib/sic-xe/src/SICXE.cpp:132–189` |
+| Simulator assembly load | `lib/sic-xe/src/SICXE.cpp:134–199` |
 | Atomic segment validation/write | `src/memory/MemoryAccessor.cpp:29–66` |
-| Language-service analysis call | `src/language/LanguageServer.cpp:245–273` |
+| Language-service analysis call | `src/language/LanguageServer.cpp:481–494` |
