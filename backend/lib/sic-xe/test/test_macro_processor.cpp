@@ -460,6 +460,12 @@ TEST(figure_4_12_outputs) {
   CHECK((outputLines(r, LineKind::Expanded) == std::vector<std::string>{"LOAD ACTUAL1", "STORE ACTUAL2"}));
   CHECK(r.definitions.size() == 2); CHECK(r.names.size() == 2);
   if (r.definitions.size() != 2 || r.names.size() != 2) return;
+  // Spec 6, test 3: A stores its own formal as #(1,1) and B's, one level deeper, as #(2,1).
+  const MacroDefinition& a = r.definitions[0];
+  CHECK(a.name == "A"); CHECK(a.hasNested);
+  CHECK((a.displayBody == std::vector<std::string>{"A FORMAL1", "LOAD #(1,1)", "MCDEFN", "B FORMAL2",
+        "STORE #(2,1)", "MCEND", "MCEND"}));
+  CHECK((a.bodySourceLines == std::vector<int>{2, 3, 4, 5, 6, 7, 8}));
   const MacroDefinition& b = r.definitions[1];
   CHECK(b.name == "B"); CHECK(b.active); CHECK(!b.hasNested);
   CHECK(b.originSerial == 1); CHECK(b.originSourceLine == 0);
