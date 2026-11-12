@@ -413,11 +413,12 @@ export default function EditorPage({ projectId }: PageProps) {
         ? languageDocumentUri(project.id, activeFile)
         : undefined;
 
-    // After a Run with macros, MASMAPRG.ASM opens next to the active file.
+    // After a Run with macros, MASMAPRG.ASM opens next to the Run's source, and
+    // only next to it: another open file did not produce that output.
     const decorationContext = { report: macroReport, view: macroView, executingLine, executionSourceFile, selectedExpansion };
     const activeDecorations = editorDecorations(activeFile, decorationContext);
     const outputDecorations = editorDecorations(MACRO_OUTPUT_FILE, decorationContext);
-    const canShowMacroOutput = Boolean(macroReport?.hasMacros) && !isGeneratedFile(activeFile);
+    const canShowMacroOutput = Boolean(macroReport?.hasMacros) && activeFile === macroView.sourceFile;
     const macroOutput = canShowMacroOutput && showMacroOutput ? macroReport : null;
 
     // A click on an expansion row reveals it in both panes, opening the split
