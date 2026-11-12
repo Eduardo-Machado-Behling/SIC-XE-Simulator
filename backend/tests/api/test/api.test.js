@@ -20,6 +20,7 @@ import errorsAndLimits from './suites/errors-limits.js';
 import fileOperations from './suites/files.js';
 import healthAndArchitectures from './suites/health-architectures.js';
 import languageServer from './suites/language-server.js';
+import languageMacros from './suites/language-macros.js';
 import isolationAndConcurrency from './suites/isolation-concurrency.js';
 import projects from './suites/projects.js';
 import sessions from './suites/sessions.js';
@@ -60,6 +61,7 @@ describe('OpenAPI document', () => {
 
 healthAndArchitectures(ctx);
 languageServer(ctx);
+languageMacros(ctx);
 sessions(ctx);
 projects(ctx);
 fileOperations(ctx);

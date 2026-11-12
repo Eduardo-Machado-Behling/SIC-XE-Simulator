@@ -179,6 +179,48 @@ void test_macro_source_has_no_false_errors() {
             "a macro processor error is published alone, at its place in the document");
 }
 
+void test_stopped_expansion_is_not_assembled() {
+    // DOBRA V+V doubles its actual at each level until the byte limit stops the processing.
+    // The partial output holds a ~262 KB LDA #1+1+... line that the assembler's expression
+    // evaluator cannot take: assembling it overflowed the stack.
+    const std::string dobra = "PROG START 0\nMCDEFN\nDOBRA V\nLDA #V\nDOBRA V+V\nMCEND\nDOBRA 1\nEND PROG\n";
+    language::AssemblerLanguageSession session;
+    // A first version that assembles, so a stale analysis would still know PROG.
+    open_document(session, "PROG START 0\nEND PROG\n");
+    require(!request(session, 1, "textDocument/hover", cursor(1, 5)).at("result").is_null(),
+            "the first version knows PROG");
+
+    const json changed = send(session, {{"jsonrpc", "2.0"}, {"method", "textDocument/didChange"},
+                                        {"params", {{"textDocument", {{"uri", "sicxe://test/main.asm"}, {"version", 2}}},
+                                                    {"contentChanges", json::array({{{"text", dobra}}})}}}});
+    const json& diagnostics = changed.at("params").at("diagnostics");
+    require(diagnostics.size() == 1, "a stopped expansion publishes only the processor's diagnostic");
+    const json& limit = diagnostics.front();
+    require(limit.at("message") == "Macro output too long (limit 1048576 bytes)" &&
+                limit.at("source") == "SIC/XE macro processor" && limit.at("severity") == 1,
+            "the byte limit is published as a macro processor error");
+    require(starts_at(limit.at("range"), 6, 0) && limit.at("range").at("end").at("line") == 6 &&
+                limit.at("range").at("end").at("character") == 5,
+            "the byte limit lands on the outermost call's macro name");
+
+    // PROG on END PROG: the partial output is not assembled, so no symbol is known.
+    require(request(session, 2, "textDocument/hover", cursor(7, 5)).at("result").is_null(),
+            "hover on a stopped expansion answers null");
+    require(request(session, 3, "textDocument/definition", cursor(7, 5)).at("result").is_null(),
+            "definition on a stopped expansion answers null");
+    json referenceParams = cursor(7, 5);
+    referenceParams["context"] = {{"includeDeclaration", true}};
+    require(request(session, 4, "textDocument/references", referenceParams).at("result") == json::array(),
+            "references on a stopped expansion answer an empty list");
+    const json completed = request(session, 5, "textDocument/completion", cursor(7, 4)).at("result").at("items");
+    require(std::none_of(completed.begin(), completed.end(), [](const json& item) { return item.at("label") == "PROG"; }),
+            "completion on a stopped expansion offers no symbol");
+    json renameParams = cursor(7, 5);
+    renameParams["newName"] = "MAIN";
+    require(request(session, 6, "textDocument/rename", renameParams).at("result").is_null(),
+            "rename on a stopped expansion answers null");
+}
+
 void test_error_in_expansion_lands_on_call_line() {
     language::AssemblerLanguageSession session;
     const json diagnostics = open_document(session,
@@ -486,6 +528,7 @@ int main() {
     test_completion_and_versioned_changes();
     test_hover_definition_references_and_rename();
     test_macro_source_has_no_false_errors();
+    test_stopped_expansion_is_not_assembled();
     test_error_in_expansion_lands_on_call_line();
     test_verbatim_line_after_definition_keeps_position();
     test_rename_refuses_synthetic_symbol();

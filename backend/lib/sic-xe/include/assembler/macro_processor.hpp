@@ -126,6 +126,7 @@ struct MacroResult {
   std::vector<Expansion> expansions;
   MacroTrace trace;
   bool hasMacros = false;
+  bool stopped = false;  // a limit ended the processing; text is partial (a truncated trace is not a stop)
 
   bool ok() const {
     return std::none_of(diagnostics.begin(), diagnostics.end(),

@@ -780,6 +780,44 @@ TEST(byte_limit_spares_legal_programs) {
   CHECK(onlyError(over) == "6:9:1 Macro output too long (limit 33 bytes)");
 }
 
+TEST(stopped_marks_a_limit_stop) {   // the language server must not assemble a stopped run's partial text
+  const std::string recursive = "        MCDEFN\n        R\n        LDA X\n        R\n        MCEND\n        R\n        END P\n";
+  const std::string twice = "P START 0\nMCDEFN\nM\n        LDA X\n        LDA Y\nMCEND\n        M\n        M\n        END P\n";
+  MacroProcessorOptions depth; depth.maxDepth = 2;
+  auto r = MacroProcessor(depth).process(recursive);
+  CHECK(onlyError(r) == "6:9:1 Macro expansion too deep (limit 2): R"); CHECK(r.stopped);
+
+  MacroProcessorOptions expansions; expansions.maxExpansions = 5;
+  r = MacroProcessor(expansions).process("MCDEFN\nINNER\n        LDA X\nMCEND\nMCDEFN\nOUTER\n        INNER\n"
+                                         "        INNER\nMCEND\n        OUTER\n        OUTER\n        END P\n");
+  CHECK(onlyError(r) == "11:9:5 Too many macro expansions (limit 5)"); CHECK(r.stopped);
+
+  MacroProcessorOptions lines; lines.maxOutputLines = 4;
+  r = MacroProcessor(lines).process(twice);
+  CHECK(onlyError(r) == "8:9:1 Macro output too long (limit 4 lines)"); CHECK(r.stopped);
+
+  MacroProcessorOptions bytes; bytes.maxOutputBytes = 40;   // the whole output
+  r = MacroProcessor(bytes).process(twice);
+  CHECK(onlyError(r) == "7:9:1 Macro output too long (limit 40 bytes)"); CHECK(r.stopped);
+  bytes.maxOutputBytes = 8;   // an actual once bound
+  r = MacroProcessor(bytes).process("MCDEFN\nM V\n        LDA V\nMCEND\n        M 123456789\n        END P\n");
+  CHECK(onlyError(r) == "5:9:1 Macro output too long (limit 8 bytes)"); CHECK(r.stopped);
+  bytes.maxOutputBytes = 100;   // the lines an expansion reads
+  r = MacroProcessor(bytes).process("MCDEFN\nGROW V\nMCDEFN\nINNER\nLDA V\nLDA V\nLDA V\nLDA V\nLDA V\nMCEND\n"
+                                    "MCEND\n        GROW AAAAAAAAAAAAAAAAAAAA\n        END P\n");
+  CHECK(onlyError(r) == "12:9:4 Macro output too long (limit 100 bytes)"); CHECK(r.stopped);
+
+  // Not a stop: a run that ends normally, an error that is not a limit, a truncated trace.
+  MacroProcessorOptions calingaert; calingaert.isOperation = calingaertOps();
+  r = MacroProcessor(calingaert).process(FIGURE_4_12_INPUT);
+  CHECK(r.ok()); CHECK(!r.stopped);
+  r = MacroProcessor().process("        MCEND\n        END P\n");
+  CHECK(onlyError(r) == "1:9:5 MCEND without MCDEFN"); CHECK(!r.stopped);
+  calingaert.maxTraceSteps = 3;
+  r = MacroProcessor(calingaert).process(FIGURE_4_12_INPUT);
+  CHECK(r.ok()); CHECK(r.trace.truncated); CHECK(!r.stopped);
+}
+
 // ---------------------------------------------------------------------------
 // Trace (spec 4.4, Figure 4.12): one step per line read
 
