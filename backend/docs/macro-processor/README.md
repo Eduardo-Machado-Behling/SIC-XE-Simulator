@@ -572,6 +572,11 @@ The full field list and an example are in
 [websocket-protocol.md](../websocket-protocol.md#macrosexpanded).
 
 **Frontend.**
+- New projects come with `macro.asm` next to `main.asm`: a commented tour of
+  the macro language (`frontend/src/lib/simulator/defaultMacroSource.ts`).
+- Run assembles the open file. With MASMAPRG.ASM open, it assembles the source
+  of the last Run. See `fileToRun` in
+  `frontend/src/lib/simulator/generatedFiles.ts`.
 - After a Run with macros, `applyMacroReport` stores `text` as
   `MASMAPRG.ASM` at the project root. A Run without macros removes an old one.
 - The file is read-only, shows the `generated` badge, and is never the entry
