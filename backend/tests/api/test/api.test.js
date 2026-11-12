@@ -16,6 +16,7 @@ import { startServer } from './support/server.js';
 import { documentedOperations, uncoveredResponses } from './support/spec.js';
 
 import contract from './suites/contract.js';
+import defaultSources from './suites/default-sources.js';
 import errorsAndLimits from './suites/errors-limits.js';
 import fileOperations from './suites/files.js';
 import healthAndArchitectures from './suites/health-architectures.js';
@@ -72,6 +73,7 @@ contract(ctx);
 startup(ctx);
 storageLimits();
 wsMacros(ctx);
+defaultSources(ctx);
 
 describe('coverage of the OpenAPI document', () => {
   it('every documented response except 500 was exercised and validated', () => {
