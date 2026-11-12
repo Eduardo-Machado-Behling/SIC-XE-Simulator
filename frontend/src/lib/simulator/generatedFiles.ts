@@ -15,12 +15,18 @@ function hasDirective(source: string, directive: "START" | "END"): boolean {
     });
 }
 
+// The extensions of an assembly source, written once for the three patterns.
+const SOURCE_EXTENSIONS = "(asm|sic|sicxe|sxe|s)";
+const SOURCE_PATH = new RegExp(`\\.${SOURCE_EXTENSIONS}$`, "i");
+const MAIN_IN_ANY_FOLDER = new RegExp(`(^|/)main\\.${SOURCE_EXTENSIONS}$`, "i");
+const ROOT_MAIN = new RegExp(`^main\\.${SOURCE_EXTENSIONS}$`, "i");
+
 // The files Run may assemble, sorted: never the generated file; the files with
 // an assembly extension, else those with START or END, else (except on SIC/XE)
 // every file.
 function runnableSources(files: Record<string, string>, architecture?: string): string[] {
     const paths = Object.keys(files).filter((path) => !isGeneratedFile(path)).sort();
-    const namedSources = paths.filter((path) => /\.(asm|sic|sicxe|sxe|s)$/i.test(path));
+    const namedSources = paths.filter((path) => SOURCE_PATH.test(path));
     const assemblySources = namedSources.length > 0
         ? namedSources
         : paths.filter((path) => hasDirective(files[path], "START") || hasDirective(files[path], "END"));
@@ -32,7 +38,7 @@ export function entryPointFile(files: Record<string, string>, architecture?: str
     const sources = runnableSources(files, architecture);
     return sources.find((path) => hasDirective(files[path], "START")) ??
         sources.find((path) => hasDirective(files[path], "END")) ??
-        sources.find((path) => /(^|\/)main\.(asm|sic|sicxe|sxe|s)$/i.test(path)) ??
+        sources.find((path) => MAIN_IN_ANY_FOLDER.test(path)) ??
         sources[0] ?? "";
 }
 
@@ -53,7 +59,7 @@ export function fileToRun(
 // The file the editor opens with a project, or after the open file is
 // deleted: the root main.<asm|sic|sicxe|sxe|s>, else the entry point.
 export function fileToOpen(files: Record<string, string>, architecture?: string): string {
-    return runnableSources(files, architecture).find((path) => /^main\.(asm|sic|sicxe|sxe|s)$/i.test(path)) ??
+    return runnableSources(files, architecture).find((path) => ROOT_MAIN.test(path)) ??
         entryPointFile(files, architecture);
 }
 
