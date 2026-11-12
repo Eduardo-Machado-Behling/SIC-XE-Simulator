@@ -22,7 +22,7 @@ import { AssemblerLanguageClient } from "@/lib/language/LanguageClient";
 import { setAssemblerLanguageClient } from "@/lib/language/sicxeLanguage";
 import { simulatorWebSocketUrl } from "@/lib/transport/urls";
 import { Project } from "@/lib/simulator/Project";
-import { DEFAULT_MAIN_SOURCE } from "@/lib/simulator/defaultMainSource";
+import { defaultProjectFiles } from "@/lib/simulator/defaultProjectFiles";
 import {
     applyMacroReport,
     canCreate,
@@ -336,7 +336,7 @@ export default function EditorPage({ projectId }: PageProps) {
                 const existingFiles = savedState?.files ?? storedProject.files;
                 const projectFiles = Object.keys(existingFiles).length > 0
                     ? existingFiles
-                    : { "main.asm": DEFAULT_MAIN_SOURCE };
+                    : defaultProjectFiles();
                 const projectFolders = [...new Set([
                     ...(savedState?.folders ?? []),
                     ...parentFolders(Object.keys(projectFiles)),

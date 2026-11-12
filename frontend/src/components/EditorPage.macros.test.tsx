@@ -27,12 +27,16 @@ const consoleCalls = vi.hoisted(() => [] as unknown[][]);
 // The last props each editor (by path) was rendered with.
 const editors = vi.hoisted(() => new Map<string, unknown>());
 
+// The files of the stored project the page opens. A test may replace them.
+const ONE_FILE = { "main.asm": "PROG START 0" };
+const stored = vi.hoisted(() => ({ files: {} as Record<string, string> }));
+
 vi.mock("@/lib/simulator/Simulator", () => ({
     Simulator: { get: () => fake },
 }));
 
 vi.mock("@/lib/simulator/ProjectSessionSync", () => ({
-    getStoredProject: () => ({ id: "demo", name: "Demo", architecture: "SIC/XE", files: { "main.asm": "PROG START 0" } }),
+    getStoredProject: () => ({ id: "demo", name: "Demo", architecture: "SIC/XE", files: stored.files }),
     saveStoredProject: () => [],
     syncProjectToSession: async () => "session",
 }));
@@ -120,6 +124,7 @@ function expansionTable(): HTMLElement {
 
 describe("EditorPage with the macro processor", () => {
     beforeEach(() => {
+        stored.files = ONE_FILE;
         fake.loadProject.mockResolvedValue({
             project: { id: "demo", name: "Demo", architecture: "SIC/XE", files: {} },
             arch: ARCH,
@@ -228,6 +233,16 @@ describe("EditorPage with the macro processor", () => {
 
             expect(await screen.findByText("lib")).toBeTruthy();
             expect(screen.queryByRole("alertdialog")).toBeNull();
+        });
+    });
+
+    describe("a stored project without files", () => {
+        it("opens with the syntax tour and the macro tour", async () => {
+            stored.files = {};
+            await openPage();
+
+            expect(screen.getByTitle("main.asm")).toBeTruthy();
+            expect(screen.getByTitle("macro.asm")).toBeTruthy();
         });
     });
 

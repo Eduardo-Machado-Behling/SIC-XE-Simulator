@@ -17,7 +17,7 @@ import Project from "@/components/Project";
 import { Project as TypeProject } from "@/lib/simulator/Project";
 import { Simulator } from "@/lib/simulator/Simulator";
 import { readStoredProjects, saveStoredProjects, syncProjectsToSession } from "@/lib/simulator/ProjectSessionSync";
-import { DEFAULT_MAIN_SOURCE } from "@/lib/simulator/defaultMainSource";
+import { defaultProjectFiles } from "@/lib/simulator/defaultProjectFiles";
 
 export default function ProjectsPage() {
     const router = useRouter();
@@ -44,7 +44,7 @@ export default function ProjectsPage() {
                         id: crypto.randomUUID(),
                         name: "SIC/XE Syntax Tour",
                         architecture: preferred,
-                        files: { "main.asm": DEFAULT_MAIN_SOURCE },
+                        files: defaultProjectFiles(),
                     }];
                     saveStoredProjects(localProjects);
                 }
@@ -106,7 +106,7 @@ export default function ProjectsPage() {
             id: crypto.randomUUID(),
             name,
             architecture,
-            files: { "main.asm": DEFAULT_MAIN_SOURCE },
+            files: defaultProjectFiles(),
         };
 
         setCreating(true);
