@@ -37,9 +37,10 @@ of the assembled text, `MASMAPRG.ASM`, the macro processor's output: the
 project file itself when it has no macros, and otherwise mapped back to the
 file by `MacrosExpanded.lineMap`. The architecture obtains this location from
 the assembler's instruction source map and adds it to the existing event;
-clients do not need a separate source mapping request. The field is omitted when no source mapping exists, such as
-when executing a raw hex image. A debugger-style editor can use this field to
-place its current-instruction marker without interpreting instruction bytes.
+clients do not need a separate source mapping request. The field is omitted
+when no source mapping exists, such as when executing a raw hex image. A
+debugger-style editor can use this field to place its current-instruction
+marker without interpreting instruction bytes.
 
 The optional `preview: true` field marks an artificial fetch used only to
 position the debugger on the next instruction. It is emitted after a

@@ -81,9 +81,10 @@ language and the line map.
     source "SIC/XE macro processor".
   - The assembler's diagnostics are positions of MASMAPRG.ASM. They are moved
     by sicxe::remapAssemblyDiagnostics(), with the source "SIC/XE assembler".
-    A verbatim line keeps its line and column. A line produced by an
-    expansion goes to the macro name on the outermost call line, and its
-    message gets the prefix "In expansion of NAME (#NNN, MASMAPRG.ASM:L): ".
+    A verbatim line keeps its column and moves to its own source line. A line
+    produced by an expansion goes to the macro name on the outermost call
+    line, and its message gets the prefix
+    "In expansion of NAME (#NNN, MASMAPRG.ASM:L): ".
   - When the processor reports an error, only the processor's diagnostics are
     published, as a Run would stop there. For example, an unclosed MCDEFN
     swallows the rest of the program, and every symbol defined there would be
@@ -91,10 +92,10 @@ language and the line map.
 - **Limit stop.** When a limit stopped the processing (MacroResult::stopped),
   the assembler is not run on the partial text. The analysis is left empty, so
   hover, definition, references and rename find no symbol, and completion
-  offers none. Only the processor's diagnostics are published.
+  offers no symbols. Only the processor's diagnostics are published.
 - **Positions of symbols.** Definition, references and hover map each place
   back to the document:
-  - a verbatim line keeps its column;
+  - a verbatim line keeps its column, on its own source line;
   - for an expansion line, the whole name is searched first in the definition
     body line the line was expanded from (known from the trace), then in the
     call line;
