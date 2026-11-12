@@ -286,6 +286,24 @@ describe("EditorPage with the macro processor", () => {
             expect(fake.loadFile).toHaveBeenLastCalledWith("main.asm");
         });
 
+        it("shows MASMAPRG.ASM next to the Run's source only, not next to another open file", async () => {
+            stored.files = TWO_FILES;
+            const user = await openPage();
+            await user.click(screen.getByTitle("macro.asm"));
+            fake.loadFile.mockResolvedValueOnce([expanded(demo)]);
+            await run(user);
+            expect(screen.getByRole("button", { name: "Hide MASMAPRG.ASM" })).toBeTruthy();
+
+            // main.asm did not produce this MASMAPRG.ASM: no split view, no toggle.
+            await user.click(screen.getByTitle("main.asm"));
+            expect(screen.queryByRole("button", { name: "Hide MASMAPRG.ASM" })).toBeNull();
+            expect(screen.queryByRole("button", { name: "Show MASMAPRG.ASM" })).toBeNull();
+
+            // Back on the Run's source, the split view returns as it was left.
+            await user.click(screen.getByTitle("macro.asm"));
+            expect(screen.getByRole("button", { name: "Hide MASMAPRG.ASM" })).toBeTruthy();
+        });
+
         it("follows the last Run's source through a rename", async () => {
             stored.files = TWO_FILES;
             const user = await openPage();
