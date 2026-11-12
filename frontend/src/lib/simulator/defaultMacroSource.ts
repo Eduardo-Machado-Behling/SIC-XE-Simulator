@@ -1,23 +1,24 @@
 export const DEFAULT_MACRO_SOURCE = `. SIC/XE macro tour. Read it from top to bottom, then press Run.
 .
-. This file shows the macro language: a definition, positional and
+. This tour shows the macro language: a definition, positional and
 . keyword parameters, the label parameter, a nested call, unique
 . labels with .SER, and a macro whose call defines another macro.
 .
-. The macro processor runs before the assembler. It reads this file
-. once, in one pass, and writes MASMAPRG.ASM: this file without its
+. The macro processor runs before the assembler. It reads macro.asm
+. once, in one pass, and writes MASMAPRG.ASM: macro.asm without its
 . definitions, and with each call replaced by the lines its macro
 . produces. The assembler then assembles MASMAPRG.ASM.
 .
-. To see the result, open this file and press Run.
-. - MASMAPRG.ASM opens side by side with this file. Coloured bands
+. To see the result, open macro.asm and press Run.
+. - MASMAPRG.ASM opens side by side with macro.asm. Coloured bands
 .   link each call of the program below to the lines it produced.
-.   MASMAPRG.ASM is read-only: edit this file and press Run again.
-. - In the Execution View, the Macros tab has two sub-tabs: Tables
-.   (the macros, their definitions and the expansions) and Trace
-.   (every line the processor read, one step at a time).
+.   MASMAPRG.ASM is read-only: edit macro.asm and run it again. When
+.   the Run button reads Stop, press Stop, then Run.
+. - The Macros tab, next to CPU and Assembler, has two sub-tabs:
+.   Tables (the macros, their definitions and the expansions) and
+.   Trace (every line the processor read, one step at a time).
 . - Step highlights the running instruction in MASMAPRG.ASM and, in
-.   this file, the line it came from (for a line a macro wrote, the
+.   macro.asm, the line it came from (for a line a macro wrote, the
 .   call in the program).
 .
 . Words used below. The prototype line names the macro and its
@@ -26,7 +27,7 @@ export const DEFAULT_MACRO_SOURCE = `. SIC/XE macro tour. Read it from top to bo
 .
 . These explanations sit outside the definitions on purpose: a
 . comment line inside a macro body is copied into MASMAPRG.ASM at
-. every expansion, like the one in SOMA below.
+. every expansion, like the one in the body of SOMA.
 
 . 1. A definition: MCDEFN, the prototype on the next line, the body,
 .    then MCEND. MCDEFN and MCEND stand alone on their lines.
@@ -62,10 +63,14 @@ L       SOMA V,V,V
 . 5. Keyword formals: P=, Q= and R=MAIOR. The text after the = is a
 .    default: R defaults to MAIOR, and P and Q have none. A call
 .    names its keyword actuals (P=N), so they may come in any order,
-.    and an omitted one takes its default.
-. 6. .SER, a label unique to each expansion. FIM.SER becomes FIM
-.    followed by the number of the expansion, with at least three
-.    digits: FIM003 here. Each call of MAXIMO gets its own label.
+.    and an omitted one takes its default. A positional actual goes
+.    to a keyword formal too, by position: MAXIMO N,M passes N to P
+.    and M to Q.
+. 6. .SER makes a label unique to each expansion. FIM.SER becomes
+.    FIM followed by the number of the expansion, with at least
+.    three digits: FIM003 here, since DOBRA is expansion 001, the
+.    SOMA it calls is 002 and MAXIMO is 003. Each call of MAXIMO
+.    gets its own label.
         MCDEFN
         MAXIMO P=,Q=,R=MAIOR ; R = max(P, Q)
         LDA P
@@ -94,7 +99,7 @@ FIM.SER STA R
 . 8. Names and keywords are case-insensitive: MCDEFN, MCEND, macro
 .    names, formal names and the keyword of a keyword actual (the Q
 .    of Q=M) can be written in any case. So maximo q=M,p=N would call
-.    MAXIMO just as the line below does.
+.    MAXIMO just as the MAXIMO call in the program below does.
 .
 . The program. MAXIMO gets its keyword actuals in another order
 . than its prototype, and R takes its default. After a run to HALT:
@@ -115,6 +120,10 @@ TRIPLO  RESW 1
 . - conditional macros (AIF/AGO);
 . - parameter concatenation;
 . - &SYSLIST;
+. - Beck's syntax (MACRO/MEND/&PARAM);
+. - the "version 1" prototype INCR MCDEFN L,A: MCDEFN takes no
+.   label or operands;
+. - the = body marker (slide 20's L= LOAD A=);
 . - an actual containing a comma: BUF,$X cannot be passed as one
 .   actual;
 . - a forward reference to a macro: a call before the definition is
