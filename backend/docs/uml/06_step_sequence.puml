@@ -47,10 +47,17 @@ Simulator -> Events : read events since step start
 Simulator --> WS : {id, result: events}
 WS --> Client : response
 Client --> Frontend : resolve(events)
-Frontend -> Frontend : map source_line to active Monaco model
+Frontend -> Frontend : map source_line to the Monaco model\nof the file the Run assembled
 Frontend -> Frontend : animate real fetch as executed instruction
-Frontend -> Frontend : map final fetch source_line to active Monaco model
+Frontend -> Frontend : map final fetch source_line the same way
 Frontend -> Frontend : show debugger arrow on next instruction
+
+note right of Frontend
+After a Run with macros, source_line is a line of
+MASMAPRG.ASM: it is lit there, and the entry file gets
+lineMap[source_line - 1].source as a secondary
+highlight (macroBands.ts, editorDecorations).
+end note
 
 note right of SourceMap
 Built by the assembler from emitted

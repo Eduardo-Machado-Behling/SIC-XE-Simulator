@@ -2,8 +2,9 @@
 
 This document describes the macro processor implemented in this repository:
 its language, data structures, functions, algorithm, output, errors, and
-integration. Paths are relative to `backend/`. The implementation remains
-authoritative if this document and the code ever disagree.
+integration. Paths are relative to `backend/`, except those that start with
+`frontend/`, which are relative to the repository root. The implementation
+remains authoritative if this document and the code ever disagree.
 
 ## 1. Overview
 
@@ -84,9 +85,10 @@ prototype. The examples come from the demo program,
 - A line whose operation names a defined macro is a call. Any other line is
   copied unchanged.
 - Actuals are separated by commas outside quotes, and each one is trimmed.
-  `IDENT=value`, where `IDENT` is a formal of the macro, is a keyword actual.
-  Any other actual is positional: the i-th one goes to the i-th formal, and
-  the label formal is not counted.
+  `IDENT=value`, where `IDENT` is an identifier, is a keyword actual. When
+  `IDENT` names no formal of the macro, it is an error and the actual is
+  ignored. Any other actual is positional: the i-th one goes to the i-th
+  formal, and the label formal is not counted.
 - An empty actual is `""`. A formal without an actual takes its default, or
   `""`. In the demo, `MAXIMO P=N,Q=M` leaves `R` at its default `MAIOR`.
 - The call label:
@@ -116,7 +118,9 @@ prototype. The examples come from the demo program,
 ## 3. Data structures
 
 `OnePass` is the private class that runs the pass, in `macro_processor.cpp`.
-Unless noted otherwise, the other types are in `macro_processor.hpp`.
+`FormalEntry`, `Frame`, `SourceRange` and `DefinitionInProgress` are private
+structs of that file too, and `Piece` and `PieceLine` are in `macro_text.hpp`.
+The other types are in `macro_processor.hpp`.
 
 **Name table.** `MacroResult::names`, a `std::vector<MacroName>`, with
 `MacroName { name, definition, line }`.
@@ -235,7 +239,7 @@ diagnostics, `diags_`.
 | `MacroResult::stopped` | A limit ended the processing, so `text` is partial. A truncated trace is not a stop. `stopped` implies `!ok()` |
 | `MacroResult::hasMacros` | An `MCDEFN` was read (a call needs one) |
 | `kMacroOutputFile` | `"MASMAPRG.ASM"` |
-| `SourceSpan mapToSource(r, source, outputLine, outputColumn, length)` | A verbatim line keeps its column. An expansion line maps to the macro name on the outermost call line, with `synthetic` set |
+| `SourceSpan mapToSource(r, source, outputLine, outputColumn, length)` | A verbatim line keeps its column, on its own source line. An expansion line maps to the macro name on the outermost call line, with `synthetic` set |
 | `remapAssemblyDiagnostics(r, source, assembled)` | Assembler diagnostics of `r.text` moved to `source` (section 7) |
 | `nlohmann::json macroReportJson(const MacroResult& r)` | The `MacrosExpanded` details (`MacroReportJson.hpp`) |
 
@@ -252,9 +256,9 @@ diagnostics, `diags_`.
 | `OnePass::store`, `bodyLine`, `findFormal` | Stores a line in the current definition, turning formals on the stack into markers |
 | `OnePass::closeDefinition`, `checkMarkers` | Enters a level-1 definition in the tables. For one an expansion created, it checks its markers against its prototype |
 | `OnePass::call` | A call: checks the limits, binds the actuals, pushes a frame, and emits the `.` line and `EQU *` |
-| `OnePass::bindActuals`, `formalIndex` | Binding: keyword and positional actuals, defaults, `#0` from the call label |
+| `OnePass::bindActuals`, with the file-local function `formalIndex` | Binding: keyword and positional actuals, defaults, `#0` from the call label |
 | `substitute`, `substitutedLength` (`macro_text`) | `#(1,i)` becomes actual `i`, and `#(k,i)` becomes `#(k-1,i)`. The second gives the length of the result without building it |
-| `toPieces`, `parsePrototype`, `displayForm`, `outputText`, `serialText` (`macro_text`) | Marker recognition, the prototype rule, the display form, output text with `.SER`, the 3-digit serial |
+| `toPieces`, `parsePrototype`, `displayForm`, `outputText`, `serialText` (`macro_text`) | Marker recognition, the prototype rule, the display form, output text with `.SER`, the serial in at least three digits |
 | `OnePass::copy`, `emitGenerated`, `emit` | Emission: a source line byte for byte, or a generated line with the call line's ending. `emitGenerated` checks the output limits |
 | `OnePass::stop` | A limit: the error goes at the outermost call, open expansions end, the stack is cleared, and `stopped` is set |
 | `OnePass::finish` | End of text: `Missing prototype after MCDEFN`, and `MCDEFN without MCEND` for each open level, unless stopped |
@@ -318,7 +322,7 @@ source. A source line is read only after the stack is empty again.
 
 | Mode | Condition | Effect on a line |
 | --- | --- | --- |
-| Normal | `d = 0`, `e = false` | A source line is copied or is a call |
+| Normal | `d = 0`, `e = false` | A source line is copied, is a call, or opens a definition (`MCDEFN`) |
 | Definition | `d > 0` | The line, from the source or from an expansion, is stored in the current definition. Calls in it are stored too |
 | Expansion | `d = 0`, `e = true` | A body line is copied (with `.SER` filled in), is a nested call, or opens a definition |
 
@@ -374,7 +378,8 @@ the serial of the frame that emits it. A line stored in a definition keeps
 ## 6. MASMAPRG.ASM and the line map
 
 - A source line outside definitions (`d = 0`) that is not a call is copied byte
-  for byte, with its `\r`, comment and spelling. Its kind is `verbatim`.
+  for byte, with its `\r`, comment and spelling. Its kind is `verbatim`. The
+  exception is an `MCEND` without `MCDEFN`: it is reported and dropped.
 - Definitions, from `MCDEFN` to `MCEND`, do not appear in the output.
 - A call, top-level or nested, produces these lines:
   - first a `.` comment line with the call text, kind `call`. A nested call
@@ -394,12 +399,15 @@ Each `LineOrigin` of the line map has these fields:
 - `output`: the 1-based line in MASMAPRG.ASM;
 - `source`: the line's own source line for `verbatim`, or the line of the
   outermost call for `call`, `label` and `expanded`;
-- `kind`: one of `verbatim`, `call`, `label` or `expanded`;
-- `serial`: the innermost expansion that emitted the line, 0 for `verbatim`.
+- `kind`: a `LineKind`, written in the event as `verbatim`, `call`, `label` or
+  `expanded`;
+- `serial`: the innermost expansion that emitted the line; 0 for `verbatim`
+  (`null` in the event).
 
 When the source ends with a newline, the empty segment after it is copied too,
 so the output keeps the newline. It gets a `verbatim` entry but no trace step:
-the demo's map has 25 entries, and the last one is source line 40.
+the demo's map has 25 entries, and the last one is the empty segment after
+line 39 (segment 40).
 
 Users of the map:
 - `remapAssemblyDiagnostics` and `mapToSource`, for load errors and for the
@@ -446,7 +454,7 @@ Notes:
 
 **Remapped assembler errors.** `remapAssemblyDiagnostics` moves each assembler
 diagnostic of MASMAPRG.ASM to the source:
-- a `verbatim` line keeps its column;
+- a `verbatim` line keeps its column and moves to its own source line;
 - a line produced by an expansion goes to the macro name on the outermost call
   line. Its message gets the prefix `In expansion of NAME (#NNN, MASMAPRG.ASM:L): `,
   which names the innermost expansion and the MASMAPRG.ASM line;
@@ -490,8 +498,11 @@ processing (`OnePass::stop`):
 expansion reads counts, with its line break, before it is built: the prototype
 and `MCEND` read again, and lines stored in definitions. A line that repeats a
 formal (`DOBRA V+V`) doubles at each level, so this check is what bounds
-memory. The error can therefore fire with MASMAPRG.ASM slightly under 1 MiB.
-Only generated text is checked, so a source copied as is is never cut.
+memory. The count is cumulative over all the expansions of a run, so the error
+can fire well before MASMAPRG.ASM reaches 1 MiB: a one-line macro whose
+prototype line has 1015 bytes, most of them a comment, stops at its 1004th
+call, with a MASMAPRG.ASM of 28,112 bytes. Only generated text is checked, so
+a source copied as is is never cut.
 
 **A processor error stops the pipeline.**
 - On the Run path, `SICXE::load_file` throws the processor's diagnostics before
@@ -502,14 +513,14 @@ Only generated text is checked, so a source copied as is is never cut.
 
 ## 8. Limitations
 
-- **Spec §4.1.** A macro without parameters cannot have a label formal:
-  `L NAME` is read as macro `L` with the formal `NAME`.
-- **Spec §4.2.** `BUF,$X` cannot be passed as one actual. A comma outside quotes
-  always separates actuals, so `M BUF,$X` against a one-formal `M` reports
-  `Too many arguments for M (expects 1)`.
-- **Spec §4.3.** The `=` marker in a body, slide 20's `L= LOAD A=`, is not
-  supported.
-- **Non-goals (spec §2):**
+- **Label formal without parameters.** A macro without parameters cannot have
+  a label formal: `L NAME` is read as macro `L` with the formal `NAME`.
+- **An actual containing a comma.** `BUF,$X` cannot be passed as one actual. A
+  comma outside quotes always separates actuals, so `M BUF,$X` against a
+  one-formal `M` reports `Too many arguments for M (expects 1)`.
+- **The `=` body marker.** The `=` marker in a body, slide 20's `L= LOAD A=`,
+  is not supported.
+- **Out of scope:**
   - conditional macros (`AIF`/`AGO`);
   - parameter concatenation;
   - `&SYSLIST`;
@@ -604,7 +615,7 @@ usage: sicxe_macro <input> [-o <dir>] [--tables] [--trace]
     output cannot be written).
 - Build: the target `sicxe_macro` is in `lib/sic-xe/CMakeLists.txt`. From
   `backend/`, run `cmake --build build --target sicxe_macro`, or build
-  everything. The binary is `backend/bin/sicxe_macro`.
+  everything. The binary is `bin/sicxe_macro`.
 
 A macro that calls itself, saved as `recursive.asm`:
 
@@ -737,9 +748,12 @@ Expansions
 ```
 
 `--trace`, excerpt. Steps 8–28, 39–46 and 57–67 are omitted, and every row
-shown is verbatim. Steps 1–7 define SOMA. Steps 29–38 are the DOBRA call and
-the SOMA call nested in it (`true ×2`). Steps 47–56 are ESCALA defining MULTK
-during expansion `#004`.
+shown is verbatim.
+- Step 1 copies the comment, and steps 2–7 define SOMA.
+- Step 29 copies `PROG START`. Steps 30–38 are the DOBRA call and the SOMA
+  call nested in it (`true ×2`).
+- Steps 47–55 are ESCALA defining MULTK during expansion `#004`, and step 56
+  calls the new MULTK.
 
 ```text
 Trace
