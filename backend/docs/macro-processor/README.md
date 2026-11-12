@@ -747,6 +747,9 @@ Expansions
 #005    MULTK   #1=N #2=TRIPLO            15-18
 ```
 
+In MULTK's body, `MUL #3` is the immediate `#3` that expansion `#004` wrote
+for `MUL ##(1,1)` (K = 3). It is not a marker: MULTK has two formals (§3).
+
 `--trace`, excerpt. Steps 8–28, 39–46 and 57–67 are omitted, and every row
 shown is verbatim.
 - Step 1 copies the comment, and steps 2–7 define SOMA.
