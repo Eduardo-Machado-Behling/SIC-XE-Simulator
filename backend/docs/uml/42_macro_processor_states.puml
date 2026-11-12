@@ -1,0 +1,55 @@
+@startuml
+title SIC/XE Macro Processor - Modes of the One-Pass Algorithm
+
+skinparam shadowing false
+
+state "Normal\n\nd = 0, e = false\na source line is copied or is a call" as Normal
+state "Definition\n\nd > 0\nthe line is stored in the current definition" as Definition
+state "Expansion\n\nd = 0, e = true\nlines come from the top frame" as Expansion
+state "Stopped\n\na limit was reached\nstopped = true, no line is read" as Stopped
+
+[*] --> Normal
+
+Normal --> Normal : other line / copy to MASMAPRG.ASM
+Normal --> Definition : MCDEFN / d + 1
+Normal --> Expansion : call / push frame, serial + 1
+Normal --> Stopped : call over a limit
+
+Definition --> Definition : MCDEFN / d + 1
+Definition --> Definition : MCEND with d > 1 / d - 1
+Definition --> Definition : other line, calls included / store
+Definition --> Normal : MCEND with d = 1, stack empty /\nd - 1, close definition
+Definition --> Expansion : MCEND with d = 1, stack not empty /\nd - 1, close definition
+Definition --> Stopped : limit reached while expanding
+
+Expansion --> Expansion : body line / copy to MASMAPRG.ASM
+Expansion --> Expansion : nested call / push frame, serial + 1
+Expansion --> Expansion : body MCEND, stack not empty / pop frame
+Expansion --> Normal : body MCEND, stack empty / pop frame
+Expansion --> Definition : MCDEFN read from the body / d + 1
+Expansion --> Stopped : limit reached
+
+Normal --> [*] : end of text
+Definition --> [*] : end of text /\nMCDEFN without MCEND
+Stopped --> [*]
+
+note right of Definition
+A definition can open while expanding:
+the stack keeps its frames, so e stays true,
+and closing it returns to Expansion.
+end note
+
+note right of Stopped
+stop(): the error goes to the outermost call,
+open expansions end, the stack is cleared.
+Other errors are reported and processing
+goes on in the same mode.
+end note
+
+note bottom of Normal
+Trace view pill (MacroTrace.tsx, modeOf):
+Definition when d > 0 or the step is define-start,
+else Expansion when e, else Normal.
+end note
+
+@enduml

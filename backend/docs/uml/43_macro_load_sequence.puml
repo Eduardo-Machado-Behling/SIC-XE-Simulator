@@ -1,0 +1,65 @@
+@startuml
+title SIC/XE Simulator - Source Load with the Macro Processor
+autonumber
+hide footbox
+skinparam shadowing false
+
+actor "Frontend client" as Client
+participant "Server /ws handler" as Server
+participant "Simulator" as Sim
+participant "SICXE::load_file" as Arch
+participant "sicxe::MacroProcessor" as Macro
+participant "macroReportJson /\nMacrosExpanded event" as Report
+participant "sicxe::Assembler" as Asm
+participant "MemoryAccessor /\nRegisterAccessor (loader)" as Loader
+
+Client -> Server : {id, type: "command",\npayload: "load %file-path"}
+Server -> Sim : event_count() as eventStart
+Server -> Sim : load_file(path)
+Sim -> Arch : load_file(file text)
+Arch -> Arch : clear(): MemoryCleared,\nregister writes, ProgramCleared
+
+alt text starts with ';' (hexadecimal dump)
+  Arch -> Loader : write the dump at address 0, PC = 0
+  note right of Arch
+  The macro processor does not run.
+  end note
+else assembly source
+  Arch -> Macro : process(content)
+  Macro --> Arch : MacroResult macros
+  Arch -> Report : macroReportJson(macros)
+  Report --> Arch : details
+  Arch -> Report : execute(MacrosExpanded(details))\nbefore assembling
+  alt !macros.ok()
+    Arch --> Sim : throw runtime_error(\nformatDiagnostics(macros.diagnostics))
+  else processor ok
+    Arch -> Asm : assembleDetailed(macros.text)
+    Asm --> Arch : AssemblyResult assembled
+    alt !assembled.ok()
+      Arch --> Sim : throw runtime_error(formatDiagnostics(\nremapAssemblyDiagnostics(macros, content, ...)))
+    else assembled
+      Arch -> Loader : write(0, assembled.memory)\nPC = entryPoint
+      Arch -> Arch : ProgramAssembled(symbols)
+    end
+  end
+end
+
+alt load threw
+  Sim --> Server : exception
+  Server -> Sim : event_batch(eventStart)
+  Sim --> Server : events so far, MacrosExpanded included
+  Server --> Client : {id, error: {type, status, title,\ndetail "L:C: error: msg", events}}
+else load succeeded
+  Arch -> Arch : InstructionFetched preview at PC
+  Arch --> Sim : events
+  Sim --> Server : EventBatch {from, to, events}
+  Server --> Client : {id, result: {from, to, events}}
+end
+
+note over Arch,Asm
+The assembler assembles MASMAPRG.ASM (macros.text).
+A source without macros comes out of the processor
+byte for byte, so it assembles as before.
+source_line in InstructionFetched is a MASMAPRG.ASM line.
+end note
+@enduml
