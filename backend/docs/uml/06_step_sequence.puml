@@ -54,9 +54,9 @@ Frontend -> Frontend : show debugger arrow on next instruction
 
 note right of Frontend
 After a Run with macros, source_line is a line of
-MASMAPRG.ASM: it is lit there, and the entry file gets
-lineMap[source_line - 1].source as a secondary
-highlight (macroBands.ts, editorDecorations).
+MASMAPRG.ASM: it is lit there, and the file the Run
+assembled gets lineMap[source_line - 1].source as a
+secondary highlight (macroBands.ts, editorDecorations).
 end note
 
 note right of SourceMap
