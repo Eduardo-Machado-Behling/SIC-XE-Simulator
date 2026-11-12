@@ -15,18 +15,46 @@ function hasDirective(source: string, directive: "START" | "END"): boolean {
     });
 }
 
-export function entryPointFile(files: Record<string, string>, architecture?: string): string {
+// The files Run may assemble, sorted: never the generated file; the files with
+// an assembly extension, else those with START or END, else (except on SIC/XE)
+// every file.
+function runnableSources(files: Record<string, string>, architecture?: string): string[] {
     const paths = Object.keys(files).filter((path) => !isGeneratedFile(path)).sort();
     const namedSources = paths.filter((path) => /\.(asm|sic|sicxe|sxe|s)$/i.test(path));
     const assemblySources = namedSources.length > 0
         ? namedSources
         : paths.filter((path) => hasDirective(files[path], "START") || hasDirective(files[path], "END"));
     const isSicxe = architecture?.toLowerCase().replace(/[^a-z0-9]/g, "") === "sicxe";
-    const sources = assemblySources.length > 0 ? assemblySources : isSicxe ? [] : paths;
+    return assemblySources.length > 0 ? assemblySources : isSicxe ? [] : paths;
+}
+
+export function entryPointFile(files: Record<string, string>, architecture?: string): string {
+    const sources = runnableSources(files, architecture);
     return sources.find((path) => hasDirective(files[path], "START")) ??
         sources.find((path) => hasDirective(files[path], "END")) ??
         sources.find((path) => /(^|\/)main\.(asm|sic|sicxe|sxe|s)$/i.test(path)) ??
-        sources[0] ?? (isSicxe ? "" : paths[0] ?? "");
+        sources[0] ?? "";
+}
+
+// The file Run assembles: the open file when it is a runnable source. With
+// MASMAPRG.ASM or another non-source open, the file the last Run assembled,
+// while it still exists. Otherwise the entry point.
+export function fileToRun(
+    files: Record<string, string>,
+    activeFile: string,
+    lastRunFile: string | null,
+    architecture?: string,
+): string {
+    if (runnableSources(files, architecture).includes(activeFile)) return activeFile;
+    if (lastRunFile && !isGeneratedFile(lastRunFile) && Object.hasOwn(files, lastRunFile)) return lastRunFile;
+    return entryPointFile(files, architecture);
+}
+
+// The file the editor opens with a project, or after the open file is
+// deleted: the root main.<asm|sic|sicxe|sxe|s>, else the entry point.
+export function fileToOpen(files: Record<string, string>, architecture?: string): string {
+    return runnableSources(files, architecture).find((path) => /^main\.(asm|sic|sicxe|sxe|s)$/i.test(path)) ??
+        entryPointFile(files, architecture);
 }
 
 export function applyMacroReport(

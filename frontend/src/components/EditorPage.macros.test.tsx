@@ -236,6 +236,55 @@ describe("EditorPage with the macro processor", () => {
         });
     });
 
+    describe("the file Run assembles", () => {
+        // Both have a START, and macro.asm sorts first.
+        const TWO_FILES = { "macro.asm": "MAC START 0", "main.asm": "PROG START 0" };
+
+        it("is main.asm, the file a project with main.asm and macro.asm opens on", async () => {
+            stored.files = TWO_FILES;
+            const user = await openPage();
+            expect([...editors.keys()]).toEqual(["main.asm"]);
+
+            fake.loadFile.mockResolvedValueOnce([]);
+            await run(user);
+            expect(fake.loadFile).toHaveBeenCalledTimes(1);
+            expect(fake.loadFile).toHaveBeenLastCalledWith("main.asm");
+        });
+
+        it("is the open file, and stays the last one while MASMAPRG.ASM is open", async () => {
+            stored.files = TWO_FILES;
+            const user = await openPage();
+            await user.click(screen.getByTitle("macro.asm"));
+            fake.loadFile.mockResolvedValueOnce([expanded(demo)]);
+            await run(user);
+            expect(fake.loadFile).toHaveBeenLastCalledWith("macro.asm");
+            expect(consoleCalls).toContainEqual(["log", "Assembling macro.asm", "info"]);
+            expect(consoleCalls).toContainEqual(["log", "Loaded macro.asm", "success"]);
+            expect(editorProps("macro.asm").bands).toHaveLength(4);
+
+            // MASMAPRG.ASM open on its own: no split view, so no toggle.
+            await user.click(screen.getByTitle("MASMAPRG.ASM"));
+            expect(screen.queryByRole("button", { name: "Hide MASMAPRG.ASM" })).toBeNull();
+            fake.loadFile.mockResolvedValueOnce([expanded(demo)]);
+            await run(user);
+            expect(fake.loadFile).toHaveBeenCalledTimes(2);
+            expect(fake.loadFile).toHaveBeenLastCalledWith("macro.asm");
+            // Run opens the file it assembled, next to MASMAPRG.ASM.
+            expect(screen.getByRole("button", { name: "Hide MASMAPRG.ASM" })).toBeTruthy();
+
+            // The same with main.asm, which is not the entry point.
+            await user.click(screen.getByTitle("main.asm"));
+            fake.loadFile.mockResolvedValueOnce([expanded(demo)]);
+            await run(user);
+            expect(fake.loadFile).toHaveBeenLastCalledWith("main.asm");
+            await user.click(screen.getByTitle("MASMAPRG.ASM"));
+            fake.loadFile.mockResolvedValueOnce([expanded(demo)]);
+            await run(user);
+            expect(fake.loadFile).toHaveBeenCalledTimes(4);
+            expect(fake.loadFile).toHaveBeenLastCalledWith("main.asm");
+        });
+    });
+
     describe("a stored project without files", () => {
         it("opens with the syntax tour and the macro tour", async () => {
             stored.files = {};
