@@ -137,10 +137,10 @@ export function selectedExpansionDecoration(range: LineRange): editor.IModelDelt
 
 // The side-by-side view of the last Run.
 export interface MacroViewState {
-    // Entry file of that Run: the only file that gets the source bands and
-    // the secondary line.
+    // The source that Run assembled: the only file that gets the source bands
+    // and the secondary line.
     sourceFile: string | null;
-    // Null when that Run had no macros, or once its entry file was edited.
+    // Null when that Run had no macros, or once its source was edited.
     bands: MacroBands | null;
 }
 
@@ -150,7 +150,7 @@ export function macroViewForRun(report: MacroReport | null, sourceFile: string):
     return { sourceFile, bands: report?.hasMacros ? macroBands(report) : null };
 }
 
-// Review Focus 5: editing the entry file makes its line numbers stale, so the
+// Review Focus 5: editing the Run's source makes its line numbers stale, so the
 // bands go (and the secondary line with them) at once, like the executing line.
 export function clearMacroViewOnEdit(state: MacroViewState, editedPath: string): MacroViewState {
     if (editedPath !== state.sourceFile || state.bands === null) return state;
@@ -170,7 +170,7 @@ export interface DecorationContext {
     view: MacroViewState;
     // InstructionFetched.source_line: a line of the file the last Run assembled.
     executingLine: number | null;
-    // Entry file of the last Run.
+    // The source the last Run assembled.
     executionSourceFile: string | null;
     // Serial of the expansion selected in the Expansions table, if any.
     selectedExpansion?: number | null;
@@ -178,7 +178,7 @@ export interface DecorationContext {
 
 // What the editor showing `path` highlights. After a Run with macros the
 // assembled text is MASMAPRG.ASM, so the executing line is lit there and the
-// entry file gets the source line it came from as a secondary highlight.
+// Run's source gets the source line it came from as a secondary highlight.
 export function editorDecorations(path: string, context: DecorationContext): EditorDecorations {
     const { report, view, executingLine } = context;
     if (!report?.hasMacros) {
@@ -189,7 +189,7 @@ export function editorDecorations(path: string, context: DecorationContext): Edi
             selectedLines: null,
         };
     }
-    // The selection goes with the bands once the entry file is edited.
+    // The selection goes with the bands once the Run's source is edited.
     const selected = view.bands && context.selectedExpansion != null
         ? expansionHighlight(report, context.selectedExpansion)
         : null;
