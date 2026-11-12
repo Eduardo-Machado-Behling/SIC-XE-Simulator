@@ -538,6 +538,17 @@ export default function EditorPage({ projectId }: PageProps) {
         if (removed(activeFile)) setActiveFile(fileToOpen(nextFiles, project?.architecture));
     }, [activeFile, files, folders, project?.architecture]);
 
+    // A rename or move takes the last Run's source with it: Run with
+    // MASMAPRG.ASM open, and the bands, follow the file to its new path.
+    const followRunSource = useCallback((destinations: ReadonlyMap<string, string>) => {
+        const follow = (path: string | null) => path === null ? null : destinations.get(path) ?? path;
+        setExecutionSourceFile(follow);
+        setMacroView((view) => {
+            const sourceFile = follow(view.sourceFile);
+            return sourceFile === view.sourceFile ? view : { ...view, sourceFile };
+        });
+    }, []);
+
     const renamePath = useCallback((path: string, name: string) => {
         if (!validSegment(name) || !canRename(path)) return;
         const isFolder = folders.includes(path) || Object.keys(files).some((file) => file.startsWith(`${path}/`));
@@ -566,7 +577,8 @@ export default function EditorPage({ projectId }: PageProps) {
         setFiles(nextFiles);
         setFolders([...new Set([...nextFolders, ...parentFolders(Object.keys(nextFiles))])]);
         if (activeFile === path || activeFile.startsWith(`${path}/`)) setActiveFile(remap(activeFile));
-    }, [activeFile, files, folders]);
+        followRunSource(new Map(sourcePaths.map((source, index) => [source, destinationPaths[index]])));
+    }, [activeFile, files, folders, followRunSource]);
 
     const movePaths = useCallback((paths: string[], targetFolder: string) => {
         const isFolder = (path: string) => folders.includes(path) || Object.keys(files).some((file) => file.startsWith(`${path}/`));
@@ -617,7 +629,8 @@ export default function EditorPage({ projectId }: PageProps) {
         setFolders(nextFolders);
         const newActivePath = destinations.get(activeFile);
         if (newActivePath) setActiveFile(newActivePath);
-    }, [activeFile, files, folders]);
+        followRunSource(destinations);
+    }, [activeFile, files, folders, followRunSource]);
 
     // --------------------------------------------------------
     // Simulator actions

@@ -283,6 +283,29 @@ describe("EditorPage with the macro processor", () => {
             expect(fake.loadFile).toHaveBeenCalledTimes(4);
             expect(fake.loadFile).toHaveBeenLastCalledWith("main.asm");
         });
+
+        it("follows the last Run's source through a rename", async () => {
+            stored.files = TWO_FILES;
+            const user = await openPage();
+            await user.click(screen.getByTitle("macro.asm"));
+            fake.loadFile.mockResolvedValueOnce([expanded(demo)]);
+            await run(user);
+            expect(fake.loadFile).toHaveBeenLastCalledWith("macro.asm");
+
+            vi.spyOn(window, "prompt").mockReturnValueOnce("tour.asm");
+            await user.click(screen.getByRole("button", { name: "Rename selected item" }));
+            expect(screen.queryByTitle("macro.asm")).toBeNull();
+            // The bands go with the file.
+            expect(editorProps("tour.asm").bands).toHaveLength(4);
+
+            // With MASMAPRG.ASM open, Run assembles the renamed file, not
+            // the entry point (main.asm, now that macro.asm is gone).
+            await user.click(screen.getByTitle("MASMAPRG.ASM"));
+            fake.loadFile.mockResolvedValueOnce([expanded(demo)]);
+            await run(user);
+            expect(fake.loadFile).toHaveBeenCalledTimes(2);
+            expect(fake.loadFile).toHaveBeenLastCalledWith("tour.asm");
+        });
     });
 
     describe("a stored project without files", () => {
