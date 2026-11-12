@@ -12,7 +12,7 @@ const TIMEOUT_MS = 10000;
 
 // A JSON-RPC client whose receive() fails when the connection closes or nothing arrives in
 // time, so a server that dies shows up as a failure instead of a hang.
-function connect(url) {
+export function connect(url) {
   const socket = new WebSocket(url);
   const queue = [];
   const waiters = [];

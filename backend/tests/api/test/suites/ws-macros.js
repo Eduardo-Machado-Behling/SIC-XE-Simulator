@@ -34,7 +34,7 @@ const LINE_KINDS = ['verbatim', 'call', 'label', 'expanded'];
 const ACTIONS = ['copy', 'define-start', 'prototype', 'store', 'define-end', 'call', 'read-prototype',
   'expansion-end', 'error'];
 
-function openSimulator(url) {
+export function openSimulator(url) {
   const socket = new WebSocket(url);
   const pending = new Map();
   let nextId = 1;
@@ -94,7 +94,7 @@ async function loadSource(ctx, source) {
 
 const eventsOf = (response) => response.result?.events ?? response.error?.events ?? [];
 
-function macrosExpanded(response) {
+export function macrosExpanded(response) {
   const found = eventsOf(response).filter((event) => event.type === 'MacrosExpanded');
   assert.equal(found.length, 1, `expected one MacrosExpanded event in ${JSON.stringify(response).slice(0, 500)}`);
   return found[0].details;
@@ -109,7 +109,7 @@ function hasKeys(object, expected, where) {
 }
 
 // The MacrosExpanded contract shared with the frontend (spec section 5).
-function checkReport(details) {
+export function checkReport(details) {
   hasKeys(details, ['file', 'ok', 'hasMacros', 'text', 'diagnostics', 'names', 'definitions', 'expansions',
     'lineMap', 'trace'], 'details');
   assert.equal(details.file, 'MASMAPRG.ASM');
