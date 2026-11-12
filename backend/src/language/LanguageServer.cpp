@@ -483,7 +483,12 @@ void AssemblerLanguageSession::analyze(Document& document) {
         // The same pipeline as a Run (spec 5): the macro processor, then the assembler on
         // its output. A source without macros comes out unchanged.
         document.macros = sicxe::MacroProcessor().process(document.text);
-        document.analysis = sicxe::Assembler().assembleDetailed(document.macros.text);
+        // A limit that stopped the processing leaves a partial text, which can hold a line the
+        // assembler cannot take (DOBRA V+V builds a ~262 KB expression that overflows its
+        // evaluator's stack). As in a Run, it is not assembled (spec 4.6): the analysis is
+        // left empty, so no symbol is known and only the processor's diagnostics are shown.
+        document.analysis = document.macros.stopped ? sicxe::AssemblyResult{}
+                                                    : sicxe::Assembler().assembleDetailed(document.macros.text);
         document.analyzed = true;
     }
 }
