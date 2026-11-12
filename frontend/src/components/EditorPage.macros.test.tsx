@@ -7,6 +7,8 @@ import type { CodeEditorProps } from "@/components/CodeEditor";
 import type { ConsoleHandle, ConsoleProps } from "@/components/Console";
 import demoPayload from "@/lib/simulator/__fixtures__/macros-demo.json";
 import type { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
+import { DEFAULT_MACRO_SOURCE } from "@/lib/simulator/defaultMacroSource";
+import { DEFAULT_MAIN_SOURCE } from "@/lib/simulator/defaultMainSource";
 import type { ExecutionEvent, MacroReport } from "@/lib/simulator/ExecutionEvent";
 import { SimulatorCommandError } from "@/lib/transport/SimulatorTransport";
 
@@ -308,13 +310,32 @@ describe("EditorPage with the macro processor", () => {
         });
     });
 
-    describe("a stored project without files", () => {
-        it("opens with the syntax tour and the macro tour", async () => {
-            stored.files = {};
-            await openPage();
+    describe("deleting the open file", () => {
+        it("opens the root main.asm, not the entry point", async () => {
+            // All three have a START and lib.asm sorts first, so the entry
+            // point is lib.asm.
+            stored.files = { "lib.asm": "LIB START 0", "macro.asm": "MAC START 0", "main.asm": "PROG START 0" };
+            const user = await openPage();
+            await user.click(screen.getByTitle("macro.asm"));
+            expect(editorProps("macro.asm")).toBeTruthy();
 
-            expect(screen.getByTitle("main.asm")).toBeTruthy();
-            expect(screen.getByTitle("macro.asm")).toBeTruthy();
+            vi.spyOn(window, "confirm").mockReturnValueOnce(true);
+            editors.clear();
+            await user.click(screen.getByRole("button", { name: "Delete selected item" }));
+            expect(screen.queryByTitle("macro.asm")).toBeNull();
+            expect([...editors.keys()]).toEqual(["main.asm"]);
+        });
+    });
+
+    describe("a stored project without files", () => {
+        it("opens with the syntax tour and the macro tour, on main.asm", async () => {
+            stored.files = {};
+            const user = await openPage();
+
+            expect([...editors.keys()]).toEqual(["main.asm"]);
+            expect(editorProps("main.asm").value).toBe(DEFAULT_MAIN_SOURCE);
+            await user.click(screen.getByTitle("macro.asm"));
+            expect(editorProps("macro.asm").value).toBe(DEFAULT_MACRO_SOURCE);
         });
     });
 
