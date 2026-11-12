@@ -583,6 +583,7 @@ class OnePass {
     for (const Frame& frame : frames_) result_.expansions[frame.expansion].outputTo = outputCount();
     frames_.clear();
     stopped_ = true;
+    result_.stopped = true;
   }
 
   int outputCount() const { return static_cast<int>(result_.lineMap.size()); }

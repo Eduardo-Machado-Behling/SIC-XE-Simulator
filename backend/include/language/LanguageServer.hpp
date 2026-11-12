@@ -24,7 +24,8 @@ private:
         bool saved = false;
         bool analyzed = false;
         // The text is expanded first; `analysis` is of `macros.text` (MASMAPRG.ASM), so
-        // its positions are mapped back to `text` before they are shown.
+        // its positions are mapped back to `text` before they are shown. It is empty when a
+        // limit stopped the processing (`macros.stopped`): a partial text is not assembled.
         sicxe::MacroResult macros;
         sicxe::AssemblyResult analysis;
     };
