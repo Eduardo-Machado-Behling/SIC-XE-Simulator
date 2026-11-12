@@ -123,6 +123,12 @@ Architecture libraries are generated in:
 bin/archs/
 ```
 
+The macro processor's command-line tool is generated in `bin/sicxe_macro`
+(`cmake --build build --target sicxe_macro` builds it alone).
+`bin/sicxe_macro <input> [-o <dir>] [--tables] [--trace]` expands the macros of
+`<input>` and writes `<dir>/MASMAPRG.ASM`; see the
+[macro processor documentation](backend/docs/macro-processor/README.md).
+
 ## Build with AddressSanitizer
 
 AddressSanitizer can be enabled with:

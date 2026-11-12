@@ -8,20 +8,23 @@ participant "MemoryAccessor" as MA
 participant "Event manager / UI" as UI
 Sim -> Arch : load_file(source)
 Arch -> Arch : clear program state
-Arch -> Asm : assemble(source)
-alt assembly diagnostics contain errors
-  Asm --> Arch : throw AssemblyError
-  Arch -> Asm : clear last metadata
-  Arch --> Sim : propagate failure
-else valid assembly
-  Asm --> Arch : CodeMemory
-  Arch -> Asm : lastInfo()
-  Asm --> Arch : entryPoint, source map, symbols
-  Arch -> MA : write(base 0, sparse CodeMemory)
-  MA -> MA : validate and stage all segments
-  MA -> UI : commit memory-write events
-  Arch -> Arch : set PC to entryPoint
-  Arch -> UI : ProgramAssembled(symbols)
-  Arch --> Sim : return execution events
+Arch -> Arch : MacroProcessor().process(source)
+Arch -> UI : MacrosExpanded(macro report)
+alt macro processor reports errors
+  Arch --> Sim : throw runtime_error(processor diagnostics)
+else expansion ok
+  Arch -> Asm : assembleDetailed(MASMAPRG.ASM text)
+  alt assembly diagnostics contain errors
+    Asm --> Arch : AssemblyResult with errors
+    Arch --> Sim : throw runtime_error(diagnostics remapped to the source)
+  else valid assembly
+    Asm --> Arch : AssemblyResult: CodeMemory,\nentryPoint, source map, symbols
+    Arch -> MA : write(base 0, sparse CodeMemory)
+    MA -> MA : validate and stage all segments
+    MA -> UI : commit memory-write events
+    Arch -> Arch : set PC to entryPoint
+    Arch -> UI : ProgramAssembled(symbols)
+    Arch --> Sim : return execution events
+  end
 end
 @enduml

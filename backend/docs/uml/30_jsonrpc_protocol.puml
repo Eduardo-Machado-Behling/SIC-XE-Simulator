@@ -10,6 +10,7 @@ participant "AssemblerLanguageClient" as Client
 participant "WebSocket /language" as WS
 participant "WebSocket handler" as Handler
 participant "AssemblerLanguageSession" as Session
+participant "sicxe::MacroProcessor" as Macro
 participant "sicxe::Assembler" as Assembler
 
 note over Client,WS
@@ -50,7 +51,9 @@ Editor -> Client : open or change document
 Client -> WS : didOpen / didChange notification\n(no id, URI, version, full text)
 WS -> Handler : text frame
 Handler -> Session : replace document snapshot
-Session -> Assembler : assembleDetailed(text)
+Session -> Macro : process(text)
+Macro --> Session : MacroResult
+Session -> Assembler : assembleDetailed(macros.text)
 Assembler --> Session : AssemblyResult
 Session --> Handler : publishDiagnostics notification\n(no id, URI, version, diagnostics)
 Handler -> WS : send notification
@@ -68,7 +71,9 @@ Client -> WS : JSON-RPC request (id = 42)
 WS -> Handler : text frame
 Handler -> Session : handle(request)
 opt cached analysis is stale
-  Session -> Assembler : assembleDetailed(current text)
+  Session -> Macro : process(current text)
+  Macro --> Session : MacroResult
+  Session -> Assembler : assembleDetailed(macros.text)
   Assembler --> Session : AssemblyResult
 end
 Session -> Session : compute feature result
@@ -101,7 +106,8 @@ end
 
 note over Session,Assembler
 The session owns documents and cached analysis.
-The assembler supplies source analysis only;
+The macro processor and the assembler supply
+source analysis only;
 this channel does not execute programs or mutate
 Simulator memory, registers, or project state.
 end note
