@@ -51,7 +51,8 @@ format-3-or-4-instruction = "ADD" | "ADDF" | "AND" | "COMP" | "COMPF"
                        | "WD" ;
 
 directive          = "START" | "END" | "BYTE" | "WORD" | "RESB" | "RESW"
-                   | "BASE" | "NOBASE" | "EQU" | "ORG" ;
+                   | "BASE" | "NOBASE" | "EQU" | "ORG"
+                   | "CSECT" | "EXTDEF" | "EXTREF" | "ENTRY" ;
 
 (* Operand arity and form depend on the selected instruction/directive:
    no-operand: FIX, RSUB, ...
@@ -78,7 +79,9 @@ register-form-alias = ( "ADD" | "SUB" | "MUL" | "DIV" | "COMP" ),
                        register, ",", register
                      | "TIX", register ;
 
-directive-operands = "START", expression
+directive-operands = ( "START" | "ENTRY" ), expression
+                   | "CSECT"
+                   | ( "EXTDEF" | "EXTREF" ), identifier, { ",", identifier }
                    | "END", [ expression ]
                    | "BYTE", data-item, { ",", data-item }
                    | "WORD", expression, { ",", expression }

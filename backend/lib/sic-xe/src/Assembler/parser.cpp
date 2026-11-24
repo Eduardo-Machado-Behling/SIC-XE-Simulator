@@ -176,12 +176,22 @@ void parseInstructionOperands(Ctx& c) {
 void parseDirectiveOperands(Ctx& c) {
   Statement& st = c.st;
   switch (*st.directive) {
-    case DirectiveKind::Nobase: arity(c, 0, 0); break;
+    case DirectiveKind::Nobase:
+    case DirectiveKind::Csect: arity(c, 0, 0); break;
+    case DirectiveKind::Extdef:
+    case DirectiveKind::Extref:
+      if (!arity(c, 1, c.f.size())) break;
+      for (const Field& f : c.f) {
+        if (!isIdentifier(f.text)) { fail(c, f.col, "Invalid symbol name '" + f.text + "'"); continue; }
+        st.names.push_back({f.text, f.col});
+      }
+      break;
     case DirectiveKind::End:
     case DirectiveKind::Org:
       if (arity(c, 0, 1) && !c.f.empty()) st.expr = parseExprField(c, c.f[0]);
       break;
     case DirectiveKind::Start:
+    case DirectiveKind::Entry:
     case DirectiveKind::Resb:
     case DirectiveKind::Resw:
     case DirectiveKind::Base:
@@ -238,9 +248,23 @@ std::optional<Statement> parseLine(std::string_view line, int lineNo, Diagnostic
 
   std::string_view mnem = f1;
   std::size_t mnemStart = f1Start;
-  if (!isOpcodeName(f1)) {                       // first field is a label
+  // Since stage 4 ENTRY, CSECT, EXTDEF and EXTREF are directives: a program that used one
+  // as a label (ENTRY LDA #5) gets a pointed message instead of an operand error.
+  bool directiveAsLabel = false;
+  if (const std::string up = toUpper(f1); up == "ENTRY" || up == "CSECT" || up == "EXTDEF" || up == "EXTREF") {
+    const std::size_t afterF1 = pos;
+    std::size_t secondStart = 0;
+    const std::string_view second = nextField(secondStart);
+    pos = afterF1;
+    if (!second.empty() && findInstruction(toUpper(operationMnemonic(second)))) {
+      diags.error(lineNo, static_cast<int>(f1Start) + 1, up + " is a directive since stage 4; rename this label");
+      directiveAsLabel = true;
+    }
+  }
+  if (directiveAsLabel || !isOpcodeName(f1)) {   // first field is a label
     st.label = std::string(f1);
     st.labelCol = static_cast<int>(f1Start) + 1;
+    if (directiveAsLabel) st.valid = false;
     if (!isIdentifier(f1)) {
       diags.error(lineNo, st.labelCol, "Invalid label '" + st.label + "'");
       st.label.clear(); st.valid = false;

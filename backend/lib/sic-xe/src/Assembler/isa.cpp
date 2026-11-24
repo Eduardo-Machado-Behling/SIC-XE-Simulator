@@ -60,7 +60,9 @@ std::optional<DirectiveKind> findDirective(std::string_view n) {
       {"BYTE", DirectiveKind::Byte},   {"WORD", DirectiveKind::Word},
       {"RESB", DirectiveKind::Resb},   {"RESW", DirectiveKind::Resw},
       {"BASE", DirectiveKind::Base},   {"NOBASE", DirectiveKind::Nobase},
-      {"EQU", DirectiveKind::Equ},     {"ORG", DirectiveKind::Org}};
+      {"EQU", DirectiveKind::Equ},     {"ORG", DirectiveKind::Org},
+      {"CSECT", DirectiveKind::Csect}, {"EXTDEF", DirectiveKind::Extdef},
+      {"EXTREF", DirectiveKind::Extref}, {"ENTRY", DirectiveKind::Entry}};
   auto it = table.find(n);
   if (it == table.end()) return std::nullopt;
   return it->second;
