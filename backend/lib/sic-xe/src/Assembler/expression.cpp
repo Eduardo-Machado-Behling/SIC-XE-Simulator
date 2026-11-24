@@ -155,7 +155,11 @@ std::optional<Value> evalNode(const ExprNode& n, const EvalContext& c, int line,
     case Kind::Unary: {
       auto v = evalNode(*n.lhs, c, line, d);
       if (!v) return std::nullopt;
-      if (n.op == '-') { v->value = -v->value; v->relocDegree = -v->relocDegree; }
+      if (n.op == '-') {
+        v->value = -v->value;
+        v->relocDegree = -v->relocDegree;
+        for (auto& term : v->externals) term.first = term.first == '+' ? '-' : '+';
+      }
       return v;
     }
     case Kind::Binary: {
@@ -168,6 +172,10 @@ std::optional<Value> evalNode(const ExprNode& n, const EvalContext& c, int line,
         case '-': out = {l->value - r->value, l->relocDegree - r->relocDegree}; break;
         case '*':
         case '/':
+          if (!l->externals.empty() || !r->externals.empty()) {
+            d.error(line, n.column, "an external symbol can only be added or subtracted");
+            return std::nullopt;
+          }
           if (l->relocDegree != 0 || r->relocDegree != 0) {
             d.error(line, n.column, "Relocatable values cannot be multiplied or divided");
             return std::nullopt;
@@ -177,6 +185,9 @@ std::optional<Value> evalNode(const ExprNode& n, const EvalContext& c, int line,
           break;
         default: return std::nullopt;
       }
+      out.externals = l->externals;
+      for (const auto& term : r->externals)
+        out.externals.push_back({n.op == '-' ? (term.first == '+' ? '-' : '+') : term.first, term.second});
       if (out.value > kLimit || out.value < -kLimit) {
         d.error(line, n.column, "Expression overflow");
         return std::nullopt;
