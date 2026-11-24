@@ -572,7 +572,11 @@ json AssemblerLanguageSession::completion(Document& document, const json& params
 
     const auto operation = operation_at_line(before);
     std::vector<json> candidates;
-    const std::string typed = token ? upper(token->text) : std::string{};
+    // Filter by what is typed before the cursor, as editors do, not by the whole word.
+    const std::string typed = token
+        ? upper(token->text.substr(0, static_cast<std::size_t>(
+              std::clamp(cursorCharacter - token->start, 0, static_cast<int>(token->text.size())))))
+        : std::string{};
     auto add = [&](std::string label, int kind, std::string detail, std::string insert = {}) {
         const std::string folded = upper(label);
         if (!typed.empty()) {

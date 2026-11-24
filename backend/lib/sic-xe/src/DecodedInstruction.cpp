@@ -121,12 +121,15 @@ DecodedInstruction::DecodedInstruction(RegisterAccessor& regs,
         m_flags.n = (raw[0] & 0x02) != 0;
         m_flags.i = (raw[0] & 0x01) != 0;
         m_flags.x = (raw[1] & 0x80) != 0;
-        m_flags.b = (raw[1] & 0x40) != 0;
-        m_flags.p = (raw[1] & 0x20) != 0;
-        m_flags.e = (raw[1] & 0x10) != 0;
+        // n = i = 0 is a plain SIC instruction: no b/p/e bits, a 15-bit address.
+        const bool sic = !m_flags.n && !m_flags.i;
+        m_flags.b = !sic && (raw[1] & 0x40) != 0;
+        m_flags.p = !sic && (raw[1] & 0x20) != 0;
+        m_flags.e = !sic && (raw[1] & 0x10) != 0;
 
         m_format = m_flags.e ? InstructionFormat::Format4 : InstructionFormat::Format3;
-        displacement = get_displacement(m_format, raw);
+        displacement = sic ? (static_cast<std::uint32_t>(raw[1] & 0x7F) << 8) | raw[2]
+                           : get_displacement(m_format, raw);
         target_address =
             get_target_address(regs, m_format, displacement, m_flags.b, m_flags.p, m_flags.x);
         m_operand = resolve_operand(memory,
