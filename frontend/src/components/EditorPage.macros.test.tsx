@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -112,12 +112,30 @@ async function openPage() {
     return user;
 }
 
+// The file the status bar names as open in the editor.
+function shownFile(): string | null | undefined {
+    return document.querySelectorAll("footer span")[2]?.textContent;
+}
+
+// Click a file in the explorer and wait until the editor shows it. The click is
+// synchronous: user-event's pointer sequence is async, and under load the
+// virtualized tree can re-render the row it found before the click lands.
+async function openFile(name: string) {
+    act(() => {
+        fireEvent.click(screen.getByTitle(name));
+    });
+    await waitFor(() => expect(shownFile()).toBe(name));
+}
+
 // Run always assembles the open file; wait until this Run's load has settled.
 async function run(user: ReturnType<typeof userEvent.setup>) {
     const calls = fake.loadFile.mock.calls.length;
     await user.click(screen.getByRole("button", { name: "Run" }));
     await waitFor(() => expect(fake.loadFile.mock.calls.length).toBe(calls + 1));
-    await act(async () => {});
+    // Let this Run's load settle (resolved or rejected) and React apply what follows it.
+    await act(async () => {
+        await Promise.resolve(fake.loadFile.mock.results.at(-1)?.value).catch(() => {});
+    });
 }
 
 function expansionTable(): HTMLElement {
@@ -257,7 +275,7 @@ describe("EditorPage with the macro processor", () => {
         it("is the open file, and stays the last one while MASMAPRG.ASM is open", async () => {
             stored.files = TWO_FILES;
             const user = await openPage();
-            await user.click(screen.getByTitle("macro.asm"));
+            await openFile("macro.asm");
             fake.loadFile.mockResolvedValueOnce([expanded(demo)]);
             await run(user);
             expect(fake.loadFile).toHaveBeenLastCalledWith("macro.asm");
@@ -266,21 +284,21 @@ describe("EditorPage with the macro processor", () => {
             expect(editorProps("macro.asm").bands).toHaveLength(4);
 
             // MASMAPRG.ASM open on its own: no split view, so no toggle.
-            await user.click(screen.getByTitle("MASMAPRG.ASM"));
+            await openFile("MASMAPRG.ASM");
             expect(screen.queryByRole("button", { name: "Hide MASMAPRG.ASM" })).toBeNull();
             fake.loadFile.mockResolvedValueOnce([expanded(demo)]);
             await run(user);
             expect(fake.loadFile).toHaveBeenCalledTimes(2);
             expect(fake.loadFile).toHaveBeenLastCalledWith("macro.asm");
             // Run opens the file it assembled, next to MASMAPRG.ASM.
-            expect(screen.getByRole("button", { name: "Hide MASMAPRG.ASM" })).toBeTruthy();
+            expect(await screen.findByRole("button", { name: "Hide MASMAPRG.ASM" })).toBeTruthy();
 
             // The same with main.asm, which is not the entry point.
-            await user.click(screen.getByTitle("main.asm"));
+            await openFile("main.asm");
             fake.loadFile.mockResolvedValueOnce([expanded(demo)]);
             await run(user);
             expect(fake.loadFile).toHaveBeenLastCalledWith("main.asm");
-            await user.click(screen.getByTitle("MASMAPRG.ASM"));
+            await openFile("MASMAPRG.ASM");
             fake.loadFile.mockResolvedValueOnce([expanded(demo)]);
             await run(user);
             expect(fake.loadFile).toHaveBeenCalledTimes(4);
@@ -290,25 +308,25 @@ describe("EditorPage with the macro processor", () => {
         it("shows MASMAPRG.ASM next to the Run's source only, not next to another open file", async () => {
             stored.files = TWO_FILES;
             const user = await openPage();
-            await user.click(screen.getByTitle("macro.asm"));
+            await openFile("macro.asm");
             fake.loadFile.mockResolvedValueOnce([expanded(demo)]);
             await run(user);
-            expect(screen.getByRole("button", { name: "Hide MASMAPRG.ASM" })).toBeTruthy();
+            expect(await screen.findByRole("button", { name: "Hide MASMAPRG.ASM" })).toBeTruthy();
 
             // main.asm did not produce this MASMAPRG.ASM: no split view, no toggle.
-            await user.click(screen.getByTitle("main.asm"));
+            await openFile("main.asm");
             expect(screen.queryByRole("button", { name: "Hide MASMAPRG.ASM" })).toBeNull();
             expect(screen.queryByRole("button", { name: "Show MASMAPRG.ASM" })).toBeNull();
 
             // Back on the Run's source, the split view returns as it was left.
-            await user.click(screen.getByTitle("macro.asm"));
-            expect(screen.getByRole("button", { name: "Hide MASMAPRG.ASM" })).toBeTruthy();
+            await openFile("macro.asm");
+            expect(await screen.findByRole("button", { name: "Hide MASMAPRG.ASM" })).toBeTruthy();
         });
 
         it("follows the last Run's source through a rename", async () => {
             stored.files = TWO_FILES;
             const user = await openPage();
-            await user.click(screen.getByTitle("macro.asm"));
+            await openFile("macro.asm");
             fake.loadFile.mockResolvedValueOnce([expanded(demo)]);
             await run(user);
             expect(fake.loadFile).toHaveBeenLastCalledWith("macro.asm");
@@ -321,7 +339,7 @@ describe("EditorPage with the macro processor", () => {
 
             // With MASMAPRG.ASM open, Run assembles the renamed file, not
             // the entry point (main.asm, now that macro.asm is gone).
-            await user.click(screen.getByTitle("MASMAPRG.ASM"));
+            await openFile("MASMAPRG.ASM");
             fake.loadFile.mockResolvedValueOnce([expanded(demo)]);
             await run(user);
             expect(fake.loadFile).toHaveBeenCalledTimes(2);
@@ -335,7 +353,7 @@ describe("EditorPage with the macro processor", () => {
             // point is lib.asm.
             stored.files = { "lib.asm": "LIB START 0", "macro.asm": "MAC START 0", "main.asm": "PROG START 0" };
             const user = await openPage();
-            await user.click(screen.getByTitle("macro.asm"));
+            await openFile("macro.asm");
             expect(editorProps("macro.asm")).toBeTruthy();
 
             vi.spyOn(window, "confirm").mockReturnValueOnce(true);
@@ -349,11 +367,11 @@ describe("EditorPage with the macro processor", () => {
     describe("a stored project without files", () => {
         it("opens with the syntax tour and the macro tour, on main.asm", async () => {
             stored.files = {};
-            const user = await openPage();
+            await openPage();
 
             expect([...editors.keys()]).toEqual(["main.asm"]);
             expect(editorProps("main.asm").value).toBe(DEFAULT_MAIN_SOURCE);
-            await user.click(screen.getByTitle("macro.asm"));
+            await openFile("macro.asm");
             expect(editorProps("macro.asm").value).toBe(DEFAULT_MACRO_SOURCE);
         });
     });
