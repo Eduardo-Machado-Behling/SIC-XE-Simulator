@@ -15,6 +15,7 @@ set(ASSEMBLER_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/macro_processor.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/macro_remap.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/macro_text.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/object_text.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/parser.cpp"
 )
 
@@ -75,6 +76,8 @@ if(BUILD_TESTING)
     list(FILTER TEST_SOURCES EXCLUDE REGEX "/test_macro_processor\\.cpp$")
     # So does SICXE::load_file (sicxe_load_tests).
     list(FILTER TEST_SOURCES EXCLUDE REGEX "/test_load\\.cpp$")
+    # And the linker pipeline (sicxe_linker_tests).
+    list(FILTER TEST_SOURCES EXCLUDE REGEX "/test_linker\\.cpp$")
 
     message(STATUS
         "${LIB_NAME}: found ${TEST_SOURCES}"
@@ -116,6 +119,26 @@ if(BUILD_TESTING)
                 COMMAND sicxe_macro_tests "${CASE_NAME}"
             )
         endfunction()
+
+        # Linker pipeline tests: own executable, linked against the static assembler only.
+        add_executable(sicxe_linker_tests
+            "${CMAKE_CURRENT_SOURCE_DIR}/test/test_linker.cpp"
+        )
+        target_link_libraries(sicxe_linker_tests PRIVATE sicxe_assembler)
+        target_compile_definitions(sicxe_linker_tests PRIVATE
+            SICXE_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/test/data"
+        )
+
+        function(add_sicxe_linker_test CASE_NAME DESCRIPTION)
+            add_test(
+                NAME "sicxe.linker.${DESCRIPTION}"
+                COMMAND sicxe_linker_tests "${CASE_NAME}"
+            )
+        endfunction()
+
+        add_sicxe_linker_test(render_records_and_annotations "object-text.records-and-annotations")
+        add_sicxe_linker_test(render_bands_follow_origins "object-text.bands-follow-origins")
+        add_sicxe_linker_test(render_section_without_transfer "object-text.no-transfer")
 
         add_sicxe_macro_test(identity_for_source_without_macros "identity.source-without-macros")
         add_sicxe_macro_test(identity_preserves_crlf "identity.preserves-crlf")
