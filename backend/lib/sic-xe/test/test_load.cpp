@@ -1,6 +1,7 @@
 // Dependency-free test runner for SICXE::load_file (same pattern as test_assembler.cpp).
 // The project API only accepts JSON, so a source that is not UTF-8 can reach load_file
 // only from here.
+#include <cstdint>
 #include <cstdio>
 #include <exception>
 #include <string>
@@ -10,6 +11,7 @@
 
 #include "MacroReportJson.hpp"
 #include "SICXE.hpp"
+#include "essentials/Word.hpp"
 #include "architecture/events/EventManager.hpp"
 #include "memory/Memory.hpp"
 #include "memory/Registers.hpp"
@@ -105,6 +107,46 @@ TEST(macro_report_replaces_invalid_utf8) {
   CHECK(dumps(report));
   const std::string R = REPLACEMENT;
   CHECK(report["text"] == "a" + R + " b\xC3\xA9 c\xF0\x9F\x98\x80 d" + R + R + R + " e" + R);
+}
+
+// One LDA per addressing mode: the word stored at the expected target address must reach A.
+TEST(lda_addressing_modes) {
+  struct Case {
+    const char* name;
+    std::uint32_t at;          // address of the instruction
+    std::vector<byte_t> code;  // the LDA bytes
+    std::uint32_t x, b;        // index and base registers
+    std::uint32_t target;      // where the operand lives (0 for immediate)
+  };
+  const std::vector<Case> cases = {
+      {"pc-relative, negative", 0x100, {0x03, 0x2F, 0xF0}, 0, 0, 0x0F3},  // 0x103 - 16
+      {"base-relative", 0x000, {0x03, 0x40, 0x10}, 0, 0x2000, 0x2010},
+      {"direct, indexed", 0x000, {0x03, 0x80, 0x20}, 5, 0, 0x025},
+      {"format 4", 0x000, {0x03, 0x10, 0x12, 0x34}, 0, 0, 0x1234},
+      {"indirect", 0x000, {0x02, 0x00, 0x40}, 0, 0, 0x300},              // word at 0x40 -> 0x300
+      {"sic", 0x000, {0x00, 0x10, 0x30}, 0, 0, 0x1030},                  // 0x10 is address, not e
+      {"sic, indexed", 0x000, {0x00, 0x90, 0x30}, 3, 0, 0x1033},
+  };
+  const std::vector<byte_t> value = {0x12, 0x34, 0x56};
+
+  for (const auto& c : cases) {
+    Machine m;
+    m.memory.write(c.at, c.code);
+    m.memory.write(c.target, value);
+    if (c.target == 0x300) m.memory.write(0x40, {0x00, 0x03, 0x00});
+    m.registerAccessor.write("PC", Word(c.at).to_bytes());
+    m.registerAccessor.write("X", Word(c.x).to_bytes());
+    m.registerAccessor.write("B", Word(c.b).to_bytes());
+    m.arch.step();
+    const std::uint32_t a = Word::from_bytes(m.registerAccessor.read("A")).as_unsigned();
+    if (a != 0x123456) std::printf("  (%s: A = 0x%06X)\n", c.name, a);
+    CHECK(a == 0x123456);
+  }
+
+  Machine m;  // immediate: the operand is the displacement itself
+  m.memory.write(0, {0x01, 0x00, 0x2A});
+  m.arch.step();
+  CHECK(Word::from_bytes(m.registerAccessor.read("A")).as_unsigned() == 42);
 }
 
 int main(int argc, char** argv) {

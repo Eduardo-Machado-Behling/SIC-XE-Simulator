@@ -29,7 +29,10 @@ const Project& Simulator::load_project(Project project) {
 }
 
 EventBatch Simulator::load_file(const std::string& filepath) {
-    const std::size_t from = m_eventManager.size();
+    // A Run starts a new program, so undo never reaches back past it; without this
+    // the log (with a 1 MiB memory snapshot per Run) only grows.
+    m_eventManager.clear();
+    const std::size_t from = 0;
 
     if (!m_hasCurrentProject)
         throw std::runtime_error("No project is loaded");

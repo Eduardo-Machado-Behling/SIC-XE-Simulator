@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstddef>
-#include <mutex>
 #include <string>
 #include <vector>
 
@@ -43,8 +42,6 @@ private:
     std::vector<std::string> m_architectures; // `Architecture` enum values available
 
     std::string m_host;
-    // Serializes commands against the single shared simulator instance.
-    std::mutex mutex;
 
     int m_port;
     int m_socket_flags = 0;
