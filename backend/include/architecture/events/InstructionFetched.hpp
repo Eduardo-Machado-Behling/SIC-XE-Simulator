@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "common/Byte.hpp"
@@ -15,7 +16,8 @@ public:
     InstructionFetched(std::uint64_t address,
                        std::vector<byte_t> value,
                        std::optional<std::size_t> sourceLine = std::nullopt,
-                       bool preview = false);
+                       bool preview = false,
+                       std::optional<std::string> sourceFile = std::nullopt);
 
     bool mutates() const noexcept override;
     void commit(EventState& state) override;
@@ -27,6 +29,7 @@ private:
     std::vector<byte_t> value;
     std::optional<std::size_t> sourceLine;
     bool preview;
+    std::optional<std::string> sourceFile;
 };
 
 } // namespace architecture::events

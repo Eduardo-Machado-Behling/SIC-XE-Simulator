@@ -173,7 +173,10 @@ class Engine {
     out.refers = section.refers;
     out.mods = section.mods;
     out.fixedFieldLines = section.fixedLines;
-    for (const auto& [_, symbol] : section.symbols) out.symbols[symbol.name] = symbol.value.value;
+    for (const auto& [_, symbol] : section.symbols) {
+      out.symbols[symbol.name] = symbol.value.value;
+      if (!symbol.value.relocatable()) out.absoluteSymbols.insert(symbol.name);
+    }
     for (const Statement& st : stmts_) {
       if (st.section != static_cast<int>(index) || !st.valid || st.bytes.empty()) continue;
       if (!st.inst && st.directive != DirectiveKind::Byte && st.directive != DirectiveKind::Word) continue;

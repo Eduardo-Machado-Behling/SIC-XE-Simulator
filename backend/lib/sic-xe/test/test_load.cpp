@@ -196,6 +196,128 @@ TEST(instruction_table_matches_cpu) {
   CHECK(bound == 59);  // every row but SVC
 }
 
+// ---------------------------------------------------------------------------
+// Several files: load_files links them and loads the result at an address.
+static std::string memoryHex(Machine& m, std::size_t address, std::size_t count) {
+  std::vector<byte_t> bytes;
+  m.memoryAccessor.read(address, count, bytes);
+  std::string out;
+  char buf[4];
+  for (byte_t b : bytes) { std::snprintf(buf, sizeof buf, "%02X", b); out += buf; }
+  return out;
+}
+
+static const char* MAIN_SOURCE =
+    "PROG    ENTRY 0\n"
+    "        EXTREF SUBB\n"
+    "LIM     EQU 7\n"
+    "        RSUB\n"
+    "INICIO +JSUB SUBB\n"
+    "        HALT\n"
+    "        END INICIO\n";
+static const char* SUB_SOURCE = "SUBB    START 0\n        RSUB\n        END\n";
+
+static std::vector<SourceFile> twoFiles() { return {{"main.asm", MAIN_SOURCE}, {"sub.asm", SUB_SOURCE}}; }
+
+static const nlohmann::json* firstEvent(const nlohmann::json& events, const char* type) {
+  for (const auto& event : events) if (event["type"] == type) return &event;
+  return nullptr;
+}
+
+TEST(single_file_load_is_unchanged) {
+  const std::string source = "PROG START 0x100\n LDA #5\n STA RESULT\n HALT\nRESULT RESW 1\n END PROG\n";
+  const std::string wantBytes = "010005" "0F2001" "FC";  // by Beck's encoding rules; RESULT is at 0x107
+  for (int api = 0; api < 2; ++api) {
+    Machine m;
+    std::string content = source;
+    if (api == 0) m.arch.load_file(content);
+    else m.arch.load_files({{"main.asm", source}}, 0);
+    CHECK(memoryHex(m, 0x100, 7) == wantBytes);
+    CHECK(Word::from_bytes(m.registerAccessor.read("PC")).as_unsigned() == 0x100);
+    const nlohmann::json events = m.events.events_since(0);
+    const nlohmann::json* macros = firstEvent(events, "MacrosExpanded");
+    CHECK(macros != nullptr && (*macros)["details"]["text"] == source);
+    CHECK(firstEvent(events, "ProgramLinked") != nullptr);
+    CHECK(firstEvent(events, "ProgramAssembled") != nullptr);
+  }
+}
+
+TEST(two_files_load_at_address) {
+  Machine m;
+  m.arch.load_files(twoFiles(), 0x1000);
+  // RSUB at 0, INICIO +JSUB at 3 (field at 4), HALT at 7; SUBB sits after it at 8.
+  CHECK(Word::from_bytes(m.registerAccessor.read("PC")).as_unsigned() == 0x1003);
+  CHECK(memoryHex(m, 0x1003, 4) == "4B101008");  // the address of SUBB: 0x1000 + 8
+  CHECK(memoryHex(m, 0x1008, 3) == "4F0000");
+  const nlohmann::json events = m.events.events_since(0);
+  int macros = 0;
+  for (const auto& event : events) if (event["type"] == "MacrosExpanded") ++macros;
+  CHECK(macros == 2);
+  const nlohmann::json* linked = firstEvent(events, "ProgramLinked");
+  CHECK(linked != nullptr);
+  if (!linked) return;
+  CHECK((*linked)["details"]["objects"].size() == 2 && (*linked)["details"]["objects"][1]["source"] == "sub.asm");
+  CHECK((*linked)["details"]["loadAddress"] == 0x1000);
+  CHECK((*linked)["details"]["out"]["name"] == "PROG");
+  CHECK((*linked)["details"]["estab"].size() == 2);  // the two sections; nothing is EXTDEF'd
+}
+
+TEST(symbols_are_relocated_and_constants_are_not) {
+  Machine m;
+  m.arch.load_files(twoFiles(), 0x1000);
+  const nlohmann::json events = m.events.events_since(0);
+  const nlohmann::json* assembled = firstEvent(events, "ProgramAssembled");
+  CHECK(assembled != nullptr);
+  if (!assembled) return;
+  int found = 0;
+  for (const auto& symbol : (*assembled)["details"]["symbols"]) {
+    if (symbol["name"] == "INICIO") { CHECK(symbol["value"] == 0x1003 && symbol["section"] == "PROG" && symbol["file"] == "main.asm"); ++found; }
+    if (symbol["name"] == "LIM") { CHECK(symbol["value"] == 7); ++found; }
+    if (symbol["name"] == "SUBB") { CHECK(symbol["value"] == 0x1008 && symbol["file"] == "sub.asm"); ++found; }
+  }
+  CHECK(found == 3);
+}
+
+TEST(reset_after_relocated_load) {
+  Machine m;
+  m.arch.load_files(twoFiles(), 0x1000);
+  m.registerAccessor.write("PC", Word(0x2000).to_bytes());
+  m.arch.reset();
+  CHECK(Word::from_bytes(m.registerAccessor.read("PC")).as_unsigned() == 0x1003);
+}
+
+TEST(fetch_reports_source_file) {
+  Machine m;
+  m.arch.load_files(twoFiles(), 0x1000);
+  m.arch.step();  // +JSUB SUBB: PC moves into sub.asm
+  const nlohmann::json events = m.events.events_since(0);
+  const nlohmann::json* last = nullptr;
+  for (const auto& event : events) if (event["type"] == "InstructionFetched" && event.contains("preview")) last = &event;
+  CHECK(last != nullptr);
+  if (!last) return;
+  CHECK((*last)["address"] == 0x1008 && (*last)["source_file"] == "sub.asm" && (*last)["source_line"] == 2);
+}
+
+TEST(link_error_leaves_memory_untouched) {
+  Machine m;
+  std::string message;
+  try {
+    m.arch.load_files({{"main.asm", "PROG ENTRY 0\n EXTREF NOWHERE\n +JSUB NOWHERE\n END\n"}, {"sub.asm", SUB_SOURCE}}, 0x1000);
+  } catch (const std::exception& e) { message = e.what(); }
+  CHECK(contains(message, "main.asm:3") && contains(message, "undefined external symbol NOWHERE"));
+  CHECK(memoryHex(m, 0x1000, 8) == "0000000000000000");
+  const nlohmann::json events = m.events.events_since(0);
+  CHECK(firstEvent(events, "ProgramLinked") != nullptr);  // what was built still reaches the editor
+}
+
+TEST(hex_dump_cannot_be_linked) {
+  Machine m;
+  std::string message;
+  try { m.arch.load_files({{"main.asm", MAIN_SOURCE}, {"dump.hex", ";hex\n4F0000\n"}}, 0); }
+  catch (const std::exception& e) { message = e.what(); }
+  CHECK(contains(message, "a hex dump cannot be linked"));
+}
+
 int main(int argc, char** argv) {
   if (argc > 2) {
     std::fprintf(stderr, "Usage: %s [test_case]\n", argv[0]);
