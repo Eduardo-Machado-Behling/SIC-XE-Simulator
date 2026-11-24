@@ -191,4 +191,6 @@ json macroReportJson(const MacroResult& r) {
           {"trace", {{"truncated", r.trace.truncated}, {"steps", std::move(steps)}}}};
 }
 
+std::string validUtf8(std::string_view s) { return utf8(s); }
+
 }  // namespace sicxe

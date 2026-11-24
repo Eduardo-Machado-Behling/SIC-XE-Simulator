@@ -49,6 +49,7 @@ struct ControlSection {
   std::vector<ModRecord> mods;                               // M
   std::optional<std::size_t> transfer;                       // E: section-relative
   std::map<std::string, std::int64_t> symbols;               // every label, for the UI
+  std::set<std::string> absoluteSymbols;                     // the labels among them that are constants (EQU)
   std::set<std::string> absoluteDefines;                     // EXTDEF names whose value is absolute
   std::vector<int> fixedFieldLines;                          // lines holding a section address no M record can fix
   bool entry = false;                                        // opened by ENTRY

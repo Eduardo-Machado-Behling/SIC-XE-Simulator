@@ -23,7 +23,8 @@ struct MemoryAccessor : public LinkQueue {
                size_t size,
                std::vector<byte_t>& buffer,
                std::optional<std::size_t> sourceLine = std::nullopt,
-               bool preview = false);
+               bool preview = false,
+               std::optional<std::string> sourceFile = std::nullopt);
 
 
 	template <typename T>

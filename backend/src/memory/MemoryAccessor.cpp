@@ -86,10 +86,11 @@ void MemoryAccessor::fetch(size_t address,
                            size_t size,
                            std::vector<byte_t>& buffer,
                            std::optional<std::size_t> sourceLine,
-                           bool preview) {
+                           bool preview,
+                           std::optional<std::string> sourceFile) {
     m_parent.read(address, size, buffer);
 
     m_eventManager.commit(std::make_unique<architecture::events::InstructionFetched>(
-        address, buffer, sourceLine, preview));
+        address, buffer, sourceLine, preview, std::move(sourceFile)));
 
 }
