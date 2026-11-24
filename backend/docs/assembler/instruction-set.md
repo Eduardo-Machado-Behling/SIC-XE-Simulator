@@ -1,8 +1,10 @@
 # Implemented instruction set
 
-The assembler's instruction definitions are centralized in
-`lib/sic-xe/src/Assembler/isa.cpp`. The table there provides each instruction's
-opcode, format, operand schema, and whether SIC mode supports it. Mnemonics and
+Every instruction is defined once, in `kInstructionTable`
+(`lib/sic-xe/include/InstructionTable.hpp`). Each row gives the opcode, formats,
+operand type, flags, whether SIC mode supports it, and whether the CPU executes it.
+`InstructionSet` binds an implementation to each row, and the assembler derives
+its view (format, operand schema) from the same row in `src/Assembler/isa.cpp`. Mnemonics and
 register names are case-insensitive.
 
 ## Operand schemas

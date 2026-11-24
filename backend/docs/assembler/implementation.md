@@ -124,8 +124,9 @@ syntax.
 
 ### Instructions and operand forms
 
-The accepted instruction names and formats come from isa.cpp and are listed
-in [instruction-set.md](instruction-set.md). The operand forms are:
+The accepted instruction names and formats come from the central instruction
+table, `lib/sic-xe/include/InstructionTable.hpp`, and are listed in
+[instruction-set.md](instruction-set.md). The operand forms are:
 
     memory operand      := ["#" | "@"] expression ["," "$X"]
     register            := "$" register-name

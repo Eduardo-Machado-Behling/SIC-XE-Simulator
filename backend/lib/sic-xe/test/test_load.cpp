@@ -11,6 +11,11 @@
 
 #include "MacroReportJson.hpp"
 #include "SICXE.hpp"
+#include "DecodedInstruction.hpp"
+#include "IInstruction.hpp"
+#include "InstructionSet.hpp"
+#include "InstructionTable.hpp"
+#include "architecture/ExecutionContext.hpp"
 #include "essentials/Word.hpp"
 #include "architecture/events/EventManager.hpp"
 #include "memory/Memory.hpp"
@@ -147,6 +152,48 @@ TEST(lda_addressing_modes) {
   m.memory.write(0, {0x01, 0x00, 0x2A});
   m.arch.step();
   CHECK(Word::from_bytes(m.registerAccessor.read("A")).as_unsigned() == 42);
+}
+
+// The table's `executable` column must match the CPU: every row the CPU binds runs, or
+// throws "not implemented" exactly when the table says it is not executable.
+TEST(instruction_table_matches_cpu) {
+  Machine m;
+  InstructionSet set;
+  ExecutionContext context{m.registerAccessor, m.memoryAccessor};
+  int bound = 0;
+  for (const InstructionSpec& row : kInstructionTable) {
+    const InstructionData* data = set.findByMnemonic(std::string(row.mnemonic));
+    if (data == nullptr) {
+      if (row.executable) std::printf("  (%s: executable but not bound)\n", std::string(row.mnemonic).c_str());
+      CHECK(!row.executable);
+      continue;
+    }
+    ++bound;
+    CHECK(data->description.opcode == row.opcode);
+    Operands operand = NoneOperand{};
+    switch (row.operand_type) {
+      case OperandType::Value:
+        operand = hasFlag(row.flags, InstructionFlags::Floating) ? Operands{FloatOperand{}} : Operands{ValueOperand{}};
+        break;
+      case OperandType::Address: operand = AddressOperand{}; break;
+      case OperandType::Register: operand = RegisterOperand{}; break;
+      case OperandType::RegisterRegister: operand = RegistersOperand{}; break;
+      case OperandType::RegisterImmediate: operand = RegisterValueOperand{}; break;
+      case OperandType::None: break;
+    }
+    bool unimplemented = false;
+    try {
+      std::visit([&](auto&& value) { data->implementation->execute(context, value); }, operand);
+    } catch (const UnimplementedInstruction&) {
+      unimplemented = true;
+    } catch (...) {
+      // Any other failure (a division by zero, say) still means the body exists.
+    }
+    if (unimplemented == row.executable)
+      std::printf("  (%s: table says executable=%d)\n", std::string(row.mnemonic).c_str(), row.executable);
+    CHECK(unimplemented != row.executable);
+  }
+  CHECK(bound == 59);  // every row but SVC
 }
 
 int main(int argc, char** argv) {
