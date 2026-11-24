@@ -10,6 +10,7 @@
 
 #include "memory/CodeMemory.hpp"
 #include "assembler/diagnostics.hpp"
+#include "assembler/object_program.hpp"
 
 namespace sicxe {
 
@@ -73,8 +74,9 @@ struct AssemblyInfo {
 };
 
 struct AssemblyResult {
-  CodeMemory memory;
-  AssemblyInfo info;
+  CodeMemory memory;    // the first control section
+  AssemblyInfo info;    // the first section's start/length/entry/relocations; every section's symbols
+  ObjectProgram object; // one entry per control section, in file order
   bool ok() const {
     for (const auto& d : info.diagnostics)
       if (d.severity == Severity::Error) return false;

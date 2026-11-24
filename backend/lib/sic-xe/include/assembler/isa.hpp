@@ -29,7 +29,7 @@ struct InstructionDef {
   bool allowsExtended() const { return format == 3 && schema == OperandSchema::Memory; }
 };
 
-enum class DirectiveKind { Start, End, Byte, Word, Resb, Resw, Base, Nobase, Equ, Org };
+enum class DirectiveKind { Start, End, Byte, Word, Resb, Resw, Base, Nobase, Equ, Org, Csect, Extdef, Extref, Entry };
 
 // Lookups take UPPER-CASE names.
 const InstructionDef* findInstruction(std::string_view upper);

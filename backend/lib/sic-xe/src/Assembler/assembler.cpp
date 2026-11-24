@@ -42,10 +42,38 @@ void collectReferences(const ExprPtr& expr, std::vector<SymbolReference>& out, i
   collectReferences(expr->rhs, out, line);
 }
 
+// One control section: its own location counter, symbol scope and output image.
+struct Section {
+  std::string name;
+  std::unordered_map<std::string, Symbol> symbols;
+  CodeMemory mem;
+  std::vector<Relocation> relocs;
+  i64 lc = 0, startAddr = 0, highWater = 0;
+  std::optional<i64> orgReturn, base;
+  bool entry = false;                       // opened by ENTRY
+  int startLine = 0, startCol = 0;          // the START/ENTRY statement
+  int endOperandLine = 0;                   // first section only: the END that names a transfer address
+  std::optional<i64> transfer;
+};
+
+// The statement as written, without its label and comment: "+JSUB RDREC".
+std::string statementText(const Statement& st) {
+  const std::size_t from = st.mnemonicCol > 0 ? static_cast<std::size_t>(st.mnemonicCol - 1) : 0;
+  std::string text = from < st.source.size() ? st.source.substr(from) : std::string();
+  bool inQuote = false;
+  for (std::size_t i = 0; i < text.size(); ++i) {
+    if (text[i] == '\'') inQuote = !inQuote;
+    else if (text[i] == ';' && !inQuote) { text.resize(i); break; }
+  }
+  while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) text.pop_back();
+  return text;
+}
+
 // One Engine = one assembly run. All state is local, so Assembler is reentrant.
 class Engine {
  public:
   Engine(const AssemblerOptions& opt, std::string_view src) : opt_(opt) {
+    sects_.emplace_back();
     limit_ = opt.memoryLimit ? static_cast<i64>(opt.memoryLimit)
                              : (opt.mode == ArchMode::Sic ? 0x8000 : 0x100000);
     int lineNo = 0;
@@ -64,26 +92,29 @@ class Engine {
     pass1();
     pass2();
     if (!sawEnd_) diags_.warning(stmts_.empty() ? 1 : stmts_.back().line, 0, "Missing END directive");
-    if (!sawEnd_ || !entrySet_) entry_ = startAddr_;
+    if (!sawEnd_ || !entrySet_) entry_ = sects_[0].startAddr;
 
     AssemblyResult r;
-    r.memory = std::move(mem_);
+    for (std::size_t i = 0; i < sects_.size(); ++i) r.object.sections.push_back(objectSection(i));
+    r.memory = std::move(sects_[0].mem);
     r.info.diagnostics = diags_.sorted();
     r.info.programName = programName_;
-    r.info.startAddress = static_cast<std::size_t>(startAddr_);
-    r.info.length = static_cast<std::size_t>(std::max<i64>(0, highWater_ - startAddr_));
+    r.info.startAddress = static_cast<std::size_t>(sects_[0].startAddr);
+    r.info.length = static_cast<std::size_t>(std::max<i64>(0, sects_[0].highWater - sects_[0].startAddr));
     r.info.entryPoint = static_cast<std::size_t>(entry_);
-    r.info.relocations = std::move(relocs_);
-    for (const auto& [_, s] : symbols_) {
-      r.info.symbols[s.name] = s.value.value;
-      r.info.symbolDefinitions.push_back(
-          {s.name, s.value.value, s.line, s.column, static_cast<int>(s.name.size())});
+    r.info.relocations = std::move(sects_[0].relocs);
+    for (const Section& section : sects_) {
+      for (const auto& [_, s] : section.symbols) {
+        r.info.symbols.emplace(s.name, s.value.value);  // a name defined in two sections shows the first
+        r.info.symbolDefinitions.push_back(
+            {s.name, s.value.value, s.line, s.column, static_cast<int>(s.name.size())});
+      }
     }
     for (const Statement& st : stmts_) {
       collectReferences(st.expr, r.info.symbolReferences, st.line);
       for (const DataItem& item : st.items)
         collectReferences(item.expr, r.info.symbolReferences, st.line);
-      if (st.valid && st.inst && !st.bytes.empty()) {
+      if (st.valid && st.inst && !st.bytes.empty() && st.section == 0) {
         r.info.instructionSourceMap.push_back({
             static_cast<std::size_t>(st.address), st.bytes.size(), st.line});
       }
@@ -102,14 +133,45 @@ class Engine {
 
  private:
   // ======================= helpers =========================================
+  Section& cur() { return sects_[cur_]; }
+
+  ControlSection objectSection(std::size_t index) const {
+    const Section& section = sects_[index];
+    ControlSection out;
+    out.name = section.name;
+    out.start = static_cast<std::size_t>(section.startAddr);
+    out.length = static_cast<std::size_t>(std::max<i64>(0, section.highWater - section.startAddr));
+    for (const auto& [address, bytes] : section.mem.segments())
+      out.text.push_back({address, std::vector<std::uint8_t>(bytes.begin(), bytes.end())});
+    if (section.transfer) out.transfer = static_cast<std::size_t>(*section.transfer);
+    out.entry = section.entry;
+    out.startLine = section.startLine;
+    out.endOperandLine = section.endOperandLine;
+    for (const auto& [_, symbol] : section.symbols) out.symbols[symbol.name] = symbol.value.value;
+    for (const Statement& st : stmts_) {
+      if (st.section != static_cast<int>(index) || !st.valid || st.bytes.empty()) continue;
+      if (!st.inst && st.directive != DirectiveKind::Byte && st.directive != DirectiveKind::Word) continue;
+      out.notes.push_back({static_cast<std::size_t>(st.address), st.bytes.size(), st.line, statementText(st)});
+    }
+    return out;
+  }
+
   std::optional<Value> eval(const Statement& st, const ExprPtr& e, bool forward) {
     EvalContext ctx;
     ctx.location = st.address;
     ctx.forwardRefsAllowed = forward;
-    ctx.lookup = [this](const std::string& n) -> std::optional<Value> {
-      auto it = symbols_.find(upper(n));
-      if (it == symbols_.end()) return std::nullopt;
-      return it->second.value;
+    ctx.lookup = [this, &st](const std::string& n) -> std::optional<Value> {
+      const std::string key = upper(n);
+      auto it = cur().symbols.find(key);
+      if (it != cur().symbols.end()) return it->second.value;
+      for (std::size_t i = 0; i < sects_.size(); ++i) {
+        if (i == cur_ || !sects_[i].symbols.count(key)) continue;
+        diags_.error(st.line, st.operandCol, n + " is defined in section " +
+                                                 (sects_[i].name.empty() ? "(unnamed)" : sects_[i].name) +
+                                                 "; add it to EXTREF");
+        return Value{0, 0};  // reported once, here
+      }
+      return std::nullopt;
     };
     return evaluate(*e, ctx, st.line, diags_);
   }
@@ -118,7 +180,7 @@ class Engine {
 
   void defineLabel(const Statement& st, Value v) {
     if (st.label.empty()) return;
-    auto [it, inserted] = symbols_.emplace(upper(st.label), Symbol{st.label, v, st.line, st.labelCol});
+    auto [it, inserted] = cur().symbols.emplace(upper(st.label), Symbol{st.label, v, st.line, st.labelCol});
     if (!inserted)
       err(st, st.labelCol, "Duplicate symbol '" + st.label + "' (first defined on line " +
                                std::to_string(it->second.line) + ")");
@@ -144,24 +206,31 @@ class Engine {
   // ======================= pass 1 ==========================================
   void pass1() {
     for (Statement& st : stmts_) {
-      st.address = lc_;
+      st.address = cur().lc;
+      st.section = static_cast<int>(cur_);
       if (ended_) {
-        if (!warnedAfterEnd_) { diags_.warning(st.line, 1, "Statements after END are ignored"); warnedAfterEnd_ = true; }
+        if (st.directive == DirectiveKind::Csect && !warnedCsectAfterEnd_) {
+          diags_.warning(st.line, st.mnemonicCol, "CSECT after END is ignored");
+          warnedCsectAfterEnd_ = warnedAfterEnd_ = true;
+        } else if (!warnedAfterEnd_) {
+          diags_.warning(st.line, 1, "Statements after END are ignored");
+          warnedAfterEnd_ = true;
+        }
         st.valid = false;
         continue;
       }
       if (st.directive) {
         pass1Directive(st);
       } else if (st.inst) {
-        defineLabel(st, Value{lc_, 1});
+        defineLabel(st, Value{cur().lc, 1});
         pass1Instruction(st);
       } else {
-        defineLabel(st, Value{lc_, 1});  // label-only (or unparsable) line
+        defineLabel(st, Value{cur().lc, 1});  // label-only (or unparsable) line
       }
       if (st.directive || st.inst) seenCode_ = true;
-      lc_ += st.size;
-      highWater_ = std::max(highWater_, lc_);
-      if (lc_ > limit_ && !overflowReported_) {
+      cur().lc += st.size;
+      cur().highWater = std::max(cur().highWater, cur().lc);
+      if (cur().lc > limit_ && !overflowReported_) {
         err(st, 1, "Program exceeds the " + hex(limit_) + "-byte address space");
         overflowReported_ = true;
       }
@@ -198,40 +267,61 @@ class Engine {
   }
 
   void pass1Directive(Statement& st) {
-    if (!st.valid) { defineLabel(st, Value{lc_, 1}); return; }
+    if (!st.valid) { defineLabel(st, Value{cur().lc, 1}); return; }
     switch (*st.directive) {
       case DirectiveKind::Start:
+      case DirectiveKind::Entry:
         if (seenCode_) {
-          err(st, st.mnemonicCol, "START must be the first statement");
+          err(st, st.mnemonicCol, st.mnemonic + " must be the first statement");
         } else if (auto v = pass1Value(st, "START address", 0, limit_ - 1, false)) {
-          lc_ = startAddr_ = highWater_ = *v;
-          st.address = lc_;
-          programName_ = st.label;
+          cur().lc = cur().startAddr = cur().highWater = *v;
+          st.address = cur().lc;
+          programName_ = cur().name = st.label;
+          cur().entry = *st.directive == DirectiveKind::Entry;
+          cur().startLine = st.line;
+          cur().startCol = st.mnemonicCol;
         }
-        defineLabel(st, Value{lc_, 1});
+        defineLabel(st, Value{cur().lc, 1});
+        break;
+      case DirectiveKind::Csect:
+        if (st.label.empty()) err(st, st.mnemonicCol, "CSECT requires a label");
+        if (!reportedNonzeroStart_ && sects_[0].startAddr != 0) {
+          diags_.error(sects_[0].startLine, sects_[0].startCol, "START must be 0 when the file has control sections");
+          reportedNonzeroStart_ = true;
+        }
+        sects_.emplace_back();
+        cur_ = sects_.size() - 1;
+        cur().name = st.label;
+        st.section = static_cast<int>(cur_);
+        st.address = 0;
+        defineLabel(st, Value{0, 1});
+        break;
+      case DirectiveKind::Extdef:
+      case DirectiveKind::Extref:
+        defineLabel(st, Value{cur().lc, 1});
         break;
       case DirectiveKind::End:
         ended_ = sawEnd_ = true;
-        defineLabel(st, Value{lc_, 1});
+        defineLabel(st, Value{cur().lc, 1});
         break;
       case DirectiveKind::Byte:
         for (const auto& it : st.items) st.size += it.isLiteral ? static_cast<i64>(it.literal.size()) : 1;
-        defineLabel(st, Value{lc_, 1});
+        defineLabel(st, Value{cur().lc, 1});
         break;
       case DirectiveKind::Word:
         st.size = 3 * static_cast<i64>(st.items.size());
-        defineLabel(st, Value{lc_, 1});
+        defineLabel(st, Value{cur().lc, 1});
         break;
       case DirectiveKind::Resb:
       case DirectiveKind::Resw: {
         const i64 unit = *st.directive == DirectiveKind::Resw ? 3 : 1;
         if (auto n = pass1Value(st, "Reservation count", 0, limit_ / unit, false)) st.size = *n * unit;
-        defineLabel(st, Value{lc_, 1});
+        defineLabel(st, Value{cur().lc, 1});
         break;
       }
       case DirectiveKind::Base:
       case DirectiveKind::Nobase:
-        defineLabel(st, Value{lc_, 1});
+        defineLabel(st, Value{cur().lc, 1});
         break;
       case DirectiveKind::Equ:
         if (st.label.empty()) err(st, st.mnemonicCol, "EQU requires a label");
@@ -240,17 +330,17 @@ class Engine {
       case DirectiveKind::Org:
         if (st.expr) {
           if (auto v = pass1Value(st, "ORG address", 0, limit_, true)) {
-            if (!orgReturn_) orgReturn_ = lc_;
-            lc_ = *v;
+            if (!cur().orgReturn) cur().orgReturn = cur().lc;
+            cur().lc = *v;
           }
-        } else if (orgReturn_) {
-          lc_ = *orgReturn_;
-          orgReturn_.reset();
+        } else if (cur().orgReturn) {
+          cur().lc = *cur().orgReturn;
+          cur().orgReturn.reset();
         } else {
           err(st, st.mnemonicCol, "ORG without an operand has no previous location to restore");
         }
-        st.address = lc_;
-        defineLabel(st, Value{lc_, 1});
+        st.address = cur().lc;
+        defineLabel(st, Value{cur().lc, 1});
         break;
     }
   }
@@ -258,6 +348,7 @@ class Engine {
   // ======================= pass 2 ==========================================
   void pass2() {
     for (Statement& st : stmts_) {
+      cur_ = static_cast<std::size_t>(st.section);
       if (st.valid) {
         if (st.directive) pass2Directive(st);
         else if (st.inst) pass2Instruction(st);
@@ -269,12 +360,12 @@ class Engine {
   void emit(Statement& st, std::vector<byte_t> bytes) {
     for (std::size_t i = 0; i < bytes.size(); ++i) {
       const auto addr = static_cast<std::size_t>(st.address) + i;
-      if (mem_.contains(addr)) {
+      if (cur().mem.contains(addr)) {
         err(st, st.mnemonicCol, "Output overlaps previously assembled bytes at " + hex(static_cast<i64>(addr), 4));
         st.valid = false;
         return;
       }
-      mem_.write(addr, bytes[i]);
+      cur().mem.write(addr, bytes[i]);
     }
     st.bytes = std::move(bytes);
   }
@@ -318,20 +409,25 @@ class Engine {
           out.push_back(static_cast<byte_t>(u >> 16));
           out.push_back(static_cast<byte_t>(u >> 8));
           out.push_back(static_cast<byte_t>(u));
-          if (v->relocatable()) relocs_.push_back({static_cast<std::size_t>(st.address) + 3 * i, 6});
+          if (v->relocatable()) cur().relocs.push_back({static_cast<std::size_t>(st.address) + 3 * i, 6});
         }
         emit(st, std::move(out));
         break;
       }
       case DirectiveKind::Base:
-        if (auto v = eval(st, st.expr, true)) base_ = v->value;
+        if (auto v = eval(st, st.expr, true)) cur().base = v->value;
         break;
       case DirectiveKind::Nobase:
-        base_.reset();
+        cur().base.reset();
         break;
       case DirectiveKind::End:
         if (st.expr) {
-          if (auto v = eval(st, st.expr, true)) { entry_ = v->value; entrySet_ = true; }
+          sects_[0].endOperandLine = st.line;
+          const std::size_t here = cur_;
+          cur_ = 0;  // the operand names a label of the first section, wherever END sits
+          const auto v = eval(st, st.expr, true);
+          cur_ = here;
+          if (v) { entry_ = v->value; entrySet_ = true; sects_[0].transfer = v->value; }
         }
         break;
       default: break;  // START, RESB, RESW, EQU, ORG: no object bytes
@@ -395,7 +491,7 @@ class Engine {
         return;
       }
       const auto a = static_cast<unsigned>(v->value);
-      if (v->relocatable()) relocs_.push_back({static_cast<std::size_t>(st.address) + 1, 5});
+      if (v->relocatable()) cur().relocs.push_back({static_cast<std::size_t>(st.address) + 1, 5});
       emit(st, {op, static_cast<byte_t>((x << 7) | 0x10 | (a >> 16)), static_cast<byte_t>(a >> 8),
                 static_cast<byte_t>(a)});
       return;
@@ -428,11 +524,11 @@ class Engine {
         p = 1;
         disp = pcDisp;
       } else if (st.relativeMode == RelativeMode::BaseRelative) {
-        if (!base_) {
+        if (!cur().base) {
           err(st, st.mnemonicCol, "Base-relative addressing (,b) requires an active BASE directive");
           return;
         }
-        const i64 baseDisp = ta - *base_;
+        const i64 baseDisp = ta - *cur().base;
         if (baseDisp < 0 || baseDisp > 4095) {
           err(st, st.operandCol, "Forced base-relative displacement " + std::to_string(baseDisp) +
                                   " is out of range (0..4095)");
@@ -442,15 +538,15 @@ class Engine {
         disp = baseDisp;
       } else if (pcDisp >= -2048 && pcDisp <= 2047) {
         p = 1; disp = pcDisp;
-      } else if (base_ && ta - *base_ >= 0 && ta - *base_ <= 4095) {
-        b = 1; disp = ta - *base_;
+      } else if (cur().base && ta - *cur().base >= 0 && ta - *cur().base <= 4095) {
+        b = 1; disp = ta - *cur().base;
       } else if (ta >= 0 && ta <= 4095) {
         disp = ta;
         if (v->relocatable())
           diags_.warning(st.line, st.operandCol, "Direct addressing of a relocatable operand cannot be relocated; consider +" + st.mnemonic);
       } else {
         err(st, st.operandCol, "Target " + hex(ta, 4) + " is out of format-3 range (PC displacement " +
-                                   std::to_string(pcDisp) + (base_ ? ", base displacement " + std::to_string(ta - *base_) : ", no BASE active") +
+                                   std::to_string(pcDisp) + (cur().base ? ", base displacement " + std::to_string(ta - *cur().base) : ", no BASE active") +
                                    "); use +" + st.mnemonic + " for format 4");
         return;
       }
@@ -476,17 +572,16 @@ class Engine {
 
   // ======================= state ===========================================
   const AssemblerOptions& opt_;
+  std::vector<Section> sects_;
+  std::size_t cur_ = 0;
   i64 limit_ = 0;
   Diagnostics diags_;
   std::vector<Statement> stmts_;
-  std::unordered_map<std::string, Symbol> symbols_;
-  CodeMemory mem_;
-  std::vector<Relocation> relocs_;
   std::string listing_, programName_;
-  i64 lc_ = 0, startAddr_ = 0, highWater_ = 0, entry_ = 0;
-  std::optional<i64> orgReturn_, base_;
+  i64 entry_ = 0;
   bool seenCode_ = false, ended_ = false, sawEnd_ = false, entrySet_ = false;
   bool warnedAfterEnd_ = false, overflowReported_ = false;
+  bool warnedCsectAfterEnd_ = false, reportedNonzeroStart_ = false;
 };
 
 }  // namespace
