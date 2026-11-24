@@ -186,14 +186,20 @@ class Engine {
   std::optional<Value> eval(const Statement& st, const ExprPtr& e, bool forward, bool allowExternals = false) {
     EvalContext ctx;
     ctx.location = st.address;
+    ctx.section = cur().name;
     ctx.forwardRefsAllowed = forward;
     ctx.lookup = [this, &st](const std::string& n) -> std::optional<Value> {
       const std::string key = upper(n);
       auto it = cur().symbols.find(key);
-      if (it != cur().symbols.end()) return it->second.value;
+      if (it != cur().symbols.end()) {
+        Value local = it->second.value;
+        local.terms.clear();  // an EQU * value already holds its own term
+        if (local.relocDegree == 1) local.terms.push_back({'+', cur().name, true});
+        return local;
+      }
       if (const auto ext = cur().externs.find(key); ext != cur().externs.end()) {
         Value external{0, 0};
-        external.externals.push_back({'+', ext->second});
+        external.terms.push_back({'+', ext->second, false});
         return external;
       }
       for (std::size_t i = 0; i < sects_.size(); ++i) {
@@ -206,8 +212,8 @@ class Engine {
       return std::nullopt;
     };
     auto v = evaluate(*e, ctx, st.line, diags_);
-    if (v && !allowExternals && !v->externals.empty()) {
-      err(st, st.operandCol, "an external symbol (" + v->externals.front().second +
+    if (v && !allowExternals && v->firstExternal()) {
+      err(st, st.operandCol, "an external symbol (" + v->firstExternal()->name +
                                  ") can only be used in a format-4 address or WORD");
       return std::nullopt;
     }
@@ -216,13 +222,20 @@ class Engine {
 
   void err(const Statement& st, int col, const std::string& m) { diags_.error(st.line, col, m); }
 
-  // The modification records of an address field: one per external term, plus one that
-  // names the section itself when the field is relative to it.
+  // The modification records of an address field, one per term in source order (Beck
+  // Fig. 3.9). Terms that name the section itself cancel in pairs: ENDA-LISTA has none.
   void addMods(const Statement& st, const Value& v, std::size_t address, unsigned halfBytes) {
-    for (const auto& [sign, name] : v.externals) cur().mods.push_back({address, halfBytes, sign, name, st.line});
-    if (!v.relocatable()) return;
-    cur().relocs.push_back({address, halfBytes});
-    cur().mods.push_back({address, halfBytes, '+', cur().name, st.line});
+    std::vector<Term> terms = v.terms;
+    for (;;) {
+      const auto isLocal = [](char sign) { return [sign](const Term& t) { return t.local && t.sign == sign; }; };
+      const auto plus = std::find_if(terms.begin(), terms.end(), isLocal('+'));
+      const auto minus = std::find_if(terms.begin(), terms.end(), isLocal('-'));
+      if (plus == terms.end() || minus == terms.end()) break;
+      terms.erase(std::max(plus, minus));
+      terms.erase(std::min(plus, minus));
+    }
+    for (const Term& term : terms) cur().mods.push_back({address, halfBytes, term.sign, term.name, st.line});
+    if (v.relocDegree == 1) cur().relocs.push_back({address, halfBytes});
   }
 
   void defineLabel(const Statement& st, Value v) {
@@ -534,8 +547,8 @@ class Engine {
   void encodeXe(Statement& st) {
     auto v = eval(st, st.expr, true, /*allowExternals=*/true);
     if (!v) return;
-    if (!v->externals.empty() && !st.extended) {
-      err(st, st.operandCol, v->externals.front().second + " is an external reference; use +" +
+    if (v->firstExternal() && !st.extended) {
+      err(st, st.operandCol, v->firstExternal()->name + " is an external reference; use +" +
                                  statementText(st) + " (format 4)");
       return;
     }

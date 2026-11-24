@@ -5,6 +5,12 @@
 #include <string>
 #include <vector>
 
+#include <fstream>
+#include <set>
+#include <sstream>
+
+#include "assembler/assembler.hpp"
+#include "assembler/linker.hpp"
 #include "assembler/object_program.hpp"
 #include "assembler/object_text.hpp"
 
@@ -112,6 +118,176 @@ TEST(render_section_without_transfer) {
   p.sections[0].transfer.reset();
   const auto lines = linesOf(renderObjectText(p).text);
   CHECK(hasLine(lines, "E"));
+}
+
+// ---------------------------------------------------------------------------
+// The linker (Beck 3.2.3 and 3.4.1): two passes over control sections, relative to 0.
+static std::string readData(const std::string& name) {
+  std::ifstream in(std::string(SICXE_TEST_DATA) + "/" + name, std::ios::binary);
+  std::ostringstream text;
+  text << in.rdbuf();
+  return text.str();
+}
+
+static LinkInput load(const std::string& file, const std::string& source, AssemblerOptions options = {}) {
+  AssemblyResult r = Assembler(options).assembleDetailed(source);
+  for (const auto& d : r.info.diagnostics)
+    if (d.severity == Severity::Error) std::printf("  (%s: %s)\n", file.c_str(), d.toString().c_str());
+  for (auto& section : r.object.sections) section.sourceFile = file;
+  return {file, std::move(r.object)};
+}
+
+static std::vector<LinkInput> fig38() {
+  std::vector<LinkInput> inputs;
+  for (const char* name : {"beck_fig3_8_proga.asm", "beck_fig3_8_progb.asm", "beck_fig3_8_progc.asm"})
+    inputs.push_back(load(name, readData(name)));
+  return inputs;
+}
+
+static bool hasDiag(const LinkResult& r, const std::string& file, int line, const std::string& needle) {
+  for (const auto& d : r.diagnostics)
+    if (d.file == file && d.diagnostic.line == line && d.diagnostic.message.find(needle) != std::string::npos) return true;
+  for (const auto& d : r.diagnostics) std::printf("  (%s:%d %s)\n", d.file.c_str(), d.diagnostic.line, d.diagnostic.message.c_str());
+  return false;
+}
+
+static std::vector<std::uint8_t> linkedBytes(const ObjectProgram& program, std::size_t address, std::size_t count) {
+  std::vector<std::uint8_t> out;
+  for (std::size_t i = 0; i < count; ++i)
+    for (const auto& run : program.sections[0].text)
+      if (address + i >= run.address && address + i < run.address + run.bytes.size())
+        out.push_back(run.bytes[address + i - run.address]);
+  return out;
+}
+
+TEST(beck_fig3_8_link) {
+  std::vector<std::string> want;
+  std::istringstream expected(readData("beck_fig3_9.txt"));
+  for (std::string line; std::getline(expected, line);) {
+    if (!line.empty() && line.back() == '\r') line.pop_back();  // a CRLF checkout
+    want.push_back(line);
+  }
+  const std::vector<LinkInput> inputs = fig38();
+  std::vector<std::string> got;
+  for (const auto& input : inputs)
+    for (const auto& record : beckRecords(renderObjectText(input.object).text)) got.push_back(record);
+  CHECK(got.size() == want.size());
+  for (std::size_t i = 0; i < std::min(got.size(), want.size()); ++i) {
+    if (got[i] != want[i]) std::printf("  record %zu\n   got  %s\n   want %s\n", i + 1, got[i].c_str(), want[i].c_str());
+    CHECK(got[i] == want[i]);
+  }
+
+  const LinkResult r = link(inputs);
+  CHECK(r.ok());
+  struct Row { const char* section; const char* symbol; std::size_t address, length; };
+  const std::vector<Row> rows = {{"PROGA", "", 0x000, 0x63}, {"PROGA", "LISTA", 0x040, 0}, {"PROGA", "ENDA", 0x054, 0},
+                                 {"PROGB", "", 0x063, 0x7F}, {"PROGB", "LISTB", 0x0C3, 0}, {"PROGB", "ENDB", 0x0D3, 0},
+                                 {"PROGC", "", 0x0E2, 0x51}, {"PROGC", "LISTC", 0x112, 0}, {"PROGC", "ENDC", 0x124, 0}};
+  CHECK(r.estab.size() == rows.size());
+  for (std::size_t i = 0; i < std::min(rows.size(), r.estab.size()); ++i) {
+    const auto& e = r.estab[i];
+    if (e.section != rows[i].section || e.symbol != rows[i].symbol || e.address != rows[i].address || e.length != rows[i].length)
+      std::printf("  estab row %zu: %s %s %zX %zX\n", i, e.section.c_str(), e.symbol.c_str(), e.address, e.length);
+    CHECK(e.section == rows[i].section && e.symbol == rows[i].symbol && e.address == rows[i].address && e.length == rows[i].length);
+  }
+  CHECK(r.estab.size() == 9 && r.estab[0].sourceFile == "beck_fig3_8_proga.asm" && r.estab[7].sourceFile == "beck_fig3_8_progc.asm");
+
+  CHECK(r.linked.sections.size() == 1);
+  if (r.linked.sections.size() != 1) return;
+  const ControlSection& out = r.linked.sections[0];
+  CHECK(out.name == "PROGA" && out.start == 0 && out.length == 0x133);
+  CHECK(out.transfer && *out.transfer == 0x20);
+  // Only the fields that are relative to the program start remain, each as +PROGA.
+  const std::vector<std::size_t> relative = {0x24, 0x54, 0x5A, 0x9A, 0xD3, 0xD9, 0xFB, 0xFF, 0x124, 0x12A};
+  CHECK(out.mods.size() == relative.size());
+  for (std::size_t i = 0; i < std::min(relative.size(), out.mods.size()); ++i)
+    CHECK(out.mods[i].address == relative[i] && out.mods[i].sign == '+' && out.mods[i].symbol == "PROGA");
+  CHECK((linkedBytes(r.linked, 0x23, 4) == std::vector<std::uint8_t>{0x77, 0x10, 0x00, 0xC7}));  // LISTB+4 = 0xC3+4
+  CHECK((linkedBytes(r.linked, 0x57, 3) == std::vector<std::uint8_t>{0x00, 0x00, 0x08}));        // ENDC-LISTC-10
+  CHECK((linkedBytes(r.linked, 0x60, 3) == std::vector<std::uint8_t>{0x00, 0x00, 0x83}));        // LISTB-LISTA
+  CHECK(r.origins.size() == 3 && r.origins[1].start == 0x63 && r.origins[1].sourceFile == "beck_fig3_8_progb.asm");
+}
+
+TEST(pass2_trace_shows_before_after) {
+  const LinkResult r = link(fig38());
+  std::size_t one = 0, two = 0;
+  const LinkStep* ref2 = nullptr;
+  for (const auto& step : r.trace) {
+    if (step.pass == LinkStep::Pass::One) ++one;
+    else ++two;
+    if (step.pass == LinkStep::Pass::Two && step.address == 0x24 && step.symbol == "LISTB") ref2 = &step;
+  }
+  CHECK(one == 9);   // one per ESTAB row
+  CHECK(two == 40);  // one per M record of the three object programs
+  CHECK(ref2 != nullptr);
+  if (!ref2) return;
+  CHECK(ref2->before == 0x4 && ref2->after == 0xC7 && ref2->file == "beck_fig3_8_proga.asm" && ref2->line == 9);
+}
+
+TEST(net_relocation_cancels) {
+  const LinkResult r = link({load("a.asm", "MAIN ENTRY 0\n EXTREF BUFFER,BUFEND\n WORD BUFEND-BUFFER\n WORD BUFFER\n END\n"),
+                             load("b.asm", "DATA START 0\n EXTDEF BUFFER,BUFEND\nBUFFER RESB 4\nBUFEND EQU *\n END\n")});
+  CHECK(r.ok());
+  if (r.linked.sections.size() != 1) { CHECK(false); return; }
+  CHECK((linkedBytes(r.linked, 0, 6) == std::vector<std::uint8_t>{0, 0, 4, 0, 0, 6}));
+  CHECK(r.linked.sections[0].mods.size() == 1 && r.linked.sections[0].mods[0].address == 3);
+}
+
+TEST(net_relocation_invalid) {
+  const LinkResult r = link({load("a.asm", "MAIN ENTRY 0\n EXTREF BUFFER,BUFEND\n WORD BUFFER+BUFEND\n END\n"),
+                             load("b.asm", "DATA START 0\n EXTDEF BUFFER,BUFEND\nBUFFER RESB 4\nBUFEND EQU *\n END\n")});
+  CHECK(!r.ok());
+  CHECK(hasDiag(r, "a.asm", 3, "relocation of this field is not 0 or 1"));
+}
+
+TEST(entry_count) {
+  const std::string main = "MAIN START 0\n RSUB\n END\n";
+  const std::string sub = "SUBB START 0\n RSUB\n END\n";
+  CHECK(hasDiag(link({load("a.asm", main), load("b.asm", sub)}), "a.asm", 1, "no ENTRY in the linked files"));
+  CHECK(hasDiag(link({load("a.asm", "MAIN ENTRY 0\n RSUB\n END\n"), load("b.asm", "SUBB ENTRY 0\n RSUB\n END\n")}),
+                "b.asm", 1, "a second ENTRY"));
+  CHECK(link({load("a.asm", main)}).ok());
+  CHECK(link({load("a.asm", "MAIN ENTRY 0\n RSUB\n END\n")}).ok());
+}
+
+TEST(end_operand_outside_entry) {
+  const LinkResult r = link({load("a.asm", "MAIN ENTRY 0\n RSUB\n END MAIN\n"),
+                             load("b.asm", "SUBB START 0\nGO RSUB\n END GO\n")});
+  CHECK(hasDiag(r, "b.asm", 3, "only the ENTRY file can name a transfer address"));
+}
+
+TEST(duplicate_external) {
+  const LinkResult r = link({load("a.asm", "MAIN ENTRY 0\n EXTDEF HI\nHI RSUB\n END\n"),
+                             load("b.asm", "SUBB START 0\n EXTDEF HI\nHI RSUB\n END\n")});
+  CHECK(!r.ok());
+  CHECK(hasDiag(r, "a.asm", 1, "HI is defined twice"));
+  CHECK(hasDiag(r, "b.asm", 1, "HI is defined twice"));
+}
+
+TEST(undefined_external) {
+  const LinkResult r = link({load("a.asm", "MAIN ENTRY 0\n EXTREF NOWHERE\n +JSUB NOWHERE\n END\n")});
+  CHECK(!r.ok());
+  CHECK(hasDiag(r, "a.asm", 3, "undefined external symbol NOWHERE"));
+}
+
+TEST(nonzero_start_multifile) {
+  const LinkResult r = link({load("a.asm", "MAIN ENTRY 0\n RSUB\n END\n"), load("b.asm", "SUBB START 100\n RSUB\n END\n")});
+  CHECK(hasDiag(r, "b.asm", 1, "START must be 0 when files are linked"));
+  CHECK(link({load("a.asm", "ABS START 0x1000\n RSUB\n END\n")}).ok());  // one absolute file links as it is
+}
+
+TEST(fixed_field_at_nonzero_csaddr) {
+  const std::string direct = "SUBB START 0\nV WORD 1\n RESB 4096\n LDA V\n END\n";
+  CHECK(hasDiag(link({load("a.asm", "MAIN ENTRY 0\n RSUB\n END\n"), load("b.asm", direct)}), "b.asm", 4, "cannot be relocated"));
+  CHECK(link({load("b.asm", direct)}).ok());  // at address 0 the field is already right
+}
+
+TEST(sic_files_cannot_link) {
+  AssemblerOptions sic;
+  sic.mode = ArchMode::Sic;
+  const LinkResult r = link({load("a.asm", "MAIN ENTRY 0\n RSUB\n END\n", sic),
+                             load("b.asm", "SUBB START 0\n LDA V\nV WORD 1\n END\n", sic)});
+  CHECK(hasDiag(r, "b.asm", 2, "cannot be relocated"));
 }
 
 int main(int argc, char** argv) {

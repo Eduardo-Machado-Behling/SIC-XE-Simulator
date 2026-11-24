@@ -12,6 +12,7 @@ set(ASSEMBLER_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/assembler.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/expression.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/isa.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/linker.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/macro_processor.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/macro_remap.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/macro_text.cpp"
@@ -142,6 +143,17 @@ if(BUILD_TESTING)
         add_sicxe_linker_test(render_records_and_annotations "object-text.records-and-annotations")
         add_sicxe_linker_test(render_bands_follow_origins "object-text.bands-follow-origins")
         add_sicxe_linker_test(render_section_without_transfer "object-text.no-transfer")
+        add_sicxe_linker_test(beck_fig3_8_link "beck-fig-3-8-link")
+        add_sicxe_linker_test(pass2_trace_shows_before_after "trace-before-after")
+        add_sicxe_linker_test(net_relocation_cancels "net-relocation-cancels")
+        add_sicxe_linker_test(net_relocation_invalid "net-relocation-invalid")
+        add_sicxe_linker_test(entry_count "entry-count")
+        add_sicxe_linker_test(end_operand_outside_entry "end-operand-outside-entry")
+        add_sicxe_linker_test(duplicate_external "duplicate-external")
+        add_sicxe_linker_test(undefined_external "undefined-external")
+        add_sicxe_linker_test(nonzero_start_multifile "nonzero-start-multifile")
+        add_sicxe_linker_test(fixed_field_at_nonzero_csaddr "fixed-field-at-nonzero-csaddr")
+        add_sicxe_linker_test(sic_files_cannot_link "sic-files-cannot-link")
 
         add_sicxe_macro_test(identity_for_source_without_macros "identity.source-without-macros")
         add_sicxe_macro_test(identity_preserves_crlf "identity.preserves-crlf")
