@@ -21,6 +21,21 @@ vi.mock("@/lib/simulator/Simulator", () => ({
     Simulator: { get: () => fake },
 }));
 
+// The page opens projects from browser storage and mirrors them to a server session.
+vi.mock("@/lib/simulator/ProjectSessionSync", () => ({
+    getStoredProject: (id: string) => ({ id, name: "Demo", architecture: "SIC/XE", files: { "main.asm": "FIRST START 1000" } }),
+    saveStoredProject: () => [],
+    syncProjectToSession: async () => "session",
+}));
+
+vi.mock("@/lib/language/LanguageClient", () => ({
+    AssemblerLanguageClient: class {
+        saveDocument = async () => {};
+        onCatalog = () => () => {};
+        dispose() {}
+    },
+}));
+
 // Monaco and xterm need a real browser; the page wiring under test does not use them.
 vi.mock("@/components/CodeEditor", () => ({ CodeEditor: () => null }));
 vi.mock("@/components/Console", () => ({ Console: () => null }));
@@ -56,7 +71,10 @@ async function run(user: ReturnType<typeof userEvent.setup>) {
     const calls = fake.loadFile.mock.calls.length;
     await user.click(screen.getByRole("button", { name: "Run" }));
     await waitFor(() => expect(fake.loadFile.mock.calls.length).toBe(calls + 1));
-    await act(async () => {});
+    // Let this Run's load settle (resolved or rejected) and React apply what follows it.
+    await act(async () => {
+        await Promise.resolve(fake.loadFile.mock.results.at(-1)?.value).catch(() => {});
+    });
 }
 
 function assemblerPanel(): HTMLElement {
@@ -89,7 +107,7 @@ describe("EditorPage symbol table", () => {
         fake.loadFile.mockResolvedValueOnce(assembled("FIRST", "LOOP"));
         await run(user);
         expect(await within(assemblerPanel()).findByText("LOOP")).toBeTruthy();
-        expect(fake.setFile).toHaveBeenCalledWith("main.asm", "FIRST START 1000");
+        expect(fake.loadProject).toHaveBeenLastCalledWith("session", "demo");
         expect(fake.loadFile).toHaveBeenCalledWith("main.asm");
 
         await user.click(screen.getByRole("button", { name: "Step" }));
@@ -144,7 +162,7 @@ describe("EditorPage symbol table", () => {
         rerender(<EditorPage projectId="other" />);
 
         await within(assemblerPanel()).findByRole("status");
-        expect(fake.loadProject).toHaveBeenLastCalledWith("other");
+        expect(fake.loadProject).toHaveBeenLastCalledWith("session", "other");
         expect(within(assemblerPanel()).queryByText("FIRST")).toBeNull();
     });
 

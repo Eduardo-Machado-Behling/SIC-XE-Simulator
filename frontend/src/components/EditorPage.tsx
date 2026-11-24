@@ -685,6 +685,8 @@ export default function EditorPage({ projectId }: PageProps) {
             consoleHandleRef.current?.writeEvents(steps);
             consoleHandleRef.current?.log(t("term.loaded", { file: startFile }), "success");
         } catch (error) {
+            // The previous program's symbols no longer describe what is loaded.
+            setSymbols(null);
             // A failure after the macro processor ran still carries its report;
             // one before it leaves no report to show.
             const report = error instanceof SimulatorCommandError && error.events
