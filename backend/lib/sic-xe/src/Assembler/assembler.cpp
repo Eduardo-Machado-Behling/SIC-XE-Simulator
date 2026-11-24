@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cstdio>
 #include <optional>
+#include <set>
 #include <unordered_map>
 
 #include "assembler/parser.hpp"
@@ -54,6 +55,12 @@ struct Section {
   int startLine = 0, startCol = 0;          // the START/ENTRY statement
   int endOperandLine = 0;                   // first section only: the END that names a transfer address
   std::optional<i64> transfer;
+  std::unordered_map<std::string, std::string> externs;  // EXTREF: upper-case key -> declared name
+  std::vector<std::string> refers;                       // EXTREF names in order, for the R record
+  struct Extdef { std::string name; int line, column; };
+  std::vector<Extdef> extdefs;
+  std::vector<ModRecord> mods;
+  std::vector<int> fixedLines;                           // lines whose address field no M record can fix
 };
 
 // The statement as written, without its label and comment: "+JSUB RDREC".
@@ -90,6 +97,7 @@ class Engine {
 
   AssemblyResult run() {
     pass1();
+    checkExtdefs();
     pass2();
     if (!sawEnd_) diags_.warning(stmts_.empty() ? 1 : stmts_.back().line, 0, "Missing END directive");
     if (!sawEnd_ || !entrySet_) entry_ = sects_[0].startAddr;
@@ -135,6 +143,14 @@ class Engine {
   // ======================= helpers =========================================
   Section& cur() { return sects_[cur_]; }
 
+  // An EXTDEF symbol must be defined by the end of its own section.
+  void checkExtdefs() {
+    for (const Section& section : sects_)
+      for (const auto& def : section.extdefs)
+        if (!section.symbols.count(upper(def.name)))
+          diags_.error(def.line, def.column, "EXTDEF names " + def.name + ", which this section does not define");
+  }
+
   ControlSection objectSection(std::size_t index) const {
     const Section& section = sects_[index];
     ControlSection out;
@@ -147,6 +163,16 @@ class Engine {
     out.entry = section.entry;
     out.startLine = section.startLine;
     out.endOperandLine = section.endOperandLine;
+    std::set<std::string> defined;
+    for (const auto& def : section.extdefs) {
+      const auto symbol = section.symbols.find(upper(def.name));
+      if (symbol == section.symbols.end() || !defined.insert(symbol->first).second) continue;
+      out.defines.push_back({symbol->second.name, static_cast<std::size_t>(symbol->second.value.value)});
+      if (!symbol->second.value.relocatable()) out.absoluteDefines.insert(symbol->second.name);
+    }
+    out.refers = section.refers;
+    out.mods = section.mods;
+    out.fixedFieldLines = section.fixedLines;
     for (const auto& [_, symbol] : section.symbols) out.symbols[symbol.name] = symbol.value.value;
     for (const Statement& st : stmts_) {
       if (st.section != static_cast<int>(index) || !st.valid || st.bytes.empty()) continue;
@@ -156,7 +182,8 @@ class Engine {
     return out;
   }
 
-  std::optional<Value> eval(const Statement& st, const ExprPtr& e, bool forward) {
+  // External terms are accepted only where the caller can turn them into M records.
+  std::optional<Value> eval(const Statement& st, const ExprPtr& e, bool forward, bool allowExternals = false) {
     EvalContext ctx;
     ctx.location = st.address;
     ctx.forwardRefsAllowed = forward;
@@ -164,6 +191,11 @@ class Engine {
       const std::string key = upper(n);
       auto it = cur().symbols.find(key);
       if (it != cur().symbols.end()) return it->second.value;
+      if (const auto ext = cur().externs.find(key); ext != cur().externs.end()) {
+        Value external{0, 0};
+        external.externals.push_back({'+', ext->second});
+        return external;
+      }
       for (std::size_t i = 0; i < sects_.size(); ++i) {
         if (i == cur_ || !sects_[i].symbols.count(key)) continue;
         diags_.error(st.line, st.operandCol, n + " is defined in section " +
@@ -173,10 +205,25 @@ class Engine {
       }
       return std::nullopt;
     };
-    return evaluate(*e, ctx, st.line, diags_);
+    auto v = evaluate(*e, ctx, st.line, diags_);
+    if (v && !allowExternals && !v->externals.empty()) {
+      err(st, st.operandCol, "an external symbol (" + v->externals.front().second +
+                                 ") can only be used in a format-4 address or WORD");
+      return std::nullopt;
+    }
+    return v;
   }
 
   void err(const Statement& st, int col, const std::string& m) { diags_.error(st.line, col, m); }
+
+  // The modification records of an address field: one per external term, plus one that
+  // names the section itself when the field is relative to it.
+  void addMods(const Statement& st, const Value& v, std::size_t address, unsigned halfBytes) {
+    for (const auto& [sign, name] : v.externals) cur().mods.push_back({address, halfBytes, sign, name, st.line});
+    if (!v.relocatable()) return;
+    cur().relocs.push_back({address, halfBytes});
+    cur().mods.push_back({address, halfBytes, '+', cur().name, st.line});
+  }
 
   void defineLabel(const Statement& st, Value v) {
     if (st.label.empty()) return;
@@ -284,6 +331,7 @@ class Engine {
         defineLabel(st, Value{cur().lc, 1});
         break;
       case DirectiveKind::Csect:
+        if (opt_.mode == ArchMode::Sic) err(st, st.mnemonicCol, "control sections and external symbols need SIC/XE");
         if (st.label.empty()) err(st, st.mnemonicCol, "CSECT requires a label");
         if (!reportedNonzeroStart_ && sects_[0].startAddr != 0) {
           diags_.error(sects_[0].startLine, sects_[0].startCol, "START must be 0 when the file has control sections");
@@ -298,6 +346,14 @@ class Engine {
         break;
       case DirectiveKind::Extdef:
       case DirectiveKind::Extref:
+        if (opt_.mode == ArchMode::Sic) {
+          err(st, st.mnemonicCol, "control sections and external symbols need SIC/XE");
+        } else {
+          for (const auto& [name, column] : st.names) {
+            if (*st.directive == DirectiveKind::Extdef) cur().extdefs.push_back({name, st.line, column});
+            else if (cur().externs.emplace(upper(name), name).second) cur().refers.push_back(name);
+          }
+        }
         defineLabel(st, Value{cur().lc, 1});
         break;
       case DirectiveKind::End:
@@ -399,7 +455,7 @@ class Engine {
       case DirectiveKind::Word: {
         std::vector<byte_t> out;
         for (std::size_t i = 0; i < st.items.size(); ++i) {
-          auto v = eval(st, st.items[i].expr, true);
+          auto v = eval(st, st.items[i].expr, true, /*allowExternals=*/true);
           if (!v) return;
           if (v->value < -(i64{1} << 23) || v->value >= (i64{1} << 24)) {
             err(st, st.operandCol, "WORD value " + std::to_string(v->value) + " does not fit in 24 bits");
@@ -409,7 +465,7 @@ class Engine {
           out.push_back(static_cast<byte_t>(u >> 16));
           out.push_back(static_cast<byte_t>(u >> 8));
           out.push_back(static_cast<byte_t>(u));
-          if (v->relocatable()) cur().relocs.push_back({static_cast<std::size_t>(st.address) + 3 * i, 6});
+          addMods(st, *v, static_cast<std::size_t>(st.address) + 3 * i, 6);
         }
         emit(st, std::move(out));
         break;
@@ -469,14 +525,20 @@ class Engine {
       err(st, st.operandCol, "Address " + std::to_string(v->value) + " does not fit SIC's 15-bit field");
       return;
     }
+    if (v->relocatable()) cur().fixedLines.push_back(st.line);  // SIC's 15-bit address has no M record
     const auto a = static_cast<unsigned>(v->value);
     emit(st, {st.inst->opcode, static_cast<byte_t>((st.indexed ? 0x80 : 0) | (a >> 8)),
               static_cast<byte_t>(a & 0xFF)});
   }
 
   void encodeXe(Statement& st) {
-    auto v = eval(st, st.expr, true);
+    auto v = eval(st, st.expr, true, /*allowExternals=*/true);
     if (!v) return;
+    if (!v->externals.empty() && !st.extended) {
+      err(st, st.operandCol, v->externals.front().second + " is an external reference; use +" +
+                                 statementText(st) + " (format 4)");
+      return;
+    }
 
     const unsigned n = st.mode != AddrMode::Immediate;
     const unsigned i = st.mode != AddrMode::Indirect;
@@ -491,7 +553,7 @@ class Engine {
         return;
       }
       const auto a = static_cast<unsigned>(v->value);
-      if (v->relocatable()) cur().relocs.push_back({static_cast<std::size_t>(st.address) + 1, 5});
+      addMods(st, *v, static_cast<std::size_t>(st.address) + 1, 5);
       emit(st, {op, static_cast<byte_t>((x << 7) | 0x10 | (a >> 16)), static_cast<byte_t>(a >> 8),
                 static_cast<byte_t>(a)});
       return;
@@ -542,8 +604,10 @@ class Engine {
         b = 1; disp = ta - *cur().base;
       } else if (ta >= 0 && ta <= 4095) {
         disp = ta;
-        if (v->relocatable())
+        if (v->relocatable()) {
           diags_.warning(st.line, st.operandCol, "Direct addressing of a relocatable operand cannot be relocated; consider +" + st.mnemonic);
+          cur().fixedLines.push_back(st.line);
+        }
       } else {
         err(st, st.operandCol, "Target " + hex(ta, 4) + " is out of format-3 range (PC displacement " +
                                    std::to_string(pcDisp) + (cur().base ? ", base displacement " + std::to_string(ta - *cur().base) : ", no BASE active") +

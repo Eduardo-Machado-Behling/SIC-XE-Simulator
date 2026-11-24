@@ -7,6 +7,9 @@
 #include <vector>
 
 #include "assembler/assembler.hpp"
+#include "assembler/object_text.hpp"
+#include <fstream>
+#include <sstream>
 #include "memory/CodeMemory.hpp"
 
 using namespace sicxe;
@@ -459,6 +462,90 @@ TEST(single_section_object_matches_info) {
     CHECK(found);
   }
   CHECK(s.notes.size() == 2 && s.notes[0].text == "LDA #5" && s.notes[1].text == "WORD 42");
+}
+
+// ---------------------------------------------------------------------------
+// External references (Beck 2.3.5): EXTDEF / EXTREF, D, R and revised M records.
+static std::string readData(const char* name) {
+  std::ifstream in(std::string(SICXE_TEST_DATA) + "/" + name, std::ios::binary);
+  std::ostringstream text;
+  text << in.rdbuf();
+  return text.str();
+}
+
+TEST(beck_fig2_17_records) {
+  const auto r = Assembler().assembleDetailed(readData("beck_fig2_15.asm"));
+  for (const auto& d : r.info.diagnostics) std::printf("  (%s)\n", d.toString().c_str());
+  CHECK(r.ok());
+  const std::vector<std::string> got = beckRecords(renderObjectText(r.object).text);
+  std::vector<std::string> want;
+  std::istringstream expected(readData("beck_fig2_17.txt"));
+  for (std::string line; std::getline(expected, line);) want.push_back(line);
+  CHECK(got.size() == want.size());
+  for (std::size_t i = 0; i < std::min(got.size(), want.size()); ++i) {
+    if (got[i] != want[i]) std::printf("  record %zu\n   got  %s\n   want %s\n", i + 1, got[i].c_str(), want[i].c_str());
+    CHECK(got[i] == want[i]);
+  }
+}
+
+TEST(extref_in_format3_suggests_plus) {
+  CHECK(hasError("SECA START 0\n EXTREF RDREC\n JSUB RDREC\n END\n",
+                 "RDREC is an external reference; use +JSUB RDREC (format 4)"));
+  CHECK(errorsOf("SECA START 0\n EXTREF RDREC\n +JSUB RDREC\n END\n").empty());
+}
+
+TEST(extdef_of_undefined_symbol) {
+  CHECK(hasError("SECA START 0\n EXTDEF NOPE\n RSUB\n END\n", "EXTDEF names NOPE, which this section does not define"));
+}
+
+TEST(external_in_equ_base_and_products) {
+  CHECK(hasError("SECA START 0\n EXTREF EXT\nLIM EQU EXT\n END\n", "external symbol"));
+  CHECK(hasError("SECA START 0\n EXTREF EXT\n BASE EXT\n END\n", "external symbol"));
+  CHECK(hasError("SECA START 0\n EXTREF EXT\n WORD EXT*2\n END\n", "external symbol"));
+  CHECK(hasError("SECA START 0\n EXTREF EXT\n BYTE EXT\n END\n", "external symbol"));
+}
+
+TEST(extdef_absolute_equ) {
+  const auto r = Assembler().assembleDetailed("SECA START 0\nK EQU 3\n EXTDEF K\n RSUB\n END\n");
+  CHECK(r.ok());
+  if (r.object.sections.size() != 1) { CHECK(false); return; }
+  CHECK(r.object.sections[0].absoluteDefines == std::set<std::string>{"K"});
+  CHECK(r.object.sections[0].defines.size() == 1 && r.object.sections[0].defines[0].second == 3);
+}
+
+TEST(external_terms_and_local_relocation_make_mods) {
+  const auto r = Assembler().assembleDetailed(
+      "SECA START 0\n EXTREF EXT,OTHER\nLOC RSUB\n WORD LOC\n WORD EXT-OTHER+4\n END\n");
+  CHECK(r.ok());
+  if (r.object.sections.size() != 1) { CHECK(false); return; }
+  const auto& mods = r.object.sections[0].mods;
+  CHECK(mods.size() == 3);
+  if (mods.size() != 3) return;
+  CHECK(mods[0].address == 3 && mods[0].halfBytes == 6 && mods[0].sign == '+' && mods[0].symbol == "SECA");
+  CHECK(mods[1].address == 6 && mods[1].sign == '+' && mods[1].symbol == "EXT");
+  CHECK(mods[2].address == 6 && mods[2].sign == '-' && mods[2].symbol == "OTHER");
+  CHECK(sameBytes(r.object.sections[0].text[0].bytes, {0x4F, 0, 0, 0, 0, 0, 0, 0, 4}));
+}
+
+TEST(format3_direct_relocatable_is_fixed_field) {
+  const auto r = Assembler().assembleDetailed("PROG START 0\nV WORD 1\n RESB 4096\n LDA V\n END\n");
+  CHECK(r.ok());
+  if (r.object.sections.size() != 1) { CHECK(false); return; }
+  CHECK(r.object.sections[0].fixedFieldLines == std::vector<int>{4});
+
+  AssemblerOptions sic;
+  sic.mode = ArchMode::Sic;
+  const auto s = Assembler(sic).assembleDetailed("PROG START 0\n LDA V\nV WORD 1\n END\n");
+  CHECK(s.ok());
+  if (s.object.sections.size() != 1) { CHECK(false); return; }
+  CHECK(s.object.sections[0].fixedFieldLines == std::vector<int>{2});
+}
+
+TEST(sic_mode_rejects_sections) {
+  AssemblerOptions sic;
+  sic.mode = ArchMode::Sic;
+  CHECK(hasError("SECA START 0\n RSUB\nSECB CSECT\n RSUB\n END\n", "control sections and external symbols need SIC/XE", sic));
+  CHECK(hasError("SECA START 0\n EXTREF EXT\n RSUB\n END\n", "control sections and external symbols need SIC/XE", sic));
 }
 
 int main(int argc, char** argv) {

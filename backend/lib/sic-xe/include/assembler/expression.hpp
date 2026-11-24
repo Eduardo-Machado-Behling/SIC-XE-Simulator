@@ -19,6 +19,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include "assembler/diagnostics.hpp"
 
@@ -40,6 +42,9 @@ struct ExprNode {
 struct Value {
   std::int64_t value = 0;
   int relocDegree = 0;
+  // EXTREF terms of the expression, each with its sign. Their values are unknown to the
+  // assembler: they contribute 0 and become modification records.
+  std::vector<std::pair<char, std::string>> externals;
   bool relocatable() const { return relocDegree != 0; }
 };
 
