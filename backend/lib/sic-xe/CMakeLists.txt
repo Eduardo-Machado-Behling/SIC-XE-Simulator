@@ -13,6 +13,7 @@ set(ASSEMBLER_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/expression.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/isa.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/linker.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/loader.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/macro_processor.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/macro_remap.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Assembler/macro_text.cpp"
@@ -154,6 +155,13 @@ if(BUILD_TESTING)
         add_sicxe_linker_test(nonzero_start_multifile "nonzero-start-multifile")
         add_sicxe_linker_test(fixed_field_at_nonzero_csaddr "fixed-field-at-nonzero-csaddr")
         add_sicxe_linker_test(sic_files_cannot_link "sic-files-cannot-link")
+        add_sicxe_linker_test(beck_fig3_10a_memory "loader.beck-fig-3-10a-memory")
+        add_sicxe_linker_test(load_at_zero_is_identity "loader.load-at-zero-is-identity")
+        add_sicxe_linker_test(program_must_fit "loader.program-must-fit")
+        add_sicxe_linker_test(relocated_field_overflow "loader.field-overflow")
+        add_sicxe_linker_test(absolute_program_with_load_address "loader.absolute-program")
+        add_sicxe_linker_test(source_map_is_absolute_and_per_file "loader.source-map")
+        add_sicxe_linker_test(fixed_field_with_load_address "loader.fixed-field")
 
         add_sicxe_macro_test(identity_for_source_without_macros "identity.source-without-macros")
         add_sicxe_macro_test(identity_preserves_crlf "identity.preserves-crlf")

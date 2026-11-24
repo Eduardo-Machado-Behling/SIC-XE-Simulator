@@ -11,6 +11,7 @@
 
 #include "assembler/assembler.hpp"
 #include "assembler/linker.hpp"
+#include "assembler/loader.hpp"
 #include "assembler/object_program.hpp"
 #include "assembler/object_text.hpp"
 
@@ -288,6 +289,109 @@ TEST(sic_files_cannot_link) {
   const LinkResult r = link({load("a.asm", "MAIN ENTRY 0\n RSUB\n END\n", sic),
                              load("b.asm", "SUBB START 0\n LDA V\nV WORD 1\n END\n", sic)});
   CHECK(hasDiag(r, "b.asm", 2, "cannot be relocated"));
+}
+
+// ---------------------------------------------------------------------------
+// The relocating loader: adds the load address to every field that is relative to the program.
+static std::vector<std::uint8_t> memoryBytes(const CodeMemory& memory, std::size_t address, std::size_t count) {
+  std::vector<std::uint8_t> out;
+  for (std::size_t i = 0; i < count; ++i)
+    if (auto byte = memory.read(address + i)) out.push_back(*byte);
+  return out;
+}
+
+static std::vector<std::uint8_t> bytesOfHex(const std::string& hex) {
+  std::vector<std::uint8_t> out;
+  for (std::size_t i = 0; i + 1 < hex.size(); i += 2) out.push_back(static_cast<std::uint8_t>(std::stoi(hex.substr(i, 2), nullptr, 16)));
+  return out;
+}
+
+static bool hasLoadDiag(const LoadResult& r, const std::string& file, int line, const std::string& needle) {
+  for (const auto& d : r.diagnostics)
+    if (d.file == file && d.diagnostic.line == line && d.diagnostic.message.find(needle) != std::string::npos) return true;
+  for (const auto& d : r.diagnostics) std::printf("  (%s:%d %s)\n", d.file.c_str(), d.diagnostic.line, d.diagnostic.message.c_str());
+  return false;
+}
+
+TEST(beck_fig3_10a_memory) {
+  const LinkResult linked = link(fig38());
+  const LoadResult r = relocateAndLoad(linked, 0x4000, 0x100000);
+  CHECK(r.ok());
+  std::istringstream expected(readData("beck_fig3_10a.txt"));
+  int words = 0;
+  for (std::string line; std::getline(expected, line);) {
+    if (!line.empty() && line.back() == '\r') line.pop_back();
+    if (line.empty() || line[0] == '#') continue;
+    const std::size_t address = std::stoul(line.substr(0, line.find(' ')), nullptr, 16);
+    const auto want = bytesOfHex(line.substr(line.find(' ') + 1));
+    if (memoryBytes(r.memory, address, want.size()) != want) std::printf("  (memory at %zX differs)\n", address);
+    CHECK(memoryBytes(r.memory, address, want.size()) == want);
+    ++words;
+  }
+  CHECK(words == 12);
+  CHECK(r.entryPoint == 0x4020);  // PROGA ends with END REF1
+  // Fig. 3.10(b): REF4 of PROGA is 000126 after linking, and 004126 once loaded at 4000.
+  const LoadStep* ref4 = nullptr;
+  for (const auto& step : r.trace) if (step.address == 0x4054) ref4 = &step;
+  CHECK(ref4 != nullptr);
+  if (ref4) CHECK(ref4->before == 0x126 && ref4->after == 0x4126);
+  CHECK(r.trace.size() == 10);  // one per relative field of the linked program
+}
+
+TEST(load_at_zero_is_identity) {
+  const LinkResult linked = link(fig38());
+  const LoadResult r = relocateAndLoad(linked, 0, 0x100000);
+  CHECK(r.ok());
+  for (const auto& run : linked.linked.sections[0].text)
+    CHECK(memoryBytes(r.memory, run.address, run.bytes.size()) == run.bytes);
+  CHECK(r.entryPoint == 0x20);
+}
+
+TEST(program_must_fit) {
+  // MAIN is 0x30 long, its last 0x10 bytes only RESB: the whole length must fit, not the emitted bytes.
+  const LinkResult linked = link({load("a.asm", "MAIN ENTRY 0\n RSUB\n RESB 0x2D\n END\n")});
+  CHECK(linked.ok() && linked.linked.sections[0].length == 0x30);
+  CHECK(hasLoadDiag(relocateAndLoad(linked, 0xE0, 0x100), "a.asm", 1, "does not fit"));
+  CHECK(relocateAndLoad(linked, 0xD0, 0x100).ok());
+}
+
+TEST(relocated_field_overflow) {
+  LinkResult linked;
+  ControlSection section;
+  section.name = "P";
+  section.length = 3;
+  section.text.push_back({0, {0xFF, 0xFF, 0xF0}});
+  section.mods.push_back({0, 6, '+', "P", 7});
+  linked.linked.sections.push_back(section);
+  linked.origins.push_back({0, 3, "a.asm", "P"});
+  CHECK(hasLoadDiag(relocateAndLoad(linked, 0x20, 0x100000), "a.asm", 7, "overflows"));
+  CHECK(relocateAndLoad(linked, 0, 0x100000).ok());
+}
+
+TEST(absolute_program_with_load_address) {
+  const LinkResult linked = link({load("a.asm", "ABS START 0x1000\n RSUB\n END\n")});
+  CHECK(linked.ok());
+  CHECK(hasLoadDiag(relocateAndLoad(linked, 0x10, 0x100000), "a.asm", 1,
+                    "an absolute program cannot be relocated; set the load address to 0"));
+  const LoadResult r = relocateAndLoad(linked, 0, 0x100000);
+  CHECK(r.ok() && r.memory.read(0x1000).has_value() && !r.memory.read(0).has_value());
+  CHECK(r.entryPoint == 0x1000);
+}
+
+TEST(source_map_is_absolute_and_per_file) {
+  const LinkResult linked = link({load("a.asm", "MAIN ENTRY 0\n RSUB\n END\n"), load("b.asm", "SUBB START 0\n RSUB\n END\n")});
+  const LoadResult r = relocateAndLoad(linked, 0x1000, 0x100000);
+  CHECK(r.ok() && r.sourceMap.size() == 2);
+  if (r.sourceMap.size() != 2) return;
+  CHECK(r.sourceMap[0].address == 0x1000 && r.sourceMap[0].size == 3 && r.sourceMap[0].file == "a.asm" && r.sourceMap[0].line == 2);
+  CHECK(r.sourceMap[1].address == 0x1003 && r.sourceMap[1].file == "b.asm" && r.sourceMap[1].line == 2);
+}
+
+TEST(fixed_field_with_load_address) {
+  const LinkResult linked = link({load("b.asm", "SUBB START 0\nV WORD 1\n RESB 4096\n LDA V\n END\n")});
+  CHECK(linked.ok());
+  CHECK(hasLoadDiag(relocateAndLoad(linked, 0x10, 0x100000), "b.asm", 4, "cannot be relocated"));
+  CHECK(relocateAndLoad(linked, 0, 0x100000).ok());
 }
 
 int main(int argc, char** argv) {
