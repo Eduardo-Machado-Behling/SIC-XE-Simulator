@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { MacroReport, MacroTraceStep } from "@/lib/simulator/ExecutionEvent";
 import type { TraceLine } from "@/lib/simulator/macroBands";
+import { useT, type MessageKey } from "@/lib/i18n";
 
 // ============================================================
 // Types
@@ -18,6 +19,7 @@ export type MacroTraceProps = {
 type Mode = "Normal" | "Definition" | "Expansion";
 
 const MODES: Mode[] = ["Normal", "Definition", "Expansion"];
+const MODE_LABEL: Record<Mode, MessageKey> = { Normal: "trace.normal", Definition: "trace.definition", Expansion: "trace.expansion" };
 
 // ============================================================
 // Helpers
@@ -63,6 +65,7 @@ function lineOf(step: MacroTraceStep): TraceLine | null {
 // ============================================================
 
 export function MacroTrace({ report, onSelectLine }: MacroTraceProps) {
+    const t = useT();
     const { steps, truncated } = report.trace;
     const [current, setCurrent] = useState(0);
     const currentRow = useRef<HTMLTableRowElement | null>(null);
@@ -79,7 +82,7 @@ export function MacroTrace({ report, onSelectLine }: MacroTraceProps) {
     }, [current]);
 
     if (steps.length === 0) {
-        return <p role="status" className="px-3 py-3 text-xs text-zinc-500">No trace steps</p>;
+        return <p role="status" className="px-3 py-3 text-xs text-zinc-400">No trace steps</p>;
     }
 
     const index = Math.min(current, steps.length - 1);
@@ -98,49 +101,51 @@ export function MacroTrace({ report, onSelectLine }: MacroTraceProps) {
     return (
         <div className="flex min-h-0 flex-1 flex-col">
             {truncated && (
-                <p role="alert" className="px-3 py-1 text-xs text-amber-400">Trace truncated at 5000 steps</p>
+                <p role="alert" className="px-3 py-1 text-xs text-amber-400">{t("trace.truncated")}</p>
             )}
             <div className="flex flex-wrap items-center gap-2 px-3 py-2 text-xs">
-                <button type="button" aria-label="Previous step" className={button} disabled={index === 0} onClick={() => goTo(index - 1)}>◀</button>
+                <button type="button" aria-label={t("trace.previous")} className={button} disabled={index === 0} onClick={() => goTo(index - 1)}>◀</button>
                 <input
                     type="range"
-                    aria-label="Trace step"
+                    aria-label={t("trace.step")}
                     min={1}
                     max={steps.length}
                     value={index + 1}
                     onChange={(event) => goTo(Number(event.target.value) - 1)}
                     className="min-w-24 flex-1"
                 />
-                <button type="button" aria-label="Next step" className={button} disabled={index === steps.length - 1} onClick={() => goTo(index + 1)}>▶</button>
+                <button type="button" aria-label={t("trace.next")} className={button} disabled={index === steps.length - 1} onClick={() => goTo(index + 1)}>▶</button>
                 <span className="text-zinc-400">{index + 1} / {steps.length}</span>
-                <ul aria-label="Mode" className="flex gap-1">
+                <ul aria-label={t("trace.mode")} className="flex gap-3">
                     {MODES.map((mode) => (
                         <li
                             key={mode}
                             aria-current={mode === lit ? "true" : undefined}
-                            className={`rounded px-2 py-0.5 ${mode === lit ? "bg-sky-700 text-white" : "bg-zinc-800 text-zinc-500"}`}
+                            className={`flex items-center gap-1.5 ${mode === lit ? "font-semibold text-sky-200" : "text-zinc-400"}`}
                         >
-                            {mode}
+                            <span aria-hidden="true" className={`h-2 w-2 rounded-full ${mode === lit ? "bg-sky-400" : "border border-zinc-500"}`} />
+                            {t(MODE_LABEL[mode])}
                         </li>
                     ))}
                 </ul>
+                <p className="w-full text-zinc-400">{t("trace.legend")}</p>
             </div>
             <div className="flex-1 min-h-0 overflow-auto px-3 pb-3">
                 {/* Every column but Text keeps its width and never wraps; Text
-                    takes what is left and is cut with an ellipsis, so Action
-                    stays on screen in the ~420px panel (at 12px the other
-                    columns of the demo alone are wider than that). */}
-                <table aria-label="Macro processor trace" className="w-full text-[11px]">
+                    takes what is left, never less than 18ch, and is cut with an
+                    ellipsis. A narrower panel scrolls sideways instead of
+                    hiding the line that was read. */}
+                <table aria-label={t("trace.table")} className="w-full text-xs">
                     <thead className="sticky top-0 bg-zinc-900 text-left text-zinc-400">
                         <tr>
-                            <th scope="col" className="py-1 pr-2 font-medium">Step</th>
-                            <th scope="col" className="py-1 pr-2 font-medium">Read</th>
+                            <th scope="col" className="py-1 pr-2 font-medium">{t("trace.colStep")}</th>
+                            <th scope="col" className="py-1 pr-2 font-medium">{t("trace.colRead")}</th>
                             <th scope="col" className="py-1 pr-2 font-medium">d</th>
                             <th scope="col" className="py-1 pr-2 font-medium">e</th>
-                            <th scope="col" className="w-full py-1 pr-2 font-medium">
-                                <span className="block w-0 min-w-full overflow-hidden text-ellipsis whitespace-nowrap">Text</span>
+                            <th scope="col" className="w-full min-w-[18ch] py-1 pr-2 font-medium">
+                                <span className="block w-0 min-w-full overflow-hidden text-ellipsis whitespace-nowrap">{t("trace.colText")}</span>
                             </th>
-                            <th scope="col" className="py-1 font-medium">Action</th>
+                            <th scope="col" className="py-1 font-medium">{t("trace.colAction")}</th>
                         </tr>
                     </thead>
                     <tbody className="font-mono text-zinc-200">
@@ -155,8 +160,8 @@ export function MacroTrace({ report, onSelectLine }: MacroTraceProps) {
                                 <td className="pr-2 whitespace-nowrap">{formatRead(step)}</td>
                                 <td className="pr-2">{step.d}</td>
                                 <td className="pr-2 whitespace-nowrap">{formatExpansionFlag(step)}</td>
-                                <td className="pr-2">
-                                    {/* Zero intrinsic width: the line never widens the table. */}
+                                <td className="min-w-[18ch] pr-2">
+                                    {/* Zero intrinsic width: the line never widens the table past its 18ch floor. */}
                                     <span className="block w-0 min-w-full overflow-hidden text-ellipsis whitespace-pre" title={step.text}>
                                         {step.text}
                                     </span>

@@ -12,8 +12,8 @@ export const DEFAULT_MACRO_SOURCE = `. SIC/XE macro tour. Read it from top to bo
 . To see the result, open macro.asm and press Run.
 . - MASMAPRG.ASM opens side by side with macro.asm. Coloured bands
 .   link each call of the program below to the lines it produced.
-.   MASMAPRG.ASM is read-only: edit macro.asm and run it again. When
-.   the Run button reads Stop, press Stop, then Run.
+.   MASMAPRG.ASM is read-only: edit macro.asm and press Run again.
+.   Run always assembles the file that is open in the editor.
 . - The Macros tab, next to CPU and Assembler, has two sub-tabs:
 .   Tables (the macros, their definitions and the expansions) and
 .   Trace (every line the processor read, one step at a time).

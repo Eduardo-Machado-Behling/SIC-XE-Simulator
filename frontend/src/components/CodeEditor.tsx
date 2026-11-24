@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/lib/i18n";
 import Editor, { type OnMount } from "@monaco-editor/react";
 import { useEffect, useState, type ReactNode } from "react";
 import type { editor } from "monaco-editor";
@@ -84,6 +85,7 @@ export function CodeEditor({
     readOnly = false,
     theme = "vs-dark",
 }: CodeEditorProps) {
+    const t = useT();
     const [editorInstance, setEditorInstance] = useState<editor.IStandaloneCodeEditor | null>(null);
     const [monacoInstance, setMonacoInstance] = useState<Parameters<OnMount>[1] | null>(null);
 
@@ -228,8 +230,8 @@ export function CodeEditor({
                     <span>{path}</span>
 
                     {readOnly && (
-                        <span className="rounded bg-amber-950/60 px-1.5 text-[10px] uppercase tracking-wide text-amber-300">
-                            generated
+                        <span className="rounded bg-amber-950/60 px-1.5 text-[11px] uppercase tracking-wide text-amber-300">
+                            {t("editor.generated")}
                         </span>
                     )}
 
