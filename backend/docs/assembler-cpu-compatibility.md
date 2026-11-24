@@ -112,7 +112,7 @@ These are follow-up cases, not tests claimed as passing in this review. Each row
 
 ### 1. The assembler accepts instructions without CPU execution support
 
-The assembler defines 60 mnemonics. The CPU instruction table has entries for all except `SVC`; among the entries that exist, 20 implementations explicitly throw `UnimplementedInstruction`:
+The instruction table (`lib/sic-xe/include/InstructionTable.hpp`) has 60 rows, shared by the assembler and the CPU; its `executable` column marks the 21 that do not run. The CPU binds an implementation to every row except `SVC`, and 20 of those implementations explicitly throw `UnimplementedInstruction` (the test `instruction_table_matches_cpu` keeps the column and the CPU in step):
 
 - Floating point: `ADDF`, `COMPF`, `DIVF`, `LDF`, `MULF`, `SUBF`.
 - Processor/system operations: `FIX`, `FLOAT`, `HIO`, `LPS`, `NORM`, `SIO`, `TIO`.
@@ -135,7 +135,7 @@ The assembler permits a one-byte instruction at address `0xFFFFF` in the 1 MiB X
 
 ## Recommended compatibility contract
 
-1. Define one shared capability table for assembler-accepted mnemonics, supported formats, operand schemas, and executable implementations.
+1. ~~Define one shared capability table~~ Done: `kInstructionTable` holds mnemonics, formats, operand types and the `executable` column for both the assembler and the CPU.
 2. Until instruction bodies exist, make the assembler reject those mnemonics for the executable SIC/XE target, or expose an explicit “encodable but not executable” mode.
 3. Keep SIC-mode assembly separate from SIC/XE execution, or add a decoder mode that parses SIC's 15-bit address and index layout.
 4. Validate format-2 register combinations against register width and instruction semantics during assembly.

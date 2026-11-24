@@ -74,7 +74,7 @@ That structure is the handoff between syntax and assembly semantics: a Statement
 | RegCount | register plus count expression | register nibble + count minus one |
 | Number | one service-number expression | number in upper nibble |
 
-The table in `assembler/isa.cpp:10–47` is the assembler’s encoding catalog. It is not the CPU instruction-execution table.
+The assembler’s encoding catalog in `assembler/isa.cpp` is derived at compile time from `kInstructionTable` (`lib/sic-xe/include/InstructionTable.hpp`), the same table `InstructionSet` binds the CPU implementations to. Its `executable` column says whether the CPU runs each instruction.
 
 ## 3. Line scanning and statement parsing
 
