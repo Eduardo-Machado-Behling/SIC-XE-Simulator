@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -51,12 +51,12 @@ async function openPage() {
     return user;
 }
 
-// Run is a toggle: after a run the button reads Stop.
+// Run always assembles the open file; wait until this Run's load has settled.
 async function run(user: ReturnType<typeof userEvent.setup>) {
-    const stop = screen.queryByRole("button", { name: "Stop" });
-    if (stop) await user.click(stop);
+    const calls = fake.loadFile.mock.calls.length;
     await user.click(screen.getByRole("button", { name: "Run" }));
-    await screen.findByRole("button", { name: "Stop" }).catch(() => undefined);
+    await waitFor(() => expect(fake.loadFile.mock.calls.length).toBe(calls + 1));
+    await act(async () => {});
 }
 
 function assemblerPanel(): HTMLElement {
@@ -111,7 +111,6 @@ describe("EditorPage symbol table", () => {
         expect(await within(assemblerPanel()).findByText("FIRST")).toBeTruthy();
 
         fake.loadFile.mockRejectedValueOnce(new Error("assembly failed"));
-        await user.click(screen.getByRole("button", { name: "Stop" }));
         await user.click(screen.getByRole("button", { name: "Run" }));
 
         await within(assemblerPanel()).findByRole("status");

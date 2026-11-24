@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/lib/i18n";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -57,6 +58,7 @@ export function MemoryTable({
     consumedAddresses = [],
     pcScrollRevision = 0,
 }: MemoryTableProps) {
+    const t = useT();
     const regionRef = useRef<HTMLDivElement>(null);
     const headRef = useRef<HTMLTableSectionElement>(null);
     const [layout, setLayout] = useState<Layout>({ viewportHeight: 0, rowHeight: DEFAULT_ROW_HEIGHT });
@@ -208,7 +210,7 @@ export function MemoryTable({
                 data-memory-address={address}
                 className="text-sm leading-5 hover:bg-zinc-800"
             >
-                <td className="px-3 py-[5px] font-mono text-zinc-500 whitespace-nowrap shadow-[inset_0_-1px_0_var(--color-zinc-800)]">
+                <td className="px-3 py-[5px] font-mono text-zinc-400 whitespace-nowrap shadow-[inset_0_-1px_0_var(--color-zinc-800)]">
                     {hex(address, 6)}
                 </td>
 
@@ -241,8 +243,8 @@ export function MemoryTable({
                             key={`${byteOffset}-${isConsumed ? changeRevision : "stable"}`}
                             data-address={byteAddress}
                             aria-current={isPc ? "location" : undefined}
-                            aria-label={isPc ? `Program counter: ${hex(byteAddress, 1)}` : undefined}
-                            title={isPc ? "Program counter" : undefined}
+                            aria-label={isPc ? t("cpu.pcAt", { address: hex(byteAddress, 1) }) : undefined}
+                            title={isPc ? t("cpu.pc") : undefined}
                             className={`
                                 px-0.5
                                 py-[5px]
@@ -250,7 +252,7 @@ export function MemoryTable({
                                 font-mono
                                 tabular-nums
                                 shadow-[inset_0_-1px_0_var(--color-zinc-800)]
-                                ${value !== 0 ? "text-zinc-100" : "text-zinc-600"}
+                                ${value !== 0 ? "text-zinc-50" : "text-zinc-400"}
                                 ${isPc ? "sim-pc-cell" : ""}
                                 ${isConsumed ? "sim-instruction-consume" : ""}
                             `}
@@ -310,10 +312,10 @@ export function MemoryTable({
                     text-zinc-400
                 "
             >
-                <span>{label}</span>
+                <h2>{label}</h2>
 
                 {pcIsValid && (
-                    <span className="font-mono normal-case text-zinc-600">
+                    <span className="font-mono normal-case text-zinc-300">
                         PC 0x{hex(pcAddress, 6)}
                     </span>
                 )}
@@ -330,9 +332,9 @@ export function MemoryTable({
             >
                 <table className="w-full min-w-[30rem] table-fixed border-collapse">
                     <thead ref={headRef} className="sticky top-0 z-10 bg-zinc-900">
-                        <tr className="text-[11px] uppercase tracking-wide text-zinc-500">
+                        <tr className="text-xs uppercase tracking-wide text-zinc-400">
                             <th className="w-20 px-3 py-[5px] text-left font-medium shadow-[inset_0_-1px_0_var(--color-zinc-800)]">
-                                Address
+                                {t("cpu.address")}
                             </th>
 
                             {Array.from({ length: bytesPerRow }, (_, offset) => (

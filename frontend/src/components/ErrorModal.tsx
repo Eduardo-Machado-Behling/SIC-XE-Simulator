@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, X } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
 type ErrorModalProps = {
     title: string;
@@ -9,6 +10,7 @@ type ErrorModalProps = {
 };
 
 export function ErrorModal({ title, detail, onClose }: ErrorModalProps) {
+    const t = useT();
     return (
         <div
             className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
@@ -38,10 +40,10 @@ export function ErrorModal({ title, detail, onClose }: ErrorModalProps) {
                     <button
                         type="button"
                         onClick={onClose}
-                        aria-label="Close error message"
-                        className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-red-400"
+                        aria-label={t("error.close")}
+                        className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-red-400"
                     >
-                        <X size={17} />
+                        <X size={17} aria-hidden="true" />
                     </button>
                 </div>
                 <div className="mt-6 flex justify-end">
@@ -49,9 +51,9 @@ export function ErrorModal({ title, detail, onClose }: ErrorModalProps) {
                         type="button"
                         autoFocus
                         onClick={onClose}
-                        className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 focus:ring-offset-zinc-950"
+                        className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400"
                     >
-                        Dismiss
+                        {t("error.dismiss")}
                     </button>
                 </div>
             </section>

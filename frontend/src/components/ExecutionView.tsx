@@ -11,6 +11,7 @@ import type { TraceLine } from "@/lib/simulator/macroBands";
 import { Tabs, type TabDefinition } from "@/components/Tabs";
 import { Separator } from "react-resizable-panels";
 import { useState } from "react";
+import { useT } from "@/lib/i18n";
 
 export interface ArchProps {
     arch: ArchitectureInfo | null
@@ -30,6 +31,7 @@ export interface ArchProps {
 }
 
 export function ExecutionView({ arch, registers, memory, memorySize, pc, changedMemory, changedRegisters, changeRevision, consumedMemory, symbols, macros = null, onSelectExpansion, selectedExpansion = null, onSelectLine }: ArchProps) {
+    const t = useT();
     const [selectedTab, setSelectedTab] = useState("cpu");
 
     // The memory table scrolls to the PC on every execution update, but a
@@ -54,6 +56,7 @@ export function ExecutionView({ arch, registers, memory, memorySize, pc, changed
                 flex-col
             "
             >
+                <p role="status" className="px-3 py-3 text-xs text-zinc-400">{t("exec.noArch")}</p>
             </aside>
         );
 
@@ -64,25 +67,25 @@ export function ExecutionView({ arch, registers, memory, memorySize, pc, changed
             label: "CPU",
             content: (
                 <div className="flex h-full min-h-0 w-full flex-col">
-                    <RegisterTable registers={registers} changedRegisters={changedRegisters} changeRevision={changeRevision} />
+                    <RegisterTable label={t("cpu.registers")} registers={registers} changedRegisters={changedRegisters} changeRevision={changeRevision} />
                     <Separator></Separator>
 
-                    <MemoryTable memory={memory} addressSpaceSize={memorySize ? memorySize : 1 << 10} pcAddress={pc} pcScrollRevision={pcScroll.count} consumedAddresses={consumedMemory} changedAddresses={changedMemory} changeRevision={changeRevision}/>
+                    <MemoryTable label={t("cpu.memory")} memory={memory} addressSpaceSize={memorySize ? memorySize : 1 << 10} pcAddress={pc} pcScrollRevision={pcScroll.count} consumedAddresses={consumedMemory} changedAddresses={changedMemory} changeRevision={changeRevision}/>
                     <div className="w-full h-4"></div>
                 </div>
             ),
         },
         {
             id: "assembler",
-            label: "Assembler",
+            label: t("asm.tab"),
             content: <SymbolTable symbols={symbols} />,
         },
         {
             id: "macros",
-            label: "Macros",
+            label: t("macro.tab"),
             content: <MacroView report={macros} onSelectExpansion={onSelectExpansion ?? (() => {})} selectedExpansion={selectedExpansion} onSelectLine={onSelectLine} />,
         },
     ];
 
-    return <Tabs label="Execution view" tabs={tabs} selectedId={selectedTab} onSelect={setSelectedTab} />;
+    return <Tabs label={t("exec.label")} tabs={tabs} selectedId={selectedTab} onSelect={setSelectedTab} />;
 }

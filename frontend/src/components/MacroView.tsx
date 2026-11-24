@@ -5,6 +5,7 @@ import { MacroTrace } from "@/components/MacroTrace";
 import type { TraceLine } from "@/lib/simulator/macroBands";
 import { Tabs, type TabDefinition } from "@/components/Tabs";
 import type { MacroReport } from "@/lib/simulator/ExecutionEvent";
+import { useT } from "@/lib/i18n";
 
 // ============================================================
 // Types
@@ -24,6 +25,7 @@ export type MacroViewProps = {
 // ============================================================
 
 export function MacroView({ report, onSelectExpansion, selectedExpansion = null, onSelectLine }: MacroViewProps) {
+    const t = useT();
     // The processor stopped before it saw a definition (a lone MCEND): there
     // are no tables, but the failure is the processor's, so say why.
     if (report && !report.ok && !report.hasMacros) {
@@ -31,10 +33,10 @@ export function MacroView({ report, onSelectExpansion, selectedExpansion = null,
             <section className="flex h-full min-h-0 w-full flex-col bg-zinc-900">
                 <div role="alert" className="space-y-1 px-3 py-3 text-xs text-red-300">
                     {report.diagnostics.length === 0
-                        ? <p>The macro processor stopped</p>
+                        ? <p>{t("macro.stopped")}</p>
                         : report.diagnostics.map((diagnostic, index) => (
                             <p key={index}>
-                                The macro processor stopped: {diagnostic.line}:{diagnostic.column} {diagnostic.message}
+                                {t("macro.stoppedAt", { position: `${diagnostic.line}:${diagnostic.column}`, message: diagnostic.message })}
                             </p>
                         ))}
                 </div>
@@ -45,8 +47,8 @@ export function MacroView({ report, onSelectExpansion, selectedExpansion = null,
     if (!report?.hasMacros) {
         return (
             <section className="flex h-full min-h-0 w-full flex-col bg-zinc-900">
-                <p role="status" className="px-3 py-3 text-xs text-zinc-500">
-                    Run a program that uses MCDEFN to see the macro processor
+                <p role="status" className="px-3 py-3 text-xs text-zinc-400">
+                    {t("macro.empty")}
                 </p>
             </section>
         );
@@ -55,19 +57,19 @@ export function MacroView({ report, onSelectExpansion, selectedExpansion = null,
     const tabs: TabDefinition[] = [
         {
             id: "tables",
-            label: "Tables",
+            label: t("macro.tables"),
             content: <MacroTables report={report} onSelectExpansion={onSelectExpansion} selectedExpansion={selectedExpansion} />,
         },
         {
             id: "trace",
-            label: "Trace",
+            label: t("macro.trace"),
             content: <MacroTrace report={report} onSelectLine={onSelectLine ?? (() => {})} />,
         },
     ];
 
     return (
         <section className="flex h-full min-h-0 w-full flex-col bg-zinc-900">
-            <Tabs label="Macro processor view" tabs={tabs} defaultTabId="tables" />
+            <Tabs label={t("macro.view")} tabs={tabs} defaultTabId="tables" />
         </section>
     );
 }
