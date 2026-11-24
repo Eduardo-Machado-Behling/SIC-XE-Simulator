@@ -43,11 +43,19 @@ struct FileDiagnostic {
   Diagnostic diagnostic;
 };
 
+// An address field that no modification record can fix: a SIC instruction, or a format-3
+// direct address of a relocatable operand. It is right only where it was assembled.
+struct FixedField {
+  std::string file;
+  int line = 0;
+};
+
 struct LinkResult {
   ObjectProgram linked;               // one section, named after the entry section
   std::vector<OriginRange> origins;   // which file and section each byte range came from
   std::vector<EstabEntry> estab;
   std::vector<LinkStep> trace;
+  std::vector<FixedField> fixedFields;  // the loader refuses them at a nonzero load address
   std::vector<FileDiagnostic> diagnostics;
 
   bool ok() const {
