@@ -3,6 +3,7 @@
 import type { KeyboardEvent } from "react";
 
 import type { MacroActual, MacroDefinition, MacroExpansion, MacroReport } from "@/lib/simulator/ExecutionEvent";
+import { useT } from "@/lib/i18n";
 
 // ============================================================
 // Types
@@ -50,6 +51,7 @@ function SectionTitle({ children }: { children: string }) {
 // ============================================================
 
 export function MacroTables({ report, onSelectExpansion, selectedExpansion = null }: MacroTablesProps) {
+    const t = useT();
     const onRowKey = (event: KeyboardEvent, serial: number) => {
         if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
@@ -59,13 +61,13 @@ export function MacroTables({ report, onSelectExpansion, selectedExpansion = nul
 
     return (
         <div className="flex-1 min-h-0 overflow-auto px-3 pb-3">
-            <SectionTitle>Macros</SectionTitle>
-            <table aria-label="Macro name table" className="w-full text-xs">
+            <SectionTitle>{t("macro.names")}</SectionTitle>
+            <table aria-label={t("macro.nameTable")} className="w-full text-xs">
                 <thead className={HEAD}>
                     <tr>
-                        <th scope="col" className="py-1 font-medium">Name</th>
-                        <th scope="col" className="py-1 font-medium">Prototype</th>
-                        <th scope="col" className="py-1 font-medium">Lines</th>
+                        <th scope="col" className="py-1 font-medium">{t("macro.name")}</th>
+                        <th scope="col" className="py-1 font-medium">{t("macro.prototype")}</th>
+                        <th scope="col" className="py-1 font-medium">{t("macro.lines")}</th>
                     </tr>
                 </thead>
                 <tbody className="font-mono">
@@ -91,7 +93,7 @@ export function MacroTables({ report, onSelectExpansion, selectedExpansion = nul
                 </tbody>
             </table>
 
-            <SectionTitle>Definitions</SectionTitle>
+            <SectionTitle>{t("macro.definitions")}</SectionTitle>
             {report.definitions.map((definition) => (
                 <div
                     key={definition.index}
@@ -102,7 +104,7 @@ export function MacroTables({ report, onSelectExpansion, selectedExpansion = nul
                     <div className="flex items-center gap-2 text-xs text-zinc-300">
                         <span className="font-medium">{definitionHeader(definition)}</span>
                         {!definition.active && (
-                            <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] uppercase text-zinc-400">redefined</span>
+                            <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-300">{t("macro.redefined")}</span>
                         )}
                     </div>
                     {/* Fixed layout: the number column is 2rem in every definition,
@@ -111,7 +113,7 @@ export function MacroTables({ report, onSelectExpansion, selectedExpansion = nul
                         <tbody className="font-mono">
                             {definition.body.map((line, position) => (
                                 <tr key={position} className="border-t border-zinc-800">
-                                    <td className="w-8 py-1 pr-2 text-right text-zinc-500">{position + 1}</td>
+                                    <td className="w-8 py-1 pr-2 text-right text-zinc-400">{position + 1}</td>
                                     <td className="py-1 text-zinc-300">
                                         <span className="block overflow-hidden text-ellipsis whitespace-pre" title={line.text}>{line.text}</span>
                                     </td>
@@ -122,14 +124,14 @@ export function MacroTables({ report, onSelectExpansion, selectedExpansion = nul
                 </div>
             ))}
 
-            <SectionTitle>Expansions</SectionTitle>
-            <table aria-label="Macro expansion table" className="w-full text-xs">
+            <SectionTitle>{t("macro.expansions")}</SectionTitle>
+            <table aria-label={t("macro.expansionTable")} className="w-full text-xs">
                 <thead className={HEAD}>
                     <tr>
                         <th scope="col" className="py-1 font-medium">#</th>
-                        <th scope="col" className="py-1 font-medium">Macro</th>
-                        <th scope="col" className="py-1 font-medium">Arguments</th>
-                        <th scope="col" className="py-1 font-medium">Output</th>
+                        <th scope="col" className="py-1 font-medium">{t("macro.macro")}</th>
+                        <th scope="col" className="py-1 font-medium">{t("macro.arguments")}</th>
+                        <th scope="col" className="py-1 font-medium">{t("macro.output")}</th>
                     </tr>
                 </thead>
                 <tbody className="font-mono">
@@ -145,7 +147,7 @@ export function MacroTables({ report, onSelectExpansion, selectedExpansion = nul
                                 expansion.serial === selectedExpansion ? "bg-sky-900/50" : "hover:bg-zinc-800 focus-visible:bg-zinc-800"
                             }`}
                         >
-                            <td className="py-1 text-zinc-500">{String(expansion.serial).padStart(3, "0")}</td>
+                            <td className="py-1 text-zinc-400">{String(expansion.serial).padStart(3, "0")}</td>
                             <td className="py-1 text-zinc-300" style={{ paddingLeft: `${expansion.depth - 1}rem` }}>{expansion.macro}</td>
                             <td className="py-1 text-zinc-400">{formatArguments(expansion.actuals)}</td>
                             <td className="py-1 text-zinc-400">{expansion.output.from}-{expansion.output.to}</td>

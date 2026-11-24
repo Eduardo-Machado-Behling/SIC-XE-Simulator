@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/lib/i18n";
 import { useEffect, useRef } from "react";
 import { Terminal as XTerminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -129,10 +130,11 @@ export type ConsoleProps = {
 
 export function Console({
     onCommand,
-    banner = "SIC/XE STUDIO\r\nCPU simulator · session ready\r\nType 'help' for commands.\r\n",
-    label = "Terminal",
+    banner = "SIC/XE Simulator\r\nCPU simulator · session ready\r\nType 'help' for commands.\r\n",
+    label,
     handleRef,
 }: ConsoleProps) {
+    const t = useT();
     const containerRef = useRef<HTMLDivElement>(null);
     const terminalRef = useRef<XTerminal | null>(null);
     const commandBufferRef = useRef("");
@@ -261,15 +263,15 @@ export function Console({
                     gap-2
                     border-b
                     border-white/[0.07]
-                    text-[11px]
+                    text-xs
                     text-zinc-400
                 "
             >
-                <TerminalIcon size={14} />
-                <span className="font-semibold tracking-[0.14em] text-zinc-300">{label.toUpperCase()}</span>
-                <span className="ml-auto flex items-center gap-1.5 text-[10px] font-medium tracking-wide text-emerald-300/80">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(74,222,128,0.5)]" />
-                    READY
+                <TerminalIcon size={14} aria-hidden="true" />
+                <h2 className="font-semibold uppercase tracking-[0.14em] text-zinc-300">{label ?? t("term.title")}</h2>
+                <span className="ml-auto flex items-center gap-1.5 text-xs font-medium text-emerald-300">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden="true" />
+                    {t("term.ready")}
                 </span>
             </div>
 

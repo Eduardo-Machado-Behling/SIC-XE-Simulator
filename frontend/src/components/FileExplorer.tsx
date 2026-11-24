@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { Tree, type NodeApi } from "react-arborist";
 import {
@@ -52,6 +53,7 @@ function FileTreeRow({
     onSelectFile: (path: string) => void;
     onSelectNode: (path: string) => void;
 }) {
+    const t = useT();
     const isFolder = node.data.children !== undefined;
     const isActive = !isFolder && node.data.id === activeFile;
     const isSelected = node.data.id === selectedId;
@@ -85,11 +87,11 @@ function FileTreeRow({
                 ? node.isOpen ? <FolderOpen size={15} className="text-sky-300" /> : <Folder size={15} className="text-sky-300" />
                 : node.data.generated
                     ? <Lock size={15} className="text-amber-300" />
-                    : <File size={15} className="text-zinc-500" />}
+                    : <File size={15} className="text-zinc-400" />}
             <span className="truncate">{node.data.name}</span>
             {node.data.generated && (
-                <span className="ml-auto rounded bg-amber-950/60 px-1.5 text-[10px] uppercase tracking-wide text-amber-300">
-                    generated
+                <span className="ml-auto rounded bg-amber-950/60 px-1.5 text-[11px] uppercase tracking-wide text-amber-300">
+                    {t("explorer.generated")}
                 </span>
             )}
         </div>
@@ -105,8 +107,9 @@ export function FileExplorer({
     onDelete,
     onRename,
     onMove,
-    label = "Explorer",
+    label,
 }: FileExplorerProps) {
+    const t = useT();
     const containerRef = useRef<HTMLDivElement>(null);
     const [treeHeight, setTreeHeight] = useState(600);
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -129,7 +132,7 @@ export function FileExplorer({
 
     const renameSelected = () => {
         if (!selectedId || !selectedNode || selectedNode.generated) return;
-        const name = window.prompt("Rename", selectedNode.name)?.trim();
+        const name = window.prompt(t("explorer.renamePrompt"), selectedNode.name)?.trim();
         if (name && name !== selectedNode.name && !name.includes("/") && !name.includes("\\")) {
             onRename(selectedId, name);
             setSelectedId(null);
@@ -138,8 +141,7 @@ export function FileExplorer({
 
     const deleteSelected = () => {
         if (!selectedId || !selectedNode) return;
-        const kind = selectedIsFolder ? "folder and everything inside it" : "file";
-        if (window.confirm(`Delete this ${kind}?`)) {
+        if (window.confirm(t(selectedIsFolder ? "explorer.deleteFolder" : "explorer.deleteFile"))) {
             onDelete([selectedId]);
             setSelectedId(null);
         }
@@ -147,19 +149,19 @@ export function FileExplorer({
 
     return (
         <aside className="flex h-full flex-col border-r border-zinc-800 bg-zinc-900">
-            <div className="flex h-10 shrink-0 items-center justify-between px-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                <span>{label}</span>
-                <div className="flex items-center gap-1">
-                    <ActionButton title={`New file in ${parentFolder || "project"}`} onClick={() => onCreateFile(parentFolder)}>
+            <div className="flex h-10 shrink-0 items-center justify-between gap-2 px-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                <h2 className="min-w-0 truncate">{label ?? t("explorer.title")}</h2>
+                <div className="flex shrink-0 items-center">
+                    <ActionButton title={t("explorer.newFileIn", { folder: parentFolder || t("explorer.project") })} onClick={() => onCreateFile(parentFolder)}>
                         <FilePlus2 size={15} />
                     </ActionButton>
-                    <ActionButton title={`New folder in ${parentFolder || "project"}`} onClick={() => onCreateFolder(parentFolder)}>
+                    <ActionButton title={t("explorer.newFolderIn", { folder: parentFolder || t("explorer.project") })} onClick={() => onCreateFolder(parentFolder)}>
                         <FolderPlus size={15} />
                     </ActionButton>
-                    <ActionButton title="Rename selected item" disabled={!selectedId || selectedNode?.generated} onClick={renameSelected}>
+                    <ActionButton title={t("explorer.rename")} disabled={!selectedId || selectedNode?.generated} onClick={renameSelected}>
                         <Pencil size={14} />
                     </ActionButton>
-                    <ActionButton title="Delete selected item" disabled={!selectedId} onClick={deleteSelected} danger>
+                    <ActionButton title={t("explorer.delete")} disabled={!selectedId} onClick={deleteSelected} danger>
                         <Trash2 size={14} />
                     </ActionButton>
                 </div>
@@ -216,8 +218,8 @@ function ActionButton({
             aria-label={title}
             disabled={disabled}
             onClick={onClick}
-            className={`rounded p-1 transition disabled:cursor-not-allowed disabled:opacity-30 ${
-                danger ? "text-zinc-500 hover:bg-red-950/50 hover:text-red-300" : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"
+            className={`flex h-6 w-6 items-center justify-center rounded transition focus-visible:outline-2 focus-visible:outline-blue-400 disabled:cursor-not-allowed disabled:opacity-30 ${
+                danger ? "text-zinc-400 hover:bg-red-950/50 hover:text-red-300" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
             }`}
         >
             {children}

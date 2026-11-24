@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/lib/i18n";
 import type { AssemblySymbol } from "@/lib/simulator/ExecutionEvent";
 
 // ============================================================
@@ -26,6 +27,7 @@ function hexValue(value: number): string {
 }
 
 export function SymbolTable({ symbols }: SymbolTableProps) {
+    const t = useT();
     return (
         <section className="flex h-full min-h-0 w-full flex-col bg-zinc-900">
             <div
@@ -42,22 +44,22 @@ export function SymbolTable({ symbols }: SymbolTableProps) {
                     text-zinc-400
                 "
             >
-                Symbol table
+                <h2>{t("asm.symbolTable")}</h2>
             </div>
 
             {symbols === null || symbols.length === 0 ? (
-                <p role="status" className="px-3 text-xs text-zinc-500">
+                <p role="status" className="px-3 text-xs text-zinc-400">
                     {symbols === null
-                        ? "No symbol table available. Symbols appear here after the assembler reports them."
-                        : "The assembled program defines no symbols."}
+                        ? t("asm.noSymbols")
+                        : t("asm.emptySymbols")}
                 </p>
             ) : (
                 <div className="flex-1 min-h-0 overflow-auto px-3 pb-3">
-                    <table aria-label="Symbol table" className="w-full text-xs">
+                    <table aria-label={t("asm.symbolTable")} className="w-full text-xs">
                         <thead className="sticky top-0 bg-zinc-900 text-left text-zinc-400">
                             <tr>
-                                <th scope="col" className="py-1 font-medium">Symbol</th>
-                                <th scope="col" className="py-1 font-medium">Value</th>
+                                <th scope="col" className="py-1 font-medium">{t("asm.symbol")}</th>
+                                <th scope="col" className="py-1 font-medium">{t("asm.value")}</th>
                             </tr>
                         </thead>
                         <tbody className="font-mono">

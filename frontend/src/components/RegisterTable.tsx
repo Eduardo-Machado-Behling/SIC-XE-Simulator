@@ -68,7 +68,7 @@ export function RegisterTable({
                     text-zinc-400
                 "
             >
-                {label}
+                <h2>{label}</h2>
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto px-3 pb-3">
