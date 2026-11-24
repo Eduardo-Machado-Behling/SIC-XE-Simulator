@@ -141,6 +141,7 @@ describe("MacroTrace", () => {
     it("renders a 5000-step trace", () => {
         const steps = Array.from({ length: 5000 }, (_, i) => ({ ...report.trace.steps[0], step: i + 1 }));
         renderTrace({ trace: { truncated: true, steps } });
-        expect(screen.getAllByRole("row")).toHaveLength(5001);
+        // A role query over 30,000 cells takes longer than the test timeout in jsdom; count the rows directly.
+        expect(document.querySelectorAll('table[aria-label="Macro processor trace"] tr')).toHaveLength(5001);
     });
 });

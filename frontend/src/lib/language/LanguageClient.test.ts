@@ -111,6 +111,9 @@ describe("AssemblerLanguageClient", () => {
         client.onDiagnostics("sicxe://demo/main.asm", diagnostics);
         await client.openDocument("sicxe://demo/main.asm", "old");
         const socket = FakeWebSocket.instances[0];
+        // The open's own (current) diagnostics arrive on a microtask; let them land, then watch for stale ones.
+        await vi.advanceTimersByTimeAsync(0);
+        diagnostics.mockClear();
 
         client.changeDocument("sicxe://demo/main.asm", "first");
         client.changeDocument("sicxe://demo/main.asm", "latest");
