@@ -208,6 +208,7 @@ if(BUILD_TESTING)
 
         add_sicxe_load_test(latin1_comment_still_reports_macros "latin1-comment-still-reports-macros")
         add_sicxe_load_test(macro_report_replaces_invalid_utf8 "macro-report-replaces-invalid-utf8")
+        add_sicxe_load_test(lda_addressing_modes "lda-addressing-modes")
 
         add_sicxe_test(code_memory_is_sparse_and_merges "code-memory.sparse-segment-merging")
         add_sicxe_test(spec_example_style_program "assembly.example-program-encoding")

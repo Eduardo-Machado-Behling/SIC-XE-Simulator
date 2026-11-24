@@ -132,6 +132,8 @@ void Server::setup_ws() {
     this->WebSocket("/ws", [this](const httplib::Request&, httplib::ws::WebSocket& ws) {
         std::cout << "WebSocket client connected" << std::endl;
 
+        // One machine per connection: clients must never see each other's program.
+        Simulator simulator;
         std::string message;
 
         while (ws.read(message)) {
@@ -154,8 +156,7 @@ void Server::setup_ws() {
             json response;
 
             {
-                std::lock_guard<std::mutex> lock(this->mutex);
-                const std::size_t eventStart = m_simulator.event_count();
+                const std::size_t eventStart = simulator.event_count();
 
                 try {
                     if (!request.is_object())
@@ -185,33 +186,33 @@ void Server::setup_ws() {
                                 project.name = stored.name;
                                 project.architecture = stored.architecture;
                                 project.files.insert(stored.files.begin(), stored.files.end());
-                                const Project& loadedProject = m_simulator.load_project(std::move(project));
+                                const Project& loadedProject = simulator.load_project(std::move(project));
                                 json proj;
                                 to_json(proj, loadedProject);
 
-                                const ArchitectureInfo* info = m_simulator.currentInfo();
+                                const ArchitectureInfo* info = simulator.currentInfo();
                                 response = {{"id", id},
                                             {"result", json{{"project", proj},
                                                              {"arch", InfoSerializer::serialize(*info)}}}};
                                 break;
                             }
                             case Command::LOAD_FILE: {
-                                const EventBatch batch = m_simulator.load_file(match[1]);
+                                const EventBatch batch = simulator.load_file(match[1]);
                                 response = {{"id", id}, {"result", batch.serialize()}};
                                 break;
                             }
                             case Command::RESET: {
-                                const EventBatch batch = m_simulator.reset();
+                                const EventBatch batch = simulator.reset();
                                 response = {{"id", id}, {"result", batch.serialize()}};
                                 break;
                             }
                             case Command::CLEAR: {
-                                const EventBatch batch = m_simulator.clear();
+                                const EventBatch batch = simulator.clear();
                                 response = {{"id", id}, {"result", batch.serialize()}};
                                 break;
                             }
                             case Command::STEP: {
-                                const EventBatch batch = m_simulator.step();
+                                const EventBatch batch = simulator.step();
                                 response = {{"id", id}, {"result", batch.events}};
                                 break;
                             }
@@ -223,19 +224,19 @@ void Server::setup_ws() {
                         throw api::invalid_request("Unknown simulator command: " + commandText);
                 } catch (const api::ApiError& error) {
                     json problem = error.to_json();
-                    const EventBatch changed = m_simulator.event_batch(eventStart);
+                    const EventBatch changed = simulator.event_batch(eventStart);
                     if (!changed.events.empty())
                         problem["events"] = changed.events;
                     response = {{"id", id}, {"error", std::move(problem)}};
                 } catch (const std::exception& error) {
                     json problem = api::invalid_request(error.what()).to_json();
-                    const EventBatch changed = m_simulator.event_batch(eventStart);
+                    const EventBatch changed = simulator.event_batch(eventStart);
                     if (!changed.events.empty())
                         problem["events"] = changed.events;
                     response = {{"id", id}, {"error", std::move(problem)}};
                 } catch (...) {
                     json problem = api::internal_error().to_json();
-                    const EventBatch changed = m_simulator.event_batch(eventStart);
+                    const EventBatch changed = simulator.event_batch(eventStart);
                     if (!changed.events.empty())
                         problem["events"] = changed.events;
                     response = {{"id", id}, {"error", std::move(problem)}};

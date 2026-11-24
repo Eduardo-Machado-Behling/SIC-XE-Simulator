@@ -31,10 +31,10 @@ function connect(url) {
   });
 }
 
-export default function languageServer({ server }) {
+export default function languageServer(ctx) {
   describe('assembler language WebSocket', () => {
     it('publishes diagnostics and serves completion requests without a simulator project', async () => {
-      const client = await connect(server.languageUrl);
+      const client = await connect(ctx.server.languageUrl);
       try {
         client.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { capabilities: {} } });
         const initialized = await client.receive();

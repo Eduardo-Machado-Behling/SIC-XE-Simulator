@@ -179,6 +179,11 @@ target_link_libraries(
         sicxe_language_server
 )
 
+# Every editor tab holds two WebSockets, each one a pool thread for its whole life;
+# the default cap (32 on small machines) stalls the server at about 16 tabs.
+# A backlog of 5 (the default) refuses bursts of connections on Windows.
+target_compile_definitions(api PRIVATE CPPHTTPLIB_THREAD_POOL_MAX_COUNT=256 CPPHTTPLIB_LISTEN_BACKLOG=128)
+
 if(BUILD_TESTING)
     add_executable(sicxe_language_server_tests
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/language_server_tests.cpp"
