@@ -50,11 +50,22 @@ struct FixedField {
   int line = 0;
 };
 
+// A label of some section, with its value in the linked program (relative to its start
+// unless it is a constant). The loader's address is added by the caller.
+struct SymbolRow {
+  std::string section;
+  std::string name;
+  std::string file;
+  std::int64_t value = 0;
+  bool relative = false;
+};
+
 struct LinkResult {
   ObjectProgram linked;               // one section, named after the entry section
   std::vector<OriginRange> origins;   // which file and section each byte range came from
   std::vector<EstabEntry> estab;
   std::vector<LinkStep> trace;
+  std::vector<SymbolRow> symbols;       // every label of every section, for the editor's table
   std::vector<FixedField> fixedFields;  // the loader refuses them at a nonzero load address
   std::vector<FileDiagnostic> diagnostics;
 

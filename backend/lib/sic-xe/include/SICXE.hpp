@@ -21,6 +21,8 @@ public:
 
     std::vector<ExecutionEvent> consume_events() override;
     std::vector<ExecutionEvent> load_file(std::string& content) override;
+    std::vector<ExecutionEvent> load_files(const std::vector<SourceFile>& files,
+                                           std::uint32_t loadAddress) override;
 
 private:
     ArchitectureInfo m_info;
@@ -32,7 +34,13 @@ private:
     std::vector<byte_t> m_buffer;
     bool m_halted = false;
     std::uint32_t m_programStart = 0;
-    std::unordered_map<std::uint32_t, std::size_t> m_instructionSourceLines;
+    struct SourceLocation {
+        std::string file;  // empty when the load came from a bare string
+        std::size_t line;
+    };
+    std::unordered_map<std::uint32_t, SourceLocation> m_instructionSourceLines;
+
+    void load_hex_dump(const std::string& content);
 
     void fetch_for_debugger(std::uint64_t address, bool preview);
 };

@@ -101,6 +101,10 @@ LinkResult link(std::vector<LinkInput> inputs) {
         out.estab.push_back({name, symbol, address, 0, in.file});
         out.trace.push_back({LinkStep::Pass::One, symbol + " = " + hex6(address), in.file, section.startLine, address, 0, 0, symbol});
       }
+      for (const auto& [symbol, value] : section.symbols) {
+        const bool relative = section.absoluteSymbols.count(symbol) == 0;
+        out.symbols.push_back({name, symbol, in.file, relative ? static_cast<std::int64_t>(base) + value : value, relative});
+      }
       base += section.length;
     }
   }
