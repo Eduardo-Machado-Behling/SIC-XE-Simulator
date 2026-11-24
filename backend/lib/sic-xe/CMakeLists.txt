@@ -95,6 +95,9 @@ if(BUILD_TESTING)
         target_link_libraries(${TEST_TARGET}
             PRIVATE ${LIB_NAME} sicxe_assembler
         )
+        target_compile_definitions(${TEST_TARGET} PRIVATE
+            SICXE_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/test/data"
+        )
 
         function(add_sicxe_test CASE_NAME DESCRIPTION)
             add_test(
@@ -265,5 +268,13 @@ if(BUILD_TESTING)
         add_sicxe_test(directive_names_as_labels "sections.directive-names-as-labels")
         add_sicxe_test(lowercase_section_directives "sections.lowercase-directives")
         add_sicxe_test(single_section_object_matches_info "sections.single-section-matches-info")
+        add_sicxe_test(beck_fig2_17_records "external.beck-fig-2-17-records")
+        add_sicxe_test(extref_in_format3_suggests_plus "external.format3-suggests-plus")
+        add_sicxe_test(extdef_of_undefined_symbol "external.extdef-of-undefined-symbol")
+        add_sicxe_test(external_in_equ_base_and_products "external.only-in-addresses")
+        add_sicxe_test(extdef_absolute_equ "external.absolute-extdef")
+        add_sicxe_test(external_terms_and_local_relocation_make_mods "external.mod-records")
+        add_sicxe_test(format3_direct_relocatable_is_fixed_field "external.fixed-field-lines")
+        add_sicxe_test(sic_mode_rejects_sections "external.sic-mode-rejects-sections")
     endif()
 endif()
