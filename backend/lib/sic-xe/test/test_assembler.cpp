@@ -480,7 +480,10 @@ TEST(beck_fig2_17_records) {
   const std::vector<std::string> got = beckRecords(renderObjectText(r.object).text);
   std::vector<std::string> want;
   std::istringstream expected(readData("beck_fig2_17.txt"));
-  for (std::string line; std::getline(expected, line);) want.push_back(line);
+  for (std::string line; std::getline(expected, line);) {
+    if (!line.empty() && line.back() == '\r') line.pop_back();  // a CRLF checkout
+    want.push_back(line);
+  }
   CHECK(got.size() == want.size());
   for (std::size_t i = 0; i < std::min(got.size(), want.size()); ++i) {
     if (got[i] != want[i]) std::printf("  record %zu\n   got  %s\n   want %s\n", i + 1, got[i].c_str(), want[i].c_str());
