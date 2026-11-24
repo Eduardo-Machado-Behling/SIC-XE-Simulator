@@ -21,12 +21,14 @@ format-1-instruction ::= "FIX" | "FLOAT" | "HALT" | "HIO" | "NORM" | "SIO" | "TI
 format-2-instruction ::= "ADDR" | "CLEAR" | "COMPR" | "DIVR" | "MULR" | "RMO" | "SHIFTL" | "SHIFTR" | "SUBR" | "SVC" | "TIXR"
 format-3-or-4-instruction ::= "ADD" | "ADDF" | "AND" | "COMP" | "COMPF" | "DIV" | "DIVF" | "J" | "JEQ" | "JGT" | "JLT" | "JSUB" | "LDA" | "LDB" | "LDCH" | "LDF" | "LDL" | "LDS" | "LDT" | "LDX" | "LPS" | "MUL" | "MULF" | "OR" | "RD" | "RSUB" | "SSK" | "STA" | "STB" | "STCH" | "STF" | "STI" | "STL" | "STS" | "STSW" | "STT" | "STX" | "SUB" | "SUBF" | "TD" | "TIX" | "WD"
 
-directive ::= "START" | "END" | "BYTE" | "WORD" | "RESB" | "RESW" | "BASE" | "NOBASE" | "EQU" | "ORG"
+directive ::= "START" | "END" | "BYTE" | "WORD" | "RESB" | "RESW" | "BASE" | "NOBASE" | "EQU" | "ORG" | "CSECT" | "EXTDEF" | "EXTREF" | "ENTRY"
 
 format-2-operands ::= register | register "," register | register "," expression | expression
 register-form-alias ::= ("ADD" | "SUB" | "MUL" | "DIV" | "COMP") register "," register | "TIX" register
 
-directive-operands ::= "START" expression
+directive-operands ::= ("START" | "ENTRY") expression
+                     | "CSECT"
+                     | ("EXTDEF" | "EXTREF") identifier ("," identifier)*
                      | "END" expression?
                      | "BYTE" data-item ("," data-item)*
                      | "WORD" expression ("," expression)*

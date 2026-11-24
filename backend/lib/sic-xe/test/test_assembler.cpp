@@ -162,8 +162,8 @@ TEST(simulator_halt_extension) {
   Assembler assembler;
   const CodeMemory image = assembler.assemble(
       "PROGRAM START 0x100\n"
-      "ENTRY  HALT\n"
-      "       END ENTRY\n");
+      "BEGIN  HALT\n"
+      "       END BEGIN\n");
 
   CHECK(bytesAt(image, 0x100, 1) == (Bytes{0xFC}));
   CHECK(assembler.lastInfo().entryPoint == 0x100);
@@ -252,7 +252,7 @@ TEST(start_end_and_reservations_produce_loadable_sparse_image) {
   Assembler assembler;
   const CodeMemory image = assembler.assemble(
       "PROGRAM START 0x100\n"
-      "ENTRY  LDA #7\n"
+      "BEGIN  LDA #7\n"
       "       RESB 2\n"
       "       ORG 0x200\n"
       "STOP   HALT\n"
@@ -360,6 +360,105 @@ TEST(analysis_reports_symbol_definition_and_reference_locations) {
     CHECK(valueReference->line == 2 && valueReference->column == 10 && valueReference->length == 5);
   CHECK(std::count_if(result.info.symbolReferences.begin(), result.info.symbolReferences.end(),
                       [](const SymbolReference& reference) { return reference.name == "LOOP"; }) == 2);
+}
+
+// ---------------------------------------------------------------------------
+// Control sections (Beck 2.3.5): CSECT, ENTRY, one scope and location counter per section.
+static bool hasWarning(const std::string& src, const std::string& needle) {
+  for (auto& d : Assembler().assembleDetailed(src).info.diagnostics)
+    if (d.severity == Severity::Warning && d.message.find(needle) != std::string::npos) return true;
+  return false;
+}
+
+static bool sameBytes(const std::vector<std::uint8_t>& got, std::initializer_list<int> want) {
+  return got.size() == want.size() && std::equal(got.begin(), got.end(), want.begin());
+}
+
+TEST(csect_starts_new_location_counter) {
+  const auto r = Assembler().assembleDetailed("SECA START 0\n LDA #1\nSECB CSECT\n LDA #2\n END\n");
+  CHECK(r.ok());
+  CHECK(r.object.sections.size() == 2);
+  if (r.object.sections.size() != 2) return;
+  CHECK(r.object.sections[0].name == "SECA" && r.object.sections[1].name == "SECB");
+  CHECK(r.object.sections[0].text.size() == 1 && r.object.sections[0].text[0].address == 0);
+  CHECK(sameBytes(r.object.sections[0].text[0].bytes, {0x01, 0x00, 0x01}));
+  CHECK(r.object.sections[1].text.size() == 1 && r.object.sections[1].text[0].address == 0);
+  CHECK(sameBytes(r.object.sections[1].text[0].bytes, {0x01, 0x00, 0x02}));
+  CHECK(r.object.sections[0].length == 3 && r.object.sections[1].length == 3);
+}
+
+TEST(same_local_name_in_two_sections) {
+  const auto r = Assembler().assembleDetailed("SECA START 0\nVAL WORD 1\nSECB CSECT\nVAL WORD 2\n END\n");
+  CHECK(r.ok());
+  if (r.object.sections.size() != 2) { CHECK(false); return; }
+  CHECK(r.object.sections[0].symbols.at("VAL") == 0);
+  CHECK(r.object.sections[1].symbols.at("VAL") == 0);
+}
+
+TEST(section_symbol_not_visible_in_other_section) {
+  CHECK(hasError("SECA START 0\nVAL WORD 1\nSECB CSECT\n LDA VAL\n END\n",
+                 "is defined in section SECA; add it to EXTREF"));
+}
+
+TEST(entry_marks_section) {
+  const auto r = Assembler().assembleDetailed("PROG ENTRY 0\n RSUB\nINICIO LDA #5\n RSUB\n END INICIO\n");
+  CHECK(r.ok());
+  if (r.object.sections.size() != 1) { CHECK(false); return; }
+  const auto& s = r.object.sections[0];
+  CHECK(s.name == "PROG" && s.entry && s.startLine == 1);
+  CHECK(s.transfer && *s.transfer == 3);
+  CHECK(s.endOperandLine == 5);
+}
+
+TEST(end_closes_file) {
+  const std::string src = "SECA START 0\n RSUB\n END\nSECB CSECT\n RSUB\n";
+  CHECK(Assembler().assembleDetailed(src).object.sections.size() == 1);
+  CHECK(hasWarning(src, "CSECT after END is ignored"));
+}
+
+TEST(end_operand_resolves_in_first_section) {
+  const auto r = Assembler().assembleDetailed("FIRST START 0\n RSUB\nGO RSUB\nSECB CSECT\n RSUB\n END GO\n");
+  CHECK(r.ok());
+  if (r.object.sections.size() != 2) { CHECK(false); return; }
+  CHECK(r.object.sections[0].transfer && *r.object.sections[0].transfer == 3);
+  CHECK(!r.object.sections[1].transfer);
+}
+
+TEST(nonzero_start_with_csect) {
+  CHECK(hasError("SECA START 100\n RSUB\nSECB CSECT\n RSUB\n END\n", "START must be 0 when the file has control sections"));
+}
+
+TEST(directive_names_as_labels) {
+  for (const char* name : {"ENTRY", "CSECT", "EXTDEF", "EXTREF"}) {
+    const std::string src = std::string(name) + "   LDA #5\n END\n";
+    CHECK(hasError(src, std::string(name) + " is a directive since stage 4; rename this label"));
+  }
+}
+
+TEST(lowercase_section_directives) {
+  const auto r = Assembler().assembleDetailed("seca start 0\n lda #1\nsecb csect\n lda #2\n end\n");
+  CHECK(r.ok());
+  if (r.object.sections.size() != 2) { CHECK(false); return; }
+  CHECK(r.object.sections[0].name == "seca" && r.object.sections[1].name == "secb");
+  CHECK(sameBytes(r.object.sections[1].text[0].bytes, {0x01, 0x00, 0x02}));
+}
+
+TEST(single_section_object_matches_info) {
+  const auto r = Assembler().assembleDetailed("PROG START 0x10\n LDA #5\nV WORD 42\n END PROG\n");
+  CHECK(r.ok());
+  if (r.object.sections.size() != 1) { CHECK(false); return; }
+  const auto& s = r.object.sections[0];
+  CHECK(s.start == 0x10 && s.length == r.info.length);
+  CHECK(s.text.size() == r.memory.segments().size());
+  for (const auto& [address, bytes] : r.memory.segments()) {
+    bool found = false;
+    for (const auto& run : s.text)
+      if (run.address == address && run.bytes.size() == bytes.size() &&
+          std::equal(run.bytes.begin(), run.bytes.end(), bytes.begin()))
+        found = true;
+    CHECK(found);
+  }
+  CHECK(s.notes.size() == 2 && s.notes[0].text == "LDA #5" && s.notes[1].text == "WORD 42");
 }
 
 int main(int argc, char** argv) {

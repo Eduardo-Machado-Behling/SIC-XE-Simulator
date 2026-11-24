@@ -40,8 +40,10 @@ struct Statement {
   ExprPtr expr;                                // memory operand / count / SVC / directive arg
   int reg1 = -1, reg2 = -1;
   std::vector<DataItem> items;                 // BYTE / WORD
+  std::vector<std::pair<std::string, int>> names;  // EXTDEF / EXTREF: symbol, 1-based column
 
   // ---- filled in by the passes ---------------------------------------------
+  int section = 0;                             // index of the control section it belongs to
   std::int64_t address = 0;
   std::int64_t size = 0;
   std::vector<byte_t> bytes;

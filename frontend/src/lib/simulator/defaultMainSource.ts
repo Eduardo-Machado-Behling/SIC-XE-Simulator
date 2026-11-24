@@ -1,7 +1,7 @@
 export const DEFAULT_MAIN_SOURCE = `. SIC/XE syntax tour. A dot in column 1 starts a full-line comment.
 SHOWCASE START 0x1000       ; START sets the load address
 
-ENTRY   lda #5              ; mnemonics are case-insensitive; # means immediate
+INICIO  lda #5              ; mnemonics are case-insensitive; # means immediate
         ADD #3
         STA RESULT           ; labels and instructions share a line
         CLEAR $X              ; register operands always use the $ prefix
