@@ -1,6 +1,6 @@
 #pragma once
-// Single source of truth for the instruction set: one InstructionDef per
-// mnemonic describes opcode, format, operand schema and SIC availability.
+// The assembler's view of the instruction set: one InstructionDef per row of
+// kInstructionTable (InstructionTable.hpp), the single source of truth.
 
 #include <optional>
 #include <span>
@@ -25,6 +25,7 @@ struct InstructionDef {
   int format;              // 1, 2 or 3 (3 may be promoted to 4 with '+')
   OperandSchema schema;
   bool sic;                // exists in the original SIC instruction set
+  bool executable;         // the CPU runs it; false: it assembles but fails at run time
   bool allowsExtended() const { return format == 3 && schema == OperandSchema::Memory; }
 };
 
