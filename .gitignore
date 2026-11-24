@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# reference material (course slides, specs, ground truths); kept local
+/resources/
+
+# knowledge graph built by graphify (local, regenerated on demand)
+/graphify-out/
+
+# local agent tooling and notes
+/.serena/
+/PRODUCT.md
