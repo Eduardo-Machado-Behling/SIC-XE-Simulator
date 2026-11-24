@@ -39,18 +39,31 @@ struct ExprNode {
   int column = 0;    // for diagnostics
 };
 
+// One signed term that the assembler cannot fold into a number: an EXTREF symbol (value
+// unknown, contributes 0), or `local`: a label of the section itself, which is relative to
+// the section's start. Both become modification records, in source order (Beck Fig. 3.9).
+struct Term {
+  char sign = '+';
+  std::string name;
+  bool local = false;
+};
+
 struct Value {
   std::int64_t value = 0;
   int relocDegree = 0;
-  // EXTREF terms of the expression, each with its sign. Their values are unknown to the
-  // assembler: they contribute 0 and become modification records.
-  std::vector<std::pair<char, std::string>> externals;
+  std::vector<Term> terms;
   bool relocatable() const { return relocDegree != 0; }
+  const Term* firstExternal() const {
+    for (const Term& term : terms)
+      if (!term.local) return &term;
+    return nullptr;
+  }
 };
 
 struct EvalContext {
   std::function<std::optional<Value>(const std::string&)> lookup;
   std::int64_t location = 0;
+  std::string section;  // name of the control section that '*' is relative to
   bool forwardRefsAllowed = true;  // only affects the wording of the error
 };
 

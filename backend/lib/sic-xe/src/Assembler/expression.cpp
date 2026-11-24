@@ -140,7 +140,11 @@ constexpr std::int64_t kLimit = std::int64_t{1} << 48;
 std::optional<Value> evalNode(const ExprNode& n, const EvalContext& c, int line, Diagnostics& d) {
   switch (n.kind) {
     case Kind::Number:   return Value{n.number, 0};
-    case Kind::Location: return Value{c.location, 1};
+    case Kind::Location: {
+      Value here{c.location, 1};
+      here.terms.push_back({'+', c.section, true});
+      return here;
+    }
     case Kind::Symbol: {
       std::optional<Value> v;
       if (c.lookup) v = c.lookup(n.name);
@@ -158,7 +162,7 @@ std::optional<Value> evalNode(const ExprNode& n, const EvalContext& c, int line,
       if (n.op == '-') {
         v->value = -v->value;
         v->relocDegree = -v->relocDegree;
-        for (auto& term : v->externals) term.first = term.first == '+' ? '-' : '+';
+        for (Term& term : v->terms) term.sign = term.sign == '+' ? '-' : '+';
       }
       return v;
     }
@@ -172,7 +176,7 @@ std::optional<Value> evalNode(const ExprNode& n, const EvalContext& c, int line,
         case '-': out = {l->value - r->value, l->relocDegree - r->relocDegree}; break;
         case '*':
         case '/':
-          if (!l->externals.empty() || !r->externals.empty()) {
+          if (l->firstExternal() || r->firstExternal()) {
             d.error(line, n.column, "an external symbol can only be added or subtracted");
             return std::nullopt;
           }
@@ -185,9 +189,11 @@ std::optional<Value> evalNode(const ExprNode& n, const EvalContext& c, int line,
           break;
         default: return std::nullopt;
       }
-      out.externals = l->externals;
-      for (const auto& term : r->externals)
-        out.externals.push_back({n.op == '-' ? (term.first == '+' ? '-' : '+') : term.first, term.second});
+      out.terms = l->terms;
+      for (Term term : r->terms) {
+        if (n.op == '-') term.sign = term.sign == '+' ? '-' : '+';
+        out.terms.push_back(term);
+      }
       if (out.value > kLimit || out.value < -kLimit) {
         d.error(line, n.column, "Expression overflow");
         return std::nullopt;
@@ -206,7 +212,8 @@ ExprPtr parseExpression(std::string_view text, int line, int column, Diagnostics
 
 std::optional<Value> evaluate(const ExprNode& e, const EvalContext& c, int line, Diagnostics& d) {
   auto v = evalNode(e, c, line, d);
-  if (v && (v->relocDegree < 0 || v->relocDegree > 1)) {
+  // With external terms the net relocation is the linker's to judge.
+  if (v && !v->firstExternal() && (v->relocDegree < 0 || v->relocDegree > 1)) {
     d.error(line, e.column, "Expression is neither absolute nor simply relocatable");
     return std::nullopt;
   }
