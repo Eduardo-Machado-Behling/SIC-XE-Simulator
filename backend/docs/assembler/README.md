@@ -31,6 +31,8 @@ input to a parser generator.
   over the `/language` WebSocket.
 - [Macro processor](../macro-processor/README.md) — the one-pass macro
   processor that runs before the assembler and writes `MASMAPRG.ASM`.
+- [Linker and relocating loader](../linker/README.md) — control sections,
+  external references, the two-pass linker and the loader that places the program.
 
 ## Implementation sources
 

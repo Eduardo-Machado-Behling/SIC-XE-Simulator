@@ -127,8 +127,10 @@ LinkResult link(std::vector<LinkInput> inputs) {
     for (const InstructionNote& note : p.section->notes)
       linked.notes.push_back({p.base + note.address, note.size, note.line, note.text});
     out.origins.push_back({p.base, p.section->length, p.input->file, p.name});
-    for (int line : p.section->fixedFieldLines)
+    for (int line : p.section->fixedFieldLines) {
+      out.fixedFields.push_back({p.input->file, line});
       if (p.base != 0) error(p.input->file, line, "this address field cannot be relocated; use format 4 (+) here");
+    }
   }
 
   for (const Placed& p : placed) {

@@ -366,7 +366,7 @@ The language service runs `MacroProcessor().process(document.text)` and then `As
 ### Boundaries that a consumer must understand
 
 1. **Assembler support is not CPU support.** The assembler’s ISA catalog and runtime dispatch are separate implementations.
-2. **Relocations are metadata only in the inspected simulator path.** No object-module writer or relocation applier is used by `SICXE::load_file`.
+2. **Relocation is applied by the linker and loader, not by the assembler.** The assembler returns Beck's object records (`AssemblyResult::object`); `link` and `relocateAndLoad` consume them (see the [linker](../linker/README.md)).
 3. **Instruction size is not auto-relaxed.** A too-distant format-3 target is diagnosed with a suggestion to use `+`; following addresses are not silently shifted.
 4. **ORG saves only one restore point.** Nested regions are not independently stacked.
 5. **Detailed assembly can carry partial output with errors.** Callers must check `ok()`; `SICXE::load_file` does, and throws the remapped diagnostics instead of loading the image.
