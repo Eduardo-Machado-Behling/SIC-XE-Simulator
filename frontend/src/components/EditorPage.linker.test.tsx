@@ -40,7 +40,11 @@ vi.mock("@/lib/language/LanguageClient", () => ({
     },
 }));
 
-vi.mock("@/components/CodeEditor", () => ({ CodeEditor: () => null }));
+// Monaco needs a real browser; the stub records the props each editor gets, by path.
+const editors = vi.hoisted(() => new Map<string, Record<string, unknown>>());
+vi.mock("@/components/CodeEditor", () => ({
+    CodeEditor: (props: Record<string, unknown>) => { editors.set(String(props.path), props); return null; },
+}));
 vi.mock("@/components/Console", () => ({ Console: () => null }));
 
 const ARCH: ArchitectureInfo = {
@@ -114,7 +118,7 @@ describe("EditorPage linking", () => {
                 loadAddress: 0x1000,
                 estab: [],
                 objects: [{ source: "main.asm", text: "H PROG" }, { source: "sub.asm", text: "H SUBB" }],
-                out: { name: "PROG", text: "H PROG   000000 00000B", bands: [] },
+                out: { name: "PROG", text: "H PROG   000000 00000B", bands: [{ firstLine: 2, lastLine: 3, label: "main.asm · PROG" }] },
                 trace: [],
             },
         }]);
@@ -126,6 +130,7 @@ describe("EditorPage linking", () => {
         const tabs = () => screen.getAllByRole("tab").map((tab) => tab.textContent);
         await waitFor(() => expect(tabs()).toEqual(expect.arrayContaining(["main.obj", "PROG.out"])));
         expect(tabs()).not.toContain("sub.obj");
+        expect(editors.get("PROG.out")?.bands).toEqual([{ from: 2, to: 3, colorIndex: 0, label: "main.asm · PROG" }]);
 
         await user.click(screen.getByText("sub.asm"));
         await waitFor(() => expect(tabs()).toEqual(expect.arrayContaining(["sub.obj", "PROG.out"])));
