@@ -29,7 +29,7 @@ import { Project } from "@/lib/simulator/Project";
 import { defaultProjectFiles } from "@/lib/simulator/defaultProjectFiles";
 import { readLinkSettings, writeLinkSettings } from "@/lib/simulator/linkSettings";
 import { generatedTabs, macroReportsBySource, type GeneratedTabId } from "@/lib/simulator/generatedOutputs";
-import { linkBands } from "@/lib/simulator/linkBands";
+import { linkBands, sectionStartLine } from "@/lib/simulator/linkBands";
 import {
     applyMacroReport,
     canCreate,
@@ -530,6 +530,17 @@ export default function EditorPage({ projectId }: PageProps) {
         const line = report?.hasMacros ? sourceLineForOutput(report, step.line) : step.line;
         setActiveFile(step.file);
         setLinkerLine(line ? { file: step.file, line } : null);
+    };
+    // The .out's bands, one per control section: a click opens the section in its file
+    // (under its current name, if renamed since the Run) and lights its START/ENTRY/CSECT.
+    const outBands = linkReport ? linkBands(linkReport, t) : [];
+    const openLinkedSection = (index: number) => {
+        const band = outBands[index];
+        const file = band && (renamedSinceRun.current.get(band.file) ?? band.file);
+        if (!file || !(file in files)) return;
+        const line = sectionStartLine(files[file], band.section);
+        setActiveFile(file);
+        setLinkerLine(line ? { file, line } : null);
     };
     // A trace step pointing at a line behaves the same way, for one line.
     const pendingLine = useRef<TraceLine | null>(null);
@@ -1143,7 +1154,8 @@ export default function EditorPage({ projectId }: PageProps) {
                                                                 path={tab.label}
                                                                 value={tab.text}
                                                                 language={OBJECT_LANGUAGE_ID}
-                                                                bands={tab.id === "out" && linkReport ? linkBands(linkReport.out) : undefined}
+                                                                bands={tab.id === "out" ? outBands : undefined}
+                                                                onBandClick={tab.id === "out" && outBands.length > 0 ? openLinkedSection : undefined}
                                                                 onChange={() => {}}
                                                                 readOnly
                                                             />
