@@ -107,6 +107,31 @@ describe("EditorPage linking", () => {
         await waitFor(() => expect(readLinkSettings("demo")).toEqual({ linkSet: ["sub.asm"], loadAddress: 0x200 }));
     });
 
+    it("shows each file's object program and the linked program beside the editor", async () => {
+        fake.loadFiles.mockResolvedValueOnce([{
+            type: "ProgramLinked",
+            details: {
+                loadAddress: 0x1000,
+                estab: [],
+                objects: [{ source: "main.asm", text: "H PROG" }, { source: "sub.asm", text: "H SUBB" }],
+                out: { name: "PROG", text: "H PROG   000000 00000B", bands: [] },
+                trace: [],
+            },
+        }]);
+        const user = await openPage();
+        await user.click(await screen.findByRole("switch", { name: "Include sub.asm in the link" }));
+        await user.click(screen.getByRole("switch", { name: "Include main.asm in the link" }));
+        await user.click(screen.getByRole("button", { name: "Run · 2 files" }));
+
+        const tabs = () => screen.getAllByRole("tab").map((tab) => tab.textContent);
+        await waitFor(() => expect(tabs()).toEqual(expect.arrayContaining(["main.obj", "PROG.out"])));
+        expect(tabs()).not.toContain("sub.obj");
+
+        await user.click(screen.getByText("sub.asm"));
+        await waitFor(() => expect(tabs()).toEqual(expect.arrayContaining(["sub.obj", "PROG.out"])));
+        expect(tabs()).not.toContain("main.obj");
+    });
+
     it("refuses an address outside the memory", async () => {
         await openPage();
         typeAddress("FFFFFFF");
