@@ -28,8 +28,8 @@ The server replies with the same `id`. A successful command uses `result`:
 session and returns the loaded project and architecture in `result`. Both IDs
 are UUIDs. Project contents are synchronized through the session project API
 before this command is sent. There is no global/default project store.
-`load %file-path`, `reset`, and `clear` return an event batch. `step` returns
-the events directly as an array.
+`load [@address] %file-path [%file-path ...]`, `reset`, and `clear` return an
+event batch. `step` returns the events directly as an array.
 
 For source assembled from a project file, `InstructionFetched` includes the
 1-based `source_line` that produced the instruction at `address`. It is a line
@@ -37,8 +37,10 @@ of the assembled text, `MASMAPRG.ASM`, the macro processor's output: the
 project file itself when it has no macros, and otherwise mapped back to the
 file by `MacrosExpanded.lineMap`. The architecture obtains this location from
 the assembler's instruction source map and adds it to the existing event;
-clients do not need a separate source mapping request. The field is omitted
-when no source mapping exists, such as when executing a raw hex image. A
+clients do not need a separate source mapping request. `source_file` names the
+project file the instruction came from, which matters when several files are
+linked; `source_line` is a line of that file's `MASMAPRG.ASM`. Both fields are
+omitted when no source mapping exists, such as when executing a raw hex image. A
 debugger-style editor can use this field to place its current-instruction
 marker without interpreting instruction bytes.
 
@@ -79,6 +81,7 @@ is valid UTF-8: an ill-formed byte sequence of the source becomes U+FFFD.
 | Field | Content |
 | --- | --- |
 | `file` | Always `"MASMAPRG.ASM"` |
+| `source` | The project file this report belongs to. A load of several files sends one report per file, in the order given |
 | `ok` | `true` when the processor reported no error |
 | `hasMacros` | `true` when the processor read an `MCDEFN` line (a call needs one) |
 | `text` | The text of MASMAPRG.ASM, which is the text assembled |
@@ -182,6 +185,37 @@ source whose `MCDEFN` is never closed fails the load:
 {"column": 9, "length": 6, "line": 1, "message": "MCDEFN without MCEND", "severity": "error"}
 ```
 
+## ProgramLinked
+
+Every load of assembly sources links them (see the [linker](linker/README.md)) and
+reports the result in one `ProgramLinked` event, after the `MacrosExpanded` events and
+before memory is written. A failed link carries the event, with what was built, in
+`error.events`. It changes no simulator state.
+
+| Field | Content |
+| --- | --- |
+| `loadAddress` | The load address (PROGADDR) of the command |
+| `estab[]` | `{section, symbol, address, length, file}`: the external symbol table. `symbol` is `""` on a control-section row; `address` is relative to the start of the linked program |
+| `objects[]` | `{source, text}`: each file's object program as readable `.obj` text (Beck's H, D, R, T, M and E records; annotation lines start with `.`) |
+| `out` | `{name, text, bands}`: the linked program as `.out` text. `bands[]` is `{firstLine, lastLine, label}`, one per control section, labelled `file · section` |
+| `trace[]` | `{pass, text, file, line, address, before, after, symbol}`. `pass` is `"1"` (a section placed, a symbol entered), `"2"` (one M term applied to a field, its value before and after) or `"load"` (a field the loader relocated) |
+
+`ProgramAssembled.details.symbols[]` is `{name, value, section, file}`: every label of
+every section, in loaded addresses (constants keep their value).
+
+Example:
+
+```json
+{"type": "ProgramLinked", "details": {
+  "loadAddress": 4096,
+  "estab": [{"section": "PROG", "symbol": "", "address": 0, "length": 8, "file": "main.asm"},
+            {"section": "SUBB", "symbol": "", "address": 8, "length": 3, "file": "sub.asm"}],
+  "objects": [{"source": "main.asm", "text": "H PROG   000000 000008\nR SUBB\n..."}],
+  "out": {"name": "PROG", "text": "H PROG   000000 00000B\n...", "bands": [{"firstLine": 2, "lastLine": 5, "label": "main.asm · PROG"}]},
+  "trace": [{"pass": "1", "text": "PROG placed at 000000", "file": "main.asm", "line": 1, "address": 0, "before": 0, "after": 0, "symbol": "PROG"}]
+}}
+```
+
 ## Errors
 
 Errors use the same problem fields as the HTTP API's `Error` schema. If a
@@ -209,10 +243,17 @@ uses a `null` id.
 
 - `load $session-id/$project-id` loads a session project and establishes a fresh architecture,
   memory, register, and assembler baseline.
-- `load %file-path` clears the current program state before loading the file.
-  The emitted `MemoryCleared` event resets the frontend memory view;
-  `ProgramCleared` removes stale assembly symbols. For an assembly source,
-  `MacrosExpanded` follows, before the assembler runs.
+- `load [@address] %file-path [%file-path ...]` clears the current program state,
+  then assembles each file, links them and loads the program at `address`
+  (hexadecimal, default 0), for example `load @1000 %main.asm %sub.asm`. The file
+  with `ENTRY` is placed first, the others in the order given. Paths are
+  separated by ` %`, so a path may contain spaces. `load %file-path` loads one
+  file at address 0, as before. The emitted `MemoryCleared` event resets the
+  frontend memory view; `ProgramCleared` removes stale assembly symbols. For
+  assembly sources, one `MacrosExpanded` per file follows, then `ProgramLinked`.
+  An address past the memory is `load address out of range`; a path given twice
+  is `<path> is listed twice`. With several files every diagnostic line starts
+  with its file (`sub.asm:3:1: error: ...`).
 - `step` executes one instruction.
 - `reset` resets registers and returns PC to the loaded program's entry point.
 - `clear` clears memory and assembler metadata, resets non-PC registers to

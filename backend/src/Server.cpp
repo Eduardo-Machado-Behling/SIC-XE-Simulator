@@ -122,7 +122,8 @@ enum class Command { LOAD_PROJECT, LOAD_FILE, RESET, CLEAR, STEP };
 
 const std::vector<std::pair<std::regex, Command>> patterns = {
     {std::regex{R"(^load \$([0-9a-fA-F-]{36})/([0-9a-fA-F-]{36})$)"}, Command::LOAD_PROJECT},
-    {std::regex{R"(^load %(.+)$)"}, Command::LOAD_FILE},
+    // load [@<hex address>] %<path> [%<path> ...]; paths are separated by " %".
+    {std::regex{R"(^load (?:@([0-9a-fA-F]+) )?%(.+)$)"}, Command::LOAD_FILE},
     {std::regex{R"(^reset$)"}, Command::RESET},
     {std::regex{R"(^clear$)"}, Command::CLEAR},
     {std::regex{R"(^step$)"}, Command::STEP},
@@ -197,7 +198,20 @@ void Server::setup_ws() {
                                 break;
                             }
                             case Command::LOAD_FILE: {
-                                const EventBatch batch = simulator.load_file(match[1]);
+                                const std::string address = match[1];
+                                if (address.size() > 8)
+                                    throw std::runtime_error("load address out of range");
+                                std::vector<std::string> paths;
+                                const std::string list = match[2];
+                                for (std::size_t from = 0;;) {
+                                    const std::size_t next = list.find(" %", from);
+                                    paths.push_back(list.substr(from, next == std::string::npos ? std::string::npos : next - from));
+                                    if (next == std::string::npos)
+                                        break;
+                                    from = next + 2;
+                                }
+                                const EventBatch batch = simulator.load_files(
+                                    paths, address.empty() ? 0 : std::stoull(address, nullptr, 16));
                                 response = {{"id", id}, {"result", batch.serialize()}};
                                 break;
                             }

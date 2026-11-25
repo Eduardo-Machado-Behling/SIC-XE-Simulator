@@ -29,6 +29,7 @@ import startup from './suites/startup.js';
 import storageLimits from './suites/storage-limits.js';
 import sync from './suites/sync.js';
 import wsMacros from './suites/ws-macros.js';
+import wsLinker from './suites/ws-linker.js';
 
 const ctx = { server: null, api: null };
 
@@ -73,6 +74,7 @@ contract(ctx);
 startup(ctx);
 storageLimits();
 wsMacros(ctx);
+wsLinker(ctx);
 defaultSources(ctx);
 
 describe('coverage of the OpenAPI document', () => {

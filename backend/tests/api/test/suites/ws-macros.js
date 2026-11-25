@@ -110,8 +110,10 @@ function hasKeys(object, expected, where) {
 
 // The MacrosExpanded contract shared with the frontend (spec section 5).
 export function checkReport(details) {
-  hasKeys(details, ['file', 'ok', 'hasMacros', 'text', 'diagnostics', 'names', 'definitions', 'expansions',
+  // source: the project file this report belongs to (stage 4: one report per linked file).
+  hasKeys(details, ['file', 'source', 'ok', 'hasMacros', 'text', 'diagnostics', 'names', 'definitions', 'expansions',
     'lineMap', 'trace'], 'details');
+  assert.equal(typeof details.source, 'string');
   assert.equal(details.file, 'MASMAPRG.ASM');
   assert.equal(typeof details.ok, 'boolean');
   assert.equal(typeof details.hasMacros, 'boolean');
