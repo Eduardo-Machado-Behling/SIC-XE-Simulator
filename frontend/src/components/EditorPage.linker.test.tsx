@@ -6,6 +6,7 @@ import EditorPage from "@/components/EditorPage";
 import type { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
 import { readLinkSettings } from "@/lib/simulator/linkSettings";
 import { SimulatorCommandError } from "@/lib/transport/SimulatorTransport";
+import { macroReportFixture } from "@/lib/simulator/macroFixtures";
 
 // The simulator talks to the backend over a WebSocket; this fake stands in for it.
 const fake = vi.hoisted(() => ({
@@ -197,6 +198,36 @@ describe("EditorPage linking", () => {
         await user.click(screen.getByRole("button", { name: "Step" }));
         await waitFor(() => expect(editors.get("sub.asm")?.executingLine).toBe(2));
         expect(screen.getByRole("tab", { name: "sub.obj" })).toBeTruthy();
+    });
+
+    it("keeps the generated tabs and the executing line when the Run's file is renamed", async () => {
+        const fetched = (line: number) => ({
+            type: "InstructionFetched" as const, address: 0, bytes: [1, 0, 5], value: 0x010005,
+            source_line: line, source_file: "main.asm", preview: true,
+        });
+        fake.loadFile.mockResolvedValueOnce([
+            { type: "MacrosExpanded", details: { ...macroReportFixture, hasMacros: true, source: "main.asm" } },
+            { ...linkedEvent(), details: { ...linkedEvent().details, objects: [{ source: "main.asm", text: "H PROG" }] } },
+            fetched(1),
+        ]);
+        // The backend names the file as it was loaded until the next Run.
+        fake.step.mockResolvedValueOnce([fetched(2)]);
+        vi.spyOn(window, "prompt").mockReturnValue("prog.asm");
+        const user = await openPage();
+        await user.click(screen.getByRole("button", { name: "Run" }));
+        await waitFor(() => expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toContain("main.obj"));
+
+        await user.click(screen.getByTitle("main.asm"));
+        await user.click(screen.getByRole("button", { name: "Rename selected item" }));
+        await waitFor(() => expect(screen.getByTitle("prog.asm")).toBeTruthy());
+
+        const tabs = screen.getAllByRole("tab").map((tab) => tab.textContent);
+        expect(tabs).toEqual(expect.arrayContaining(["MASMAPRG.ASM", "prog.obj", "PROG.out"]));
+        expect(editors.get("prog.asm")?.headerActions).toBeTruthy();  // the Hide MASMAPRG.ASM toggle
+        expect(editors.get("MASMAPRG.ASM")?.executingLine).toBe(1);
+
+        await user.click(screen.getByRole("button", { name: "Step" }));
+        await waitFor(() => expect(editors.get("MASMAPRG.ASM")?.executingLine).toBe(2));
     });
 
     it("refuses an address outside the memory", async () => {
