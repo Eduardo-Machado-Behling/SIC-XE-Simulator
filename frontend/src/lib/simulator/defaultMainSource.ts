@@ -1,5 +1,5 @@
 export const DEFAULT_MAIN_SOURCE = `. SIC/XE syntax tour. A dot in column 1 starts a full-line comment.
-SHOWCASE START 0x1000       ; START sets the load address
+SHOWCASE START 0x1000       ; an absolute program: START fixes its address at assembly time
 
 INICIO  lda #5              ; mnemonics are case-insensitive; # means immediate
         ADD #3

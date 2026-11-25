@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import ProjectsPage from "@/app/page";
 import { DEFAULT_MACRO_SOURCE } from "@/lib/simulator/defaultMacroSource";
 import { DEFAULT_MAIN_SOURCE } from "@/lib/simulator/defaultMainSource";
+import { DEFAULT_LINKER_DADOS, DEFAULT_LINKER_MAXIMO, DEFAULT_LINKER_PROG } from "@/lib/simulator/defaultLinkerSources";
 import type { Project } from "@/lib/simulator/Project";
 
 // The projects page with its backends faked: the simulator answers one
@@ -29,7 +30,14 @@ vi.mock("@/lib/simulator/ProjectSessionSync", () => ({
     syncProjectsToSession: async () => {},
 }));
 
-const DEFAULT_FILES = { "main.asm": DEFAULT_MAIN_SOURCE, "macro.asm": DEFAULT_MACRO_SOURCE };
+// The syntax tour, the macro tour and the linker tour (three files, switched off for linking).
+const DEFAULT_FILES = {
+    "main.asm": DEFAULT_MAIN_SOURCE,
+    "macro.asm": DEFAULT_MACRO_SOURCE,
+    "linker/prog.asm": DEFAULT_LINKER_PROG,
+    "linker/maximo.asm": DEFAULT_LINKER_MAXIMO,
+    "linker/dados.asm": DEFAULT_LINKER_DADOS,
+};
 
 describe("ProjectsPage default files", () => {
     afterEach(() => {
@@ -46,7 +54,7 @@ describe("ProjectsPage default files", () => {
         expect(tour.files).toEqual(DEFAULT_FILES);
     });
 
-    it("gives a new project the same two files", async () => {
+    it("gives a new project the same files", async () => {
         store.stored = [{ id: "kept", name: "Kept", architecture: "SIC/XE", files: { "a.asm": "" } }];
         const user = userEvent.setup();
         render(<ProjectsPage />);
