@@ -162,6 +162,8 @@ if(BUILD_TESTING)
         add_sicxe_linker_test(absolute_program_with_load_address "loader.absolute-program")
         add_sicxe_linker_test(source_map_is_absolute_and_per_file "loader.source-map")
         add_sicxe_linker_test(fixed_field_with_load_address "loader.fixed-field")
+        add_sicxe_linker_test(pc_relative_absolute_target_is_fixed "review.pc-relative-absolute-target")
+        add_sicxe_linker_test(base_relative_mixing_absolute_and_relative_is_fixed "review.base-relative-mixed")
 
         add_sicxe_macro_test(identity_for_source_without_macros "identity.source-without-macros")
         add_sicxe_macro_test(identity_preserves_crlf "identity.preserves-crlf")

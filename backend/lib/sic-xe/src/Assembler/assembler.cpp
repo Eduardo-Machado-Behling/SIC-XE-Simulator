@@ -51,6 +51,7 @@ struct Section {
   std::vector<Relocation> relocs;
   i64 lc = 0, startAddr = 0, highWater = 0;
   std::optional<i64> orgReturn, base;
+  bool baseRelative = false;               // BASE holds a label of the section, not a constant
   bool entry = false;                       // opened by ENTRY
   int startLine = 0, startCol = 0;          // the START/ENTRY statement
   int endOperandLine = 0;                   // first section only: the END that names a transfer address
@@ -487,7 +488,10 @@ class Engine {
         break;
       }
       case DirectiveKind::Base:
-        if (auto v = eval(st, st.expr, true)) cur().base = v->value;
+        if (auto v = eval(st, st.expr, true)) {
+          cur().base = v->value;
+          cur().baseRelative = v->relocatable();
+        }
         break;
       case DirectiveKind::Nobase:
         cur().base.reset();
@@ -631,6 +635,11 @@ class Engine {
         return;
       }
     }
+    // A displacement is measured from PC or BASE. It stays right when the code moves only if
+    // the target moves with it: an absolute target reached PC-relatively (or a target and a
+    // BASE of different kinds) is right only where it was assembled.
+    if ((p == 1 && !v->relocatable()) || (b == 1 && v->relocatable() != cur().baseRelative))
+      cur().fixedLines.push_back(st.line);
     const unsigned field = static_cast<unsigned>(disp) & 0xFFF;
     emit(st, {op, static_cast<byte_t>((x << 7) | (b << 6) | (p << 5) | (field >> 8)),
               static_cast<byte_t>(field & 0xFF)});
