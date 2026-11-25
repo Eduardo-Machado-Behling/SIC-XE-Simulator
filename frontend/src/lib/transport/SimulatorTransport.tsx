@@ -18,6 +18,8 @@ export interface SimulatorTransport {
     architectures(): Promise<string[]>;
     loadProject(sessionId: string, projectId: string): Promise<LoadProjectResponse>;
     loadFile(file: string): Promise<ExecutionEvent[]>;
+    /** Links `files` (the ENTRY file first) and loads the program at `loadAddress`. */
+    loadFiles(files: string[], loadAddress: number): Promise<ExecutionEvent[]>;
 }
 
 export interface SimulatorProblem {

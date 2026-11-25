@@ -44,3 +44,24 @@ describe("Console eventLines for MacrosExpanded", () => {
         ]);
     });
 });
+
+describe("Console eventLines for ProgramLinked", () => {
+    const report = (estab: { section: string; symbol: string }[], loadAddress: number) => ({
+        loadAddress,
+        estab: estab.map((row) => ({ ...row, address: 0, length: 0, file: "main.asm" })),
+        objects: [],
+        out: { name: "PROG", text: "", bands: [] },
+        trace: [],
+    });
+
+    it("summarizes the linked sections and the load address", () => {
+        const details = report([{ section: "PROG", symbol: "" }, { section: "PROG", symbol: "N" }, { section: "SUBB", symbol: "" }], 0x1000);
+        expect(eventLines({ type: "ProgramLinked", details })).toEqual([
+            { text: "Linker · 2 sections · loaded at 0x01000 · PROG", level: "success" },
+        ]);
+    });
+
+    it("writes nothing for a single section at address 0, as before the linker existed", () => {
+        expect(eventLines({ type: "ProgramLinked", details: report([{ section: "PROG", symbol: "" }], 0) })).toEqual([]);
+    });
+});

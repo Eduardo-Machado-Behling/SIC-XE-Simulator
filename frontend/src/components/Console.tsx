@@ -48,6 +48,15 @@ export function eventLines(event: ExecutionEvent): { text: string; level: "info"
                 }]
                 : [];
         }
+        case "ProgramLinked": {
+            const sections = event.details.estab.filter((row) => row.symbol === "").length;
+            // One section at address 0 links to itself: no line, as before the linker existed.
+            if (sections <= 1 && event.details.loadAddress === 0) return [];
+            return [{
+                text: `Linker · ${sections} ${sections === 1 ? "section" : "sections"} · loaded at 0x${hex(event.details.loadAddress, 5)} · ${event.details.out.name}`,
+                level: "success",
+            }];
+        }
         case "InstructionFetched":
             return [{
                 text: `${event.preview ? "Next" : "Fetch"}  0x${hex(event.address, 5)}  ${bytesText(event.bytes)}`,
