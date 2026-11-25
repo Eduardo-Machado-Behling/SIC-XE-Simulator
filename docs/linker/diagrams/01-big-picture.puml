@@ -1,0 +1,41 @@
+@startuml
+!pragma layout smetana
+title From source files to memory (the linker tour)
+skinparam componentStyle rectangle
+skinparam defaultFontName sans-serif
+left to right direction
+
+package "Source files" {
+  file "prog.asm" as P
+  file "maximo.asm" as X
+  file "dados.asm" as D
+}
+
+package "Per file" {
+  component "Macro processor\n+ assembler" as A
+}
+
+package "Object programs\n(addresses from 0, gaps + notes)" {
+  file "prog.obj" as PO
+  file "maximo.obj" as XO
+  file "dados.obj" as DO
+}
+
+component "Linker\n(linkage editor)\nallocation + linking" as L
+file "PROG.out\none program, still from 0" as OUT
+component "Relocating loader\nrelocation + loading" as R
+database "Memory\nfrom the load address" as MEM
+
+P --> A
+X --> A
+D --> A
+A --> PO
+A --> XO
+A --> DO
+PO --> L
+XO --> L
+DO --> L
+L --> OUT
+OUT --> R
+R --> MEM : load address\n(e.g. 1000)
+@enduml

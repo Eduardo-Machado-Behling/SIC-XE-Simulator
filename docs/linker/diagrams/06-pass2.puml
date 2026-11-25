@@ -1,0 +1,32 @@
+@startuml
+title Linker pass 2: fixing the fields (linker.cpp)
+skinparam defaultFontName sans-serif
+
+start
+while (next control section, at its CSADDR?) is (yes)
+  :Copy each T record's bytes\nto CSADDR + address;
+  while (next M record?) is (yes)
+    if (symbol in the ESTAB?) then (no)
+      :error: "undefined external symbol X";
+    else (yes)
+      :field at CSADDR + address,\nhalfBytes wide;
+      :field = field ± ESTAB[symbol]\n(modulo the field width);
+      note right: trace "+MAXIMO at 00000A\n000000 → 00002F"
+      :net[field] += 1 for a relative symbol added,\n−1 for one subtracted;
+    endif
+  endwhile (no)
+endwhile (no)
+while (next field with M records?) is (yes)
+  switch (net)
+  case (1)
+    :write "M address halfBytes +PROG"\nfor the loader;
+  case (0)
+    :nothing to do: a distance;
+  case (other)
+    :error: "relocation of this field\nis not 0 or 1 (net 2)";
+  endswitch
+endwhile (no)
+:Refuse fixed fields in sections\nnot placed at 0;
+:Output one section named after\nthe ENTRY section, plus estab,\norigins, trace, fixedFields;
+stop
+@enduml

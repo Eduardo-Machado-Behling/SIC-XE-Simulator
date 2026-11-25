@@ -1,0 +1,32 @@
+@startuml
+title Does this field change when the program moves?
+skinparam defaultFontName sans-serif
+
+start
+:A field the assembler emitted;
+if (Does it hold a value computed\nfrom labels of the program?) then (no: opcode, #constant, EQU number)
+  :Absolute. Never changes.;
+  stop
+else (yes)
+endif
+switch (Net relocation of the expression\n+1 per relative name added\n−1 per relative name subtracted)
+case (0)
+  :A distance, e.g. WORD PTR-VALUE.\nNever changes.;
+  stop
+case (other)
+  :Error: cannot be relocated\n(e.g. VALUE+PTR is net 2).;
+  stop
+case (1)
+endswitch
+switch (What kind of field?)
+case (format 4 address\nor WORD)
+  :Relative. The assembler writes an\nM record; the loader adds the\nload address.;
+  stop
+case (format 3 PC- or\nbase-relative,\nrelative target)
+  :A distance inside the program.\nNever changes.;
+  stop
+case (format 3 direct, SIC 15-bit,\nPC-relative to an\nabsolute target)
+  :Fixed field. Right only where it\nwas assembled; the loader refuses\nto move it.;
+  stop
+endswitch
+@enduml

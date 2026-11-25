@@ -1,0 +1,31 @@
+@startuml
+title The relocating loader: relocateAndLoad (loader.cpp)
+skinparam defaultFontName sans-serif
+
+start
+:linked program (from 0), loadAddress, memorySize;
+if (START was nonzero (absolute)\nand loadAddress ≠ 0?) then (yes)
+  :error: "an absolute program cannot be\nrelocated; set the load address to 0";
+  stop
+endif
+if (loadAddress + length > memorySize?) then (yes)
+  :error: "the program does not fit in memory";
+  stop
+endif
+if (loadAddress ≠ 0 and a fixed field exists?) then (yes)
+  :error: "this address field cannot be\nrelocated; use format 4 (+) here";
+  stop
+endif
+while (next "M address halfBytes +PROG"?) is (yes)
+  :field += loadAddress;
+  note right: trace "00100A: 00002F → 00102F"
+  if (result fits halfBytes?) then (no)
+    :error: field overflows;
+    stop
+  endif
+endwhile (no)
+:copy the bytes to loadAddress + address;
+:PC = loadAddress + transfer;
+:return image, entry point,\nsource map (address → file, line), trace;
+stop
+@enduml

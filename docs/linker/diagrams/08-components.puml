@@ -1,0 +1,48 @@
+@startuml
+!pragma layout smetana
+title Components involved in linking
+skinparam defaultFontName sans-serif
+skinparam componentStyle rectangle
+
+package "Frontend (frontend/src)" {
+  component "FileExplorer\nlink switches, ENTRADA badge" as FE
+  component "TopBar\nRun, load address" as TB
+  component "EditorPage" as EP
+  component "generatedFiles.filesToLink\nlinkSettings" as LS
+  component "loadCommand\nWebTransport" as WT
+  component "ExecutionEvent\nlinkReportFromEvents" as EV
+  component "Generated tabs\n.obj / .out (linkBands,\nobjectLanguage)" as GT
+  component "LinkerView\nESTAB + trace" as LV
+}
+
+package "Server (backend/src)" {
+  component "Server.cpp\nload [@hex] %path ..." as SV
+  component "Simulator::load_files\nreads files from the project" as SIM
+}
+
+package "SIC/XE plugin (backend/lib/sic-xe)" {
+  component "SICXE::load_files" as SX
+  component "MacroProcessor" as MP
+  component "Assembler\n→ ObjectProgram" as AS
+  component "link()\n→ LinkResult" as LK
+  component "relocateAndLoad()\n→ LoadResult" as LD
+  component "LinkReportJson\n→ ProgramLinked" as LR
+}
+
+FE --> EP
+TB --> EP
+EP --> LS
+EP --> WT
+WT --> SV : WebSocket
+SV --> SIM
+SIM --> SX
+SX --> MP
+SX --> AS
+SX --> LK
+SX --> LD
+SX --> LR
+LR ..> WT : events
+WT ..> EV
+EV ..> GT
+EV ..> LV
+@enduml

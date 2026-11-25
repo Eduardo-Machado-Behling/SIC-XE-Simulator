@@ -1,0 +1,56 @@
+@startuml
+!pragma layout smetana
+title The object program as data (backend/lib/sic-xe/include/assembler/object_program.hpp)
+skinparam defaultFontName sans-serif
+hide empty methods
+
+class ObjectProgram {
+  sections : vector<ControlSection>
+}
+
+class ControlSection {
+  name : string          <<H>>
+  start : size_t         <<H>>
+  length : size_t        <<H>>
+  defines : vector<pair<string, size_t>>  <<D>>
+  refers : vector<string>  <<R>>
+  transfer : optional<size_t>  <<E>>
+  --
+  entry : bool
+  startLine : int
+  sourceFile : string
+  symbols : map<string, int64>
+  fixedFieldLines : vector<int>
+}
+
+class TextRun <<T>> {
+  address : size_t
+  bytes : vector<uint8>
+}
+
+class ModRecord <<M>> {
+  address : size_t
+  halfBytes : unsigned
+  sign : char
+  symbol : string
+  line : int
+}
+
+class InstructionNote {
+  address : size_t
+  size : size_t
+  line : int
+  text : string
+}
+
+ObjectProgram "1" *-- "1..*" ControlSection
+ControlSection "1" *-- "*" TextRun : text
+ControlSection "1" *-- "*" ModRecord : mods
+ControlSection "1" *-- "*" InstructionNote : notes
+
+note bottom of InstructionNote
+  One per emitted statement.
+  Becomes the "  .  address  bytes  source"
+  lines of the readable .obj.
+end note
+@enduml
