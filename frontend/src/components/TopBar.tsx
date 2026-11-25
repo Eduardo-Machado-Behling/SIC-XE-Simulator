@@ -11,6 +11,12 @@ import { LanguageSwitch, useT } from "@/lib/i18n";
 
 export type TopBarProps = {
     title: string;
+    /** "Run", or "Run · 3 files" when files are switched on for linking. */
+    runLabel?: string;
+    /** The load address as typed (hexadecimal); `loadAddressInvalid` disables Run. */
+    loadAddress?: string;
+    loadAddressInvalid?: boolean;
+    onLoadAddressChange?: (text: string) => void;
     onRun: () => void;
     onStep: () => void;
     onReset: () => void;
@@ -24,7 +30,10 @@ const GHOST = "flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs text-zinc
 // TopBar
 // ============================================================
 
-export function TopBar({ title, onRun, onStep, onReset, onClear, onOpenCommandPalette }: TopBarProps) {
+export function TopBar({
+    title, runLabel, loadAddress = "0", loadAddressInvalid = false, onLoadAddressChange,
+    onRun, onStep, onReset, onClear, onOpenCommandPalette,
+}: TopBarProps) {
     const t = useT();
     return (
         <header className="flex h-12 shrink-0 items-center gap-2 border-b border-zinc-800 bg-zinc-900 px-3">
@@ -41,13 +50,35 @@ export function TopBar({ title, onRun, onStep, onReset, onClear, onOpenCommandPa
             <button
                 type="button"
                 onClick={onRun}
+                disabled={loadAddressInvalid}
                 title={t("top.runHint")}
                 aria-keyshortcuts="F5"
-                className="flex items-center gap-1.5 rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
+                className="flex items-center gap-1.5 rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
             >
                 <Play size={14} aria-hidden="true" />
-                {t("top.run")}
+                {runLabel ?? t("top.run")}
             </button>
+
+            <span className="flex items-center gap-1 text-xs text-zinc-400">
+                <span aria-hidden="true">{t("top.loadAt")}</span>
+                <input
+                    type="text"
+                    inputMode="text"
+                    spellCheck={false}
+                    autoComplete="off"
+                    value={loadAddress}
+                    onChange={(event) => onLoadAddressChange?.(event.target.value)}
+                    aria-label={t("top.loadAddress")}
+                    aria-invalid={loadAddressInvalid}
+                    title={t("top.loadAddressHint")}
+                    className={`w-[4.5rem] rounded border bg-zinc-950 px-1.5 py-1 font-mono text-xs text-zinc-100 focus-visible:outline-2 focus-visible:outline-blue-400 ${
+                        loadAddressInvalid ? "border-red-500" : "border-zinc-700"
+                    }`}
+                />
+            </span>
+            {loadAddressInvalid && (
+                <span role="alert" className="text-xs text-red-300">{t("top.loadAddressInvalid")}</span>
+            )}
 
             <button type="button" onClick={onStep} title={t("top.stepHint")} aria-keyshortcuts="F10" className={GHOST}>
                 <StepForward size={14} aria-hidden="true" />

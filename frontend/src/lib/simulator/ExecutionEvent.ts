@@ -245,6 +245,8 @@ export interface MacroReport {
     expansions: MacroExpansion[];
     lineMap: MacroLineOrigin[];
     trace: { truncated: boolean; steps: MacroTraceStep[] };
+    /** The project file the report belongs to (one report per linked file). */
+    source?: string;
 }
 
 // Emitted by SICXE::load_file before assembling, on success and on failure.
@@ -556,4 +558,11 @@ export function macroReportFromEvents(events: ExecutionEvent[]): MacroReport | n
 export function linkReportFromEvents(events: ExecutionEvent[]): LinkReport | null {
     const linked = events.findLast((event) => event.type === "ProgramLinked");
     return linked?.type === "ProgramLinked" ? linked.details : null;
+}
+
+// The report of `file` in a batch of events (a load of several files sends one per file),
+// else the last report, else null.
+export function macroReportForFile(events: ExecutionEvent[], file: string): MacroReport | null {
+    const reports = events.flatMap((event) => (event.type === "MacrosExpanded" ? [event.details] : []));
+    return reports.find((report) => report.source === file) ?? reports.at(-1) ?? null;
 }

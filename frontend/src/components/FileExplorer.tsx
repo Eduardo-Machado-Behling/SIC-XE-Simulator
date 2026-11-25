@@ -22,6 +22,11 @@ export type FileNode = {
     children?: FileNode[];
     /** Read-only file produced by the macro processor. */
     generated?: boolean;
+    /** An assembly source that Run can link; `included` says whether it is switched on. */
+    linkable?: boolean;
+    included?: boolean;
+    /** The source holds ENTRY: the linked program starts in it. */
+    entry?: boolean;
 };
 
 export type FileExplorerProps = {
@@ -33,6 +38,8 @@ export type FileExplorerProps = {
     onDelete: (paths: string[]) => void;
     onRename: (path: string, name: string) => void;
     onMove: (paths: string[], targetFolder: string) => void;
+    /** Switches a file in or out of the set Run links. */
+    onToggleLink?: (path: string) => void;
     label?: string;
 };
 
@@ -44,6 +51,7 @@ function FileTreeRow({
     selectedId,
     onSelectFile,
     onSelectNode,
+    onToggleLink,
 }: {
     node: NodeApi<FileNode>;
     style: React.CSSProperties;
@@ -52,6 +60,7 @@ function FileTreeRow({
     selectedId: string | null;
     onSelectFile: (path: string) => void;
     onSelectNode: (path: string) => void;
+    onToggleLink?: (path: string) => void;
 }) {
     const t = useT();
     const isFolder = node.data.children !== undefined;
@@ -94,6 +103,36 @@ function FileTreeRow({
                     {t("explorer.generated")}
                 </span>
             )}
+            {(node.data.entry || node.data.linkable) && (
+                <span className="ml-auto flex shrink-0 items-center gap-1.5">
+                    {node.data.entry && (
+                        <span title={t("explorer.entryHint")} className="rounded bg-emerald-950/60 px-1.5 text-[11px] uppercase tracking-wide text-emerald-300">
+                            {t("explorer.entry")}
+                        </span>
+                    )}
+                    {node.data.linkable && (
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={Boolean(node.data.included)}
+                            aria-label={t("explorer.includeInLink", { file: node.data.name })}
+                            title={t("explorer.includeInLink", { file: node.data.name })}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                onToggleLink?.(node.data.id);
+                            }}
+                            className={`relative h-3.5 w-6 shrink-0 rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-400 ${
+                                node.data.included ? "bg-blue-500" : "bg-zinc-700 hover:bg-zinc-600"
+                            }`}
+                        >
+                            <span
+                                aria-hidden="true"
+                                className={`absolute top-0.5 h-2.5 w-2.5 rounded-full bg-white transition-[left] ${node.data.included ? "left-3" : "left-0.5"}`}
+                            />
+                        </button>
+                    )}
+                </span>
+            )}
         </div>
     );
 }
@@ -107,6 +146,7 @@ export function FileExplorer({
     onDelete,
     onRename,
     onMove,
+    onToggleLink,
     label,
 }: FileExplorerProps) {
     const t = useT();
@@ -190,6 +230,7 @@ export function FileExplorer({
                             selectedId={selectedId}
                             onSelectFile={onSelectFile}
                             onSelectNode={setSelectedId}
+                            onToggleLink={onToggleLink}
                         />
                     )}
                 </Tree>
