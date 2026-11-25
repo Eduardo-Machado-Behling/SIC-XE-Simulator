@@ -31,11 +31,14 @@ No prior knowledge of linkers, loaders or object files is assumed.
 | 7 | [The loader](07-the-loader.md) | follow one field from the assembler to memory | 20 min |
 | 8 | [The codebase](08-the-codebase.md) | find the code for each step and trace a Run end to end | 30 min |
 | 9 | [Hands-on](09-hands-on.md) | break the tour on purpose and predict each error; write your own linked program | 45 min |
+| 10 | [From the lecture to the code](10-the-lecture.md) | translate the lecture's terms (TSG, usage table, relocation bits, kinds of loader) and explain what is not implemented | 25 min |
+| 11 | [The presentation, slide by slide](11-the-presentation.md) | present any slide of the stage 4 video and answer the questions on it | 30 min |
 
 The [glossary](glossary.md) defines every term in bold the first time it appears.
 
 Chapters 1 to 7 are about concepts and use this project only for examples. Chapter 8 is the
-map of the code. If you already know linkers and only need the code, read chapter 8, then
+map of the code. Chapter 10 maps the course lecture's vocabulary onto Beck's and the code's,
+and chapter 11 is the long version of the presentation script. If you already know linkers and only need the code, read chapter 8, then
 [backend/docs/linker/README.md](../../backend/docs/linker/README.md), the reference for what
 is implemented.
 

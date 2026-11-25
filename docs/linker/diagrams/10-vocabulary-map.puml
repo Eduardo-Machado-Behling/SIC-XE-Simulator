@@ -1,0 +1,47 @@
+@startuml
+!pragma layout smetana
+title The same ideas under three names: lecture, Beck, this project
+skinparam defaultFontName sans-serif
+skinparam componentStyle rectangle
+left to right direction
+
+package "Lecture: Ligadores 1" {
+  [INTDEF / INTUSE] as L1
+  [tabela de definições] as L2
+  [tabela de uso] as L3
+  [TSG] as L4
+  [bit / mapa de relocação] as L5
+  [carregador ligador] as L6
+}
+
+package "Beck, chapter 3" {
+  [EXTDEF / EXTREF] as B1
+  [D record] as B2
+  [R record + revised M records] as B3
+  [ESTAB] as B4
+  [bit mask (Fig. 3.7)\nor M records (Fig. 3.5)] as B5
+  [linking loader (§3.2.3)\nor linkage editor (§3.4.1)] as B6
+}
+
+package "This project" {
+  [EXTDEF / EXTREF\n(+ ENTRY)] as C1
+  [ControlSection::defines] as C2
+  [ControlSection::refers\n+ ModRecord] as C3
+  [LinkResult::estab] as C4
+  [M records only] as C5
+  [link() writes PROG.out,\nrelocateAndLoad() loads it] as C6
+}
+
+L1 --> B1
+L2 --> B2
+L3 --> B3
+L4 --> B4
+L5 --> B5
+L6 --> B6
+B1 --> C1
+B2 --> C2
+B3 --> C3
+B4 --> C4
+B5 --> C5
+B6 --> C6
+@enduml

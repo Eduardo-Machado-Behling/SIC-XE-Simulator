@@ -52,7 +52,7 @@ Pass 1 also checks the set of files and reports, with the file and line:
 | two files have `ENTRY` | `a second ENTRY (the first is in linker/prog.asm)` |
 | a subroutine's `END` names an address | `only the ENTRY file can name a transfer address` |
 | a `START` other than 0 | `START must be 0 when files are linked` |
-| a name exported twice | `N is defined twice`, at both definitions |
+| a name exported twice | `N is defined twice`, in both files, each at the start line of the section that exports it |
 
 ## Pass 2: fixing the fields
 
