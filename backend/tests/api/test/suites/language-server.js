@@ -73,5 +73,53 @@ export default function languageServer(ctx) {
         client.close();
       }
     });
+
+    it('knows the linker directives: completion, hover and single-file diagnostics', async () => {
+      const client = await connect(ctx.server.languageUrl);
+      try {
+        client.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { capabilities: {} } });
+        const initialized = await client.receive();
+        for (const name of ['CSECT', 'EXTDEF', 'EXTREF', 'ENTRY'])
+          assert.ok(initialized.result.capabilities.experimental.sicxe.directives.includes(name), `${name} is a directive`);
+        client.send({ jsonrpc: '2.0', method: 'initialized', params: {} });
+
+        const uri = 'sicxe://api-test/linked.asm';
+        client.send({
+          jsonrpc: '2.0',
+          method: 'textDocument/didOpen',
+          params: { textDocument: { uri, languageId: 'sicxe', version: 1,
+            text: 'PROG ENTRY 0\n EXTREF X1\n JSUB X1\nENTRY LDA #5\n END\n' } },
+        });
+        const published = await client.receive();
+        const messages = published.params.diagnostics.map((item) => `${item.range.start.line + 1}: ${item.message}`);
+        assert.ok(messages.includes('3: X1 is an external reference; use +JSUB X1 (format 4)'), messages.join('\n'));
+        assert.ok(messages.includes('4: ENTRY is a directive since stage 4; rename this label'), messages.join('\n'));
+
+        client.send({ jsonrpc: '2.0', id: 2, method: 'textDocument/completion',
+          params: { textDocument: { uri }, position: { line: 1, character: 1 } } });
+        const completion = await client.receive();
+        for (const name of ['CSECT', 'EXTDEF', 'EXTREF', 'ENTRY'])
+          assert.ok(completion.result.items.some((item) => item.label === name), `${name} is offered`);
+
+        client.send({ jsonrpc: '2.0', id: 3, method: 'textDocument/hover',
+          params: { textDocument: { uri }, position: { line: 1, character: 3 } } });
+        const hover = await client.receive();
+        assert.match(hover.result.contents.value, /defined in another control section/);
+
+        // Whether NOWHERE exists is the linker's question, asked at Run: no diagnostic here.
+        const alone = 'sicxe://api-test/alone.asm';
+        client.send({
+          jsonrpc: '2.0',
+          method: 'textDocument/didOpen',
+          params: { textDocument: { uri: alone, languageId: 'sicxe', version: 1,
+            text: 'P START 0\n EXTREF NOWHERE\n +JSUB NOWHERE\n END\n' } },
+        });
+        const quiet = await client.receive();
+        assert.equal(quiet.params.uri, alone);
+        assert.deepEqual(quiet.params.diagnostics, []);
+      } finally {
+        client.close();
+      }
+    });
   });
 }

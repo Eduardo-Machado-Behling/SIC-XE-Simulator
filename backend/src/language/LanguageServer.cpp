@@ -460,6 +460,10 @@ std::string directive_detail(std::string_view name) {
     if (directive == "NOBASE") return "Disable base-relative addressing.";
     if (directive == "EQU") return "Define a symbol from an expression.\n\n`label EQU expression`";
     if (directive == "ORG") return "Set the location counter, or restore its saved value.\n\n`ORG [expression]`";
+    if (directive == "CSECT") return "Start a new control section, with its own location counter from 0.\n\n`label CSECT`";
+    if (directive == "EXTDEF") return "Make symbols of this control section usable by other sections.\n\n`EXTDEF symbol, ...`";
+    if (directive == "EXTREF") return "Use symbols defined in another control section; only in format 4 (`+`) or `WORD`.\n\n`EXTREF symbol, ...`";
+    if (directive == "ENTRY") return "Like START, and mark this file as the one the linked program starts in.\n\n`label ENTRY expression`";
     return {};
 }
 
@@ -614,12 +618,14 @@ json AssemblerLanguageSession::completion(Document& document, const json& params
             }
             add(std::string(instruction.mnemonic), 14, std::move(detail));
         }
-        const std::array<std::pair<const char*, const char*>, 10> directives = {{
+        const std::array<std::pair<const char*, const char*>, 14> directives = {{
             {"START", "Set program start address"}, {"END", "End source and select entry point"},
             {"BYTE", "Emit byte values or literals"}, {"WORD", "Emit three-byte values"},
             {"RESB", "Reserve bytes"}, {"RESW", "Reserve words"}, {"BASE", "Set base address"},
             {"NOBASE", "Disable base-relative addressing"}, {"EQU", "Define a symbol value"},
-            {"ORG", "Set or restore the location counter"}}};
+            {"ORG", "Set or restore the location counter"}, {"CSECT", "Start a control section"},
+            {"EXTDEF", "Export symbols to other sections"}, {"EXTREF", "Import symbols from other sections"},
+            {"ENTRY", "Start the program that runs first"}}};
         for (const auto& [name, detail] : directives) add(name, 14, detail);
     } else {
         std::string op = *operation;
@@ -842,7 +848,8 @@ std::vector<json> AssemblerLanguageSession::handle(const json& message) {
             json instructions = json::array();
             for (const sicxe::InstructionDef& instruction : sicxe::instructionSet())
                 instructions.push_back(instruction.mnemonic);
-            const json directives = {"START", "END", "BYTE", "WORD", "RESB", "RESW", "BASE", "NOBASE", "EQU", "ORG"};
+            const json directives = {"START", "END", "BYTE", "WORD", "RESB", "RESW", "BASE", "NOBASE", "EQU", "ORG",
+                                     "CSECT", "EXTDEF", "EXTREF", "ENTRY"};
             const json registers = register_names();
             // Keywords of the macro processor, not assembler directives (spec 5).
             const json macroDirectives = {"MCDEFN", "MCEND"};
