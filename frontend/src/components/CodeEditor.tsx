@@ -58,8 +58,6 @@ export type CodeEditorProps = {
     onMount?: OnMount;
     /** Blocks edits and shows the generated badge in the tab header. */
     readOnly?: boolean;
-    /** Editor theme. Defaults to "vs-dark". */
-    theme?: string;
 };
 
 // ============================================================
@@ -83,7 +81,6 @@ export function CodeEditor({
     onCloseTab,
     onMount,
     readOnly = false,
-    theme = "vs-dark",
 }: CodeEditorProps) {
     const t = useT();
     const [editorInstance, setEditorInstance] = useState<editor.IStandaloneCodeEditor | null>(null);
@@ -264,10 +261,10 @@ export function CodeEditor({
                     path={documentUri ?? path}
                     language={language}
                     value={value}
-                    theme={language === "sicxe" ? "sicxe-dark" : theme}
-                    beforeMount={(monaco) => {
-                        if (language === "sicxe") registerSicxeLanguage(monaco);
-                    }}
+                    // Monaco's theme is global: every editor sets the same one, or a plaintext
+                    // pane mounting last would strip the SIC/XE colours from the others.
+                    theme="sicxe-dark"
+                    beforeMount={registerSicxeLanguage}
                     onMount={(editor, monaco) => {
                         if (language === "sicxe") {
                             const model = editor.getModel();
