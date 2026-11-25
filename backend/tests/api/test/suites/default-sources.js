@@ -9,17 +9,28 @@ import { describe, it } from 'node:test';
 
 import { DEFAULT_MACRO_SOURCE } from '../../../../../frontend/src/lib/simulator/defaultMacroSource.ts';
 import { DEFAULT_MAIN_SOURCE } from '../../../../../frontend/src/lib/simulator/defaultMainSource.ts';
+import {
+  DEFAULT_LINKER_DADOS,
+  DEFAULT_LINKER_MAXIMO,
+  DEFAULT_LINKER_PROG,
+} from '../../../../../frontend/src/lib/simulator/defaultLinkerSources.ts';
 import { sessionWithProject } from '../support/fixtures.js';
 import { connect } from './language-macros.js';
 import { checkReport, macrosExpanded, openSimulator } from './ws-macros.js';
 
-const FILES = { 'main.asm': DEFAULT_MAIN_SOURCE, 'macro.asm': DEFAULT_MACRO_SOURCE };
+const FILES = {
+  'main.asm': DEFAULT_MAIN_SOURCE,
+  'macro.asm': DEFAULT_MACRO_SOURCE,
+  'linker/prog.asm': DEFAULT_LINKER_PROG,
+  'linker/maximo.asm': DEFAULT_LINKER_MAXIMO,
+  'linker/dados.asm': DEFAULT_LINKER_DADOS,
+};
 
 /**
  * Loads a new SIC-XE project holding both default files, then `load %<file>`. Returns the
  * open connection and that response; the caller closes the connection.
  */
-async function openDefaultProject(ctx, file) {
+async function openDefaultProject(ctx, file, command = `load %${file}`) {
   const { sessionId, projectId } = await sessionWithProject(ctx.api, {
     name: 'Default project',
     architecture: 'SIC-XE',
@@ -29,7 +40,7 @@ async function openDefaultProject(ctx, file) {
   try {
     const project = await client.command(`load $${sessionId}/${projectId}`);
     assert.ok(project.result, `load $ failed: ${JSON.stringify(project.error)}`);
-    return { client, response: await client.command(`load %${file}`) };
+    return { client, response: await client.command(command) };
   } catch (error) {
     client.close();
     throw error;
@@ -108,6 +119,70 @@ export default function defaultSources(ctx) {
         assert.equal(published.method, 'textDocument/publishDiagnostics');
         assert.equal(published.params.uri, uri);
         assert.deepEqual(published.params.diagnostics, []);
+      } finally {
+        client.close();
+      }
+    });
+
+    it('the linker tour links at 1000 and runs to HALT with the values its header states', async () => {
+      const { client, response } = await openDefaultProject(ctx, 'linker',
+        'load @1000 %linker/prog.asm %linker/dados.asm %linker/maximo.asm');
+      try {
+        assert.ok(response.result, `the link failed: ${JSON.stringify(response.error)}`);
+        const linked = response.result.events.find((event) => event.type === 'ProgramLinked');
+        assert.ok(linked, 'one ProgramLinked event');
+        assert.deepEqual(linked.details.estab.filter((row) => row.symbol === '').map((row) => row.section),
+          ['PROG', 'DADOS', 'TABELA', 'MAXIMO'], 'the ENTRY file first, then the order given; dados.asm has two sections');
+
+        const memory = new Map();
+        const apply = (events) => events.filter((event) => event.type === 'MemoryWrite').forEach((event) => {
+          event.value.forEach((byte, i) => memory.set(event.address + i, byte));
+        });
+        apply(response.result.events);
+        const symbols = symbolTable(response.result.events);
+
+        const executed = [];
+        let steps = 0;
+        while (!executed.includes('HALT') && steps < 50) {
+          const step = await client.command('step');
+          assert.ok(step.result, `step failed: ${JSON.stringify(step.error)}`);
+          steps += 1;
+          apply(step.result);
+          step.result.filter((event) => event.type === 'InstructionExecuted')
+            .forEach((event) => executed.push(event.instruction?.mnemonic));
+        }
+        // DOBRA, then MAXIMO in maximo.asm (JGT skips LDA M), then N * K into TRIPLO.
+        assert.deepEqual(executed, ['LDA', 'ADD', 'STA', 'JSUB', 'LDA', 'COMP', 'JGT', 'STA', 'RSUB',
+          'LDA', 'MUL', 'STA', 'HALT']);
+
+        const word = (name) => {
+          assert.ok(symbols.has(name), `symbol ${name} in the symbol table`);
+          return [0, 1, 2].map((i) => memory.get(symbols.get(name) + i));
+        };
+        assert.deepEqual(word('N'), [0x00, 0x00, 0x0a], 'N = 10');
+        assert.deepEqual(word('MAIOR'), [0x00, 0x00, 0x0a], 'MAIOR = 10');
+        assert.deepEqual(word('TRIPLO'), [0x00, 0x00, 0x1e], 'TRIPLO = 30');
+        assert.deepEqual(word('ENDMAIOR'), [0x00, 0x10, 0x20], 'ENDMAIOR = the loaded address of MAIOR, 0x001020');
+        assert.deepEqual(word('DISTANC'), [0x00, 0x00, 0x06], 'DISTANC = MAIOR - N = 6, no relocation');
+      } finally {
+        client.close();
+      }
+    });
+
+    it('each linker tour file gets no diagnostic from the language server', async () => {
+      const client = await connect(ctx.server.languageUrl);
+      try {
+        client.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { capabilities: {} } });
+        assert.equal((await client.receive()).id, 1);
+        client.send({ jsonrpc: '2.0', method: 'initialized', params: {} });
+        for (const [name, text] of [['prog', DEFAULT_LINKER_PROG], ['maximo', DEFAULT_LINKER_MAXIMO], ['dados', DEFAULT_LINKER_DADOS]]) {
+          const uri = `sicxe://api-test/linker/${name}.asm`;
+          client.send({ jsonrpc: '2.0', method: 'textDocument/didOpen',
+            params: { textDocument: { uri, languageId: 'sicxe', version: 1, text } } });
+          const published = await client.receive();
+          assert.equal(published.params.uri, uri);
+          assert.deepEqual(published.params.diagnostics, [], `${name}.asm`);
+        }
       } finally {
         client.close();
       }
