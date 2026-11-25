@@ -10,6 +10,8 @@ export interface EditorBand {
     colorIndex: number;
     /** Written after the band's first line: where a linked section came from. */
     label?: string;
+    /** Markdown shown when hovering any line of the band. */
+    hover?: string;
 }
 
 // The same expansion has the same index in both lists.
@@ -120,6 +122,7 @@ export function bandDecorations(bands: EditorBand[]): editor.IModelDeltaDecorati
                 isWholeLine: true,
                 className: `macro-band-${band.colorIndex}`,
                 linesDecorationsClassName: `macro-band-${band.colorIndex} macro-band-stripe`,
+                ...(band.hover ? { hoverMessage: { value: band.hover } } : {}),
             },
         },
         ...(band.label ? [{
