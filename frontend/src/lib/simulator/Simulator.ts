@@ -86,6 +86,10 @@ export class Simulator {
         return this.transport!.loadFile(file)
     }
 
+    public loadFiles(files: string[], loadAddress: number): Promise<ExecutionEvent[]> {
+        return this.transport!.loadFiles(files, loadAddress);
+    }
+
     private constructor() {
         if (this.is_web()) {
             this.transport = new WebTransport(this.get_url());

@@ -9,7 +9,8 @@ export type ExecutionEvent =
     | MemoryClearedEvent
     | ProgramClearedEvent
     | ProgramAssembledEvent
-    | MacrosExpandedEvent;
+    | MacrosExpandedEvent
+    | ProgramLinkedEvent;
 
 export type InstructionFormat =
     | "format1"
@@ -83,6 +84,8 @@ export interface InstructionFetchedEvent {
     bytes: number[];
     value: number;
     source_line?: number;
+    /** The project file of the instruction, when several files were linked. */
+    source_file?: string;
     preview?: boolean;
 }
 
@@ -127,6 +130,9 @@ export interface MemoryReadEvent {
 export interface AssemblySymbol {
     name: string;
     value: number;
+    /** The control section and file that define it (stage 4). */
+    section?: string;
+    file?: string;
 }
 
 // Emitted by SICXE::load_file when it assembles a source file (not for hex
@@ -247,6 +253,44 @@ export interface MacrosExpandedEvent {
     details: MacroReport;
 }
 
+// One step of the linker (pass 1 and 2) or of the relocating loader.
+export interface LinkerTraceStep {
+    pass: "1" | "2" | "load";
+    text: string;
+    file: string;
+    line: number;
+    address: number;
+    before: number;
+    after: number;
+    symbol: string;
+}
+
+export interface EstabRow {
+    section: string;
+    /** Empty on a control-section row. */
+    symbol: string;
+    /** Relative to the start of the linked program. */
+    address: number;
+    length: number;
+    file: string;
+}
+
+export interface LinkReport {
+    loadAddress: number;
+    estab: EstabRow[];
+    /** Each file's object program, as readable .obj text. */
+    objects: { source: string; text: string }[];
+    /** The linked program as .out text, with one band per control section. */
+    out: { name: string; text: string; bands: { firstLine: number; lastLine: number; label: string }[] };
+    trace: LinkerTraceStep[];
+}
+
+// Emitted by SICXE::load_files after the MacrosExpanded events, on success and on failure.
+export interface ProgramLinkedEvent {
+    type: "ProgramLinked";
+    details: LinkReport;
+}
+
 export interface MemoryClearedEvent {
     type: "MemoryCleared";
 }
@@ -276,7 +320,12 @@ function symbolArray(value: unknown): AssemblySymbol[] {
         throw new TypeError("Invalid symbol table in ProgramAssembled event");
     }
 
-    return value.map((symbol) => ({ name: symbol.name, value: symbol.value }));
+    return value.map((symbol) => ({
+        name: symbol.name,
+        value: symbol.value,
+        ...(typeof symbol.section === "string" ? { section: symbol.section } : {}),
+        ...(typeof symbol.file === "string" ? { file: symbol.file } : {}),
+    }));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -336,6 +385,35 @@ function normalizeMacroReport(raw: unknown): MacroReport {
     return raw as unknown as MacroReport;
 }
 
+function linkFields(value: unknown, field: string, checks: Record<string, "string" | "number">): Record<string, unknown>[] {
+    if (!Array.isArray(value) || !value.every(isRecord)) {
+        throw new TypeError(`Invalid '${field}' in ProgramLinked event`);
+    }
+    for (const item of value) {
+        for (const [key, type] of Object.entries(checks)) {
+            if (typeof item[key] !== type) throw new TypeError(`Invalid '${field}.${key}' in ProgramLinked event`);
+        }
+    }
+    return value;
+}
+
+function normalizeLinkReport(raw: unknown): LinkReport {
+    if (!isRecord(raw) || typeof raw.loadAddress !== "number") {
+        throw new TypeError("Invalid details in ProgramLinked event");
+    }
+    linkFields(raw.estab, "estab", { section: "string", symbol: "string", address: "number", length: "number", file: "string" });
+    linkFields(raw.objects, "objects", { source: "string", text: "string" });
+    if (!isRecord(raw.out) || typeof raw.out.name !== "string" || typeof raw.out.text !== "string") {
+        throw new TypeError("Invalid 'out' in ProgramLinked event");
+    }
+    linkFields(raw.out.bands, "out.bands", { firstLine: "number", lastLine: "number", label: "string" });
+    const trace = linkFields(raw.trace, "trace", { text: "string", address: "number" });
+    if (trace.some((step) => step.pass !== "1" && step.pass !== "2" && step.pass !== "load")) {
+        throw new TypeError("Invalid 'trace.pass' in ProgramLinked event");
+    }
+    return raw as unknown as LinkReport;
+}
+
 export function bytesToNumber(bytes: number[]): number {
     return bytes.reduce((value, byte) => value * 256 + byte, 0);
 }
@@ -355,6 +433,9 @@ export function normalizeExecutionEvent(raw: unknown): ExecutionEvent {
                 (typeof sourceLine !== "number" || !Number.isInteger(sourceLine) || sourceLine < 1)) {
                 throw new TypeError("Invalid source line in InstructionFetched event");
             }
+            if (event.source_file !== undefined && typeof event.source_file !== "string") {
+                throw new TypeError("Invalid source file in InstructionFetched event");
+            }
             if (event.preview !== undefined && typeof event.preview !== "boolean") {
                 throw new TypeError("Invalid preview flag in InstructionFetched event");
             }
@@ -364,6 +445,7 @@ export function normalizeExecutionEvent(raw: unknown): ExecutionEvent {
                 bytes,
                 value: bytesToNumber(bytes),
                 ...(sourceLine === undefined ? {} : { source_line: sourceLine as number }),
+                ...(typeof event.source_file === "string" ? { source_file: event.source_file } : {}),
                 ...(event.preview === true ? { preview: true } : {}),
             };
         }
@@ -435,6 +517,8 @@ export function normalizeExecutionEvent(raw: unknown): ExecutionEvent {
         }
         case "MacrosExpanded":
             return { type: "MacrosExpanded", details: normalizeMacroReport(event.details) };
+        case "ProgramLinked":
+            return { type: "ProgramLinked", details: normalizeLinkReport(event.details) };
         case "MemoryCleared":
             return { type: "MemoryCleared" };
         case "ProgramCleared":
@@ -465,4 +549,11 @@ export function symbolsFromEvents(events: ExecutionEvent[]): AssemblySymbol[] | 
 export function macroReportFromEvents(events: ExecutionEvent[]): MacroReport | null {
     const expanded = events.findLast((event) => event.type === "MacrosExpanded");
     return expanded?.type === "MacrosExpanded" ? expanded.details : null;
+}
+
+// The report of the last link in a batch of events, or null when the batch has none
+// (a hex dump, or a load that failed before linking).
+export function linkReportFromEvents(events: ExecutionEvent[]): LinkReport | null {
+    const linked = events.findLast((event) => event.type === "ProgramLinked");
+    return linked?.type === "ProgramLinked" ? linked.details : null;
 }
