@@ -10,6 +10,7 @@ import type {
     AssemblerLanguageClient,
 } from "@/lib/language/LanguageClient";
 import { toMonacoMarker } from "@/lib/language/monacoDiagnostics";
+import { registerObjectLanguage } from "@/lib/language/objectLanguage";
 import { registerSicxeLanguage } from "@/lib/language/sicxeLanguage";
 import {
     bandAt,
@@ -264,7 +265,10 @@ export function CodeEditor({
                     // Monaco's theme is global: every editor sets the same one, or a plaintext
                     // pane mounting last would strip the SIC/XE colours from the others.
                     theme="sicxe-dark"
-                    beforeMount={registerSicxeLanguage}
+                    beforeMount={(monaco) => {
+                        registerSicxeLanguage(monaco);
+                        registerObjectLanguage(monaco);
+                    }}
                     onMount={(editor, monaco) => {
                         if (language === "sicxe") {
                             const model = editor.getModel();

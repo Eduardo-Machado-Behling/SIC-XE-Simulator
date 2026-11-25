@@ -23,6 +23,7 @@ import { Simulator } from "@/lib/simulator/Simulator";
 import { SimulatorCommandError } from "@/lib/transport/SimulatorTransport";
 import { AssemblerLanguageClient } from "@/lib/language/LanguageClient";
 import { setAssemblerLanguageClient } from "@/lib/language/sicxeLanguage";
+import { OBJECT_LANGUAGE_ID } from "@/lib/language/objectLanguage";
 import { simulatorWebSocketUrl } from "@/lib/transport/urls";
 import { Project } from "@/lib/simulator/Project";
 import { defaultProjectFiles } from "@/lib/simulator/defaultProjectFiles";
@@ -1141,7 +1142,7 @@ export default function EditorPage({ projectId }: PageProps) {
                                                                 key={`generated-${tab.id}`}
                                                                 path={tab.label}
                                                                 value={tab.text}
-                                                                language="plaintext"
+                                                                language={OBJECT_LANGUAGE_ID}
                                                                 bands={tab.id === "out" && linkReport ? linkBands(linkReport.out) : undefined}
                                                                 onChange={() => {}}
                                                                 readOnly
