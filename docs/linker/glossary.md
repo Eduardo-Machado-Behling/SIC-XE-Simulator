@@ -2,12 +2,15 @@
 
 | Term | Meaning | Chapter |
 |---|---|---|
+| absolute loader | a loader that copies text already holding final addresses; the lecture's *carregador absoluto*; here, a program whose `START` is not 0 | 7, 10 |
 | absolute value | a value that does not depend on where the program is loaded: a number, a length, a distance between two addresses | 3 |
 | allocation | deciding where each control section goes in the linked program | 1, 6 |
-| CSADDR | control section address: the counter the linker uses to place the next section | 6 |
 | control section | a part of a program with its own location counter from 0 and its own labels; opened by `START`, `ENTRY` or `CSECT` | 4 |
+| CSADDR | control section address: the counter the linker uses to place the next section | 6 |
 | `CSECT` | opens another control section in the same file | 4 |
+| definition table | the lecture's *tabela de definições*: per segment, each exported symbol with its address and mode; the `D` record here | 10 |
 | dynamic linking | linking a routine when it is first called; not implemented here | 7 |
+| dynamic loading | the lecture's *carga dinâmica*: the program asks the loader for a segment while it runs; not implemented here | 10 |
 | `ENTRY` | this project's version of `START` that also marks the file the program starts in; exactly one per link | 4 |
 | entry point | the address where execution starts: load address plus the `E` record's address | 7 |
 | ESTAB | external symbol table: every section name and exported symbol, with its address in the linked program | 6 |
@@ -24,10 +27,17 @@
 | net relocation | for one field, +1 per relative name added and −1 per relative name subtracted; 0 absolute, 1 relative, otherwise an error | 3, 6 |
 | object program | the assembler's output for one file: `H D R T M E` records per section | 5 |
 | origin | which file and section a byte range of the linked program came from; the coloured bands of `.out` | 6, 8 |
+| overlay | segments that share the same memory at different times, usually arranged as a tree; not implemented here | 10 |
 | relative value | an address inside the program; it changes when the program moves; also called relocatable | 3 |
 | relocating loader | a loader that can put the program at any address by adjusting the fields the M records name | 7 |
 | relocation | changing the address fields so the program works at another address | 1, 3 |
 | relocation bit mask | Beck's alternative to M records: one bit per word of a `T` record; not used here | 7 |
+| relocation constant | the lecture's *constante de relocação*: the number added to relocated fields; CSADDR in the linker, the load address in the loader | 10 |
+| relocation map | the lecture's *mapa de relocação*: the relocation bits kept in one area after the code, whole or per block; not used here | 10 |
+| relocation mode | the lecture's *modo de relocabilidade*, `r` (relative) or `a` (absolute); net relocation 1 or 0 here | 10 |
 | revised M record | the M record with a sign and a symbol (Beck §2.3.5), as opposed to the first form that only said "relocate" | 5 |
 | target address | the address an instruction finally uses, after applying format 4, PC-relative, base-relative or direct addressing | 2 |
 | trace | the list of steps the linker (pass 1, pass 2) and the loader took; the Rastreio tab | 6, 7, 8 |
+| transfer vector | the lecture's *vetor de transferência*: a table of jumps to external subroutines that the loader fills in; not used here | 10 |
+| TSG | the lecture's *tabela de símbolos globais*, the union of all definition tables; the ESTAB here | 10 |
+| usage table | the lecture's *tabela de uso*: per segment, each field that uses an imported symbol, with its sign; the `R` and `M` records here | 10 |
