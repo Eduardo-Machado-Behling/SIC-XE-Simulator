@@ -64,3 +64,22 @@ describe("SymbolTable", () => {
         expect(values).toEqual(["FFFFFF", "FFFFE6", "1000000"]);
     });
 });
+
+describe("SymbolTable of a linked program", () => {
+    it("groups the symbols by control section and file", () => {
+        render(<SymbolTable symbols={[
+            { name: "INICIO", value: 0x1003, section: "PROG", file: "main.asm" },
+            { name: "VAL", value: 0x1006, section: "PROG", file: "main.asm" },
+            { name: "SUBB", value: 0x1008, section: "SUBB", file: "sub.asm" },
+            { name: "VAL", value: 0x100B, section: "SUBB", file: "sub.asm" },
+        ]} />);
+        const groups = screen.getAllByRole("rowheader").map((cell) => cell.textContent);
+        expect(groups).toEqual(["PROG · main.asm", "SUBB · sub.asm"]);
+        expect(screen.getAllByText("VAL")).toHaveLength(2);
+    });
+
+    it("looks as before when the symbols carry no section", () => {
+        render(<SymbolTable symbols={[{ name: "FIRST", value: 0x1000 }]} />);
+        expect(screen.queryAllByRole("rowheader")).toHaveLength(0);
+    });
+});

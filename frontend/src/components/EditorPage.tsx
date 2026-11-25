@@ -206,6 +206,8 @@ export default function EditorPage({ projectId }: PageProps) {
     const [generatedTab, setGeneratedTab] = useState<GeneratedTabId>("macro");
     // The source line of the Linker trace step last clicked, lit in its file.
     const [linkerLine, setLinkerLine] = useState<{ file: string; line: number } | null>(null);
+    // The project file of the instruction about to run, when a link put it in another file.
+    const [executingFile, setExecutingFile] = useState<string | null>(null);
     const [loadAddressText, setLoadAddressText] = useState("0");
     const [macroReport, setMacroReport] = useState<MacroReport | null>(null);
     const [macroView, setMacroView] = useState<MacroViewState>(NO_MACRO_VIEW);
@@ -271,11 +273,13 @@ export default function EditorPage({ projectId }: PageProps) {
         if (fetchedForSource?.type === "InstructionFetched") {
             setExecutingLine(fetchedForSource.source_line ?? null);
             setExecutingAddress(fetchedForSource.address);
+            setExecutingFile(fetchedForSource.source_file ?? null);
         } else if (!animateInstruction || events.some((event) =>
             event.type === "ProgramAssembled" || event.type === "ProgramCleared"
         )) {
             setExecutingLine(null);
             setExecutingAddress(null);
+            setExecutingFile(null);
         }
 
         const pcWrite = events.findLast((event) =>
@@ -464,8 +468,23 @@ export default function EditorPage({ projectId }: PageProps) {
 
     // After a Run with macros, MASMAPRG.ASM opens next to the Run's source, and
     // only next to it: another open file did not produce that output.
-    const decorationContext = { report: macroReport, view: macroView, executingLine, executionSourceFile, selectedExpansion };
-    const activeDecorations = editorDecorations(activeFile, decorationContext);
+    // Stepping into another linked file: that file shows the line, mapped back through its
+    // own MASMAPRG.ASM when it has macros; the Run's file and its output show none.
+    const executingElsewhere = executingFile !== null && executingFile !== executionSourceFile;
+    const decorationContext = {
+        report: macroReport, view: macroView, executingLine: executingElsewhere ? null : executingLine,
+        executionSourceFile, selectedExpansion,
+    };
+    const baseDecorations = editorDecorations(activeFile, decorationContext);
+    const elsewhereReport = executingElsewhere ? macroReports[executingFile] : undefined;
+    const activeDecorations = executingElsewhere && activeFile === executingFile
+        ? {
+            ...baseDecorations,
+            executingLine: executingLine !== null && elsewhereReport?.hasMacros
+                ? sourceLineForOutput(elsewhereReport, executingLine)
+                : executingLine,
+        }
+        : baseDecorations;
     const outputDecorations = editorDecorations(MACRO_OUTPUT_FILE, decorationContext);
     const canShowMacroOutput = Boolean(macroReport?.hasMacros) && activeFile === macroView.sourceFile;
     const macroOutput = canShowMacroOutput && showMacroOutput ? macroReport : null;
@@ -780,16 +799,27 @@ export default function EditorPage({ projectId }: PageProps) {
         }
     }, [activeFile, applyExecutionEvents, executionSourceFile, files, folders, languageClient, linkSet, loadAddress, project, projectId, reportCommandError, simulator, t]);
 
+    // After a step or a reset, open the file the next instruction is in (a linked program
+    // spans files). MASMAPRG.ASM of the Run's own file stays open when execution is there.
+    const followExecution = useCallback((events: ExecutionEvent[]) => {
+        const fetched = events.findLast((event) => event.type === "InstructionFetched");
+        const file = fetched?.type === "InstructionFetched" ? fetched.source_file : undefined;
+        if (!file || file === activeFile || !(file in files)) return;
+        if (isGeneratedFile(activeFile) && file === executionSourceFile) return;
+        setActiveFile(file);
+    }, [activeFile, executionSourceFile, files]);
+
     const step = useCallback(async () => {
         consoleHandleRef.current?.log(t("term.stepping"), "info");
         try {
             const steps = await simulator.step();
             applyExecutionEvents(steps);
+            followExecution(steps);
             consoleHandleRef.current?.writeEvents(steps);
         } catch (error) {
             reportCommandError(error);
         }
-    }, [applyExecutionEvents, reportCommandError, simulator, t]);
+    }, [applyExecutionEvents, followExecution, reportCommandError, simulator, t]);
 
     const reset = useCallback(async () => {
         if (instructionTimerRef.current) clearTimeout(instructionTimerRef.current);
@@ -798,11 +828,12 @@ export default function EditorPage({ projectId }: PageProps) {
         try {
             const steps = await simulator.reset();
             applyExecutionEvents(steps, false);
+            followExecution(steps);
             consoleHandleRef.current?.writeEvents(steps);
         } catch (error) {
             reportCommandError(error);
         }
-    }, [applyExecutionEvents, reportCommandError, simulator, t]);
+    }, [applyExecutionEvents, followExecution, reportCommandError, simulator, t]);
 
     const clearMachine = useCallback(async () => {
         if (!window.confirm(t("top.clearConfirm"))) return;

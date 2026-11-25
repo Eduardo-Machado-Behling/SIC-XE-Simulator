@@ -185,6 +185,20 @@ describe("EditorPage linking", () => {
         expect(editors.get("sub.asm")?.secondaryLine).toBe(2);
     });
 
+    it("follows the next instruction into its own file", async () => {
+        fake.loadFiles.mockResolvedValueOnce([linkedEvent()]);
+        fake.step.mockResolvedValueOnce([{
+            type: "InstructionFetched", address: 0x1008, bytes: [0x4f, 0, 0], value: 0x4f0000,
+            source_line: 2, source_file: "sub.asm", preview: true,
+        }]);
+        const user = await openPage();
+        await linkedRun(user);
+        await waitFor(() => expect(fake.loadFiles).toHaveBeenCalled());
+        await user.click(screen.getByRole("button", { name: "Step" }));
+        await waitFor(() => expect(editors.get("sub.asm")?.executingLine).toBe(2));
+        expect(screen.getByRole("tab", { name: "sub.obj" })).toBeTruthy();
+    });
+
     it("refuses an address outside the memory", async () => {
         await openPage();
         typeAddress("FFFFFFF");
