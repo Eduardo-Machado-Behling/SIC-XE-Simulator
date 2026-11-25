@@ -208,6 +208,9 @@ export default function EditorPage({ projectId }: PageProps) {
     const [linkerLine, setLinkerLine] = useState<{ file: string; line: number } | null>(null);
     // The project file of the instruction about to run, when a link put it in another file.
     const [executingFile, setExecutingFile] = useState<string | null>(null);
+    // Paths renamed or moved since the last Run, from the name the simulator loaded to the
+    // current one: the simulator keeps reporting the loaded names until the next Run.
+    const renamedSinceRun = useRef(new Map<string, string>());
     const [loadAddressText, setLoadAddressText] = useState("0");
     const [macroReport, setMacroReport] = useState<MacroReport | null>(null);
     const [macroView, setMacroView] = useState<MacroViewState>(NO_MACRO_VIEW);
@@ -273,7 +276,8 @@ export default function EditorPage({ projectId }: PageProps) {
         if (fetchedForSource?.type === "InstructionFetched") {
             setExecutingLine(fetchedForSource.source_line ?? null);
             setExecutingAddress(fetchedForSource.address);
-            setExecutingFile(fetchedForSource.source_file ?? null);
+            const file = fetchedForSource.source_file;
+            setExecutingFile(file ? renamedSinceRun.current.get(file) ?? file : null);
         } else if (!animateInstruction || events.some((event) =>
             event.type === "ProgramAssembled" || event.type === "ProgramCleared"
         )) {
@@ -398,6 +402,9 @@ export default function EditorPage({ projectId }: PageProps) {
                 setMacroReport(null);
                 setMacroReports({});
                 setLinkReport(null);
+                setExecutingFile(null);
+                setLinkerLine(null);
+                renamedSinceRun.current = new Map();
                 setMacroView(NO_MACRO_VIEW);
                 setExecutingLine(null);
                 setExecutingAddress(null);
@@ -634,6 +641,22 @@ export default function EditorPage({ projectId }: PageProps) {
     const followRunSource = useCallback((destinations: ReadonlyMap<string, string>) => {
         const follow = (path: string | null) => path === null ? null : destinations.get(path) ?? path;
         setLinkSet((current) => current.map((path) => destinations.get(path) ?? path));
+        // Everything the last Run produced per file follows the file.
+        setMacroReports((reports) => Object.fromEntries(
+            Object.entries(reports).map(([path, report]) => [destinations.get(path) ?? path, report]),
+        ));
+        setLinkReport((report) => report && {
+            ...report,
+            objects: report.objects.map((object) => ({ ...object, source: destinations.get(object.source) ?? object.source })),
+        });
+        setExecutingFile(follow);
+        setLinkerLine((line) => line && { ...line, file: destinations.get(line.file) ?? line.file });
+        const renamed = renamedSinceRun.current;
+        for (const [loaded, current] of renamed) {
+            const next = destinations.get(current);
+            if (next) renamed.set(loaded, next);
+        }
+        for (const [source, destination] of destinations) if (!renamed.has(source)) renamed.set(source, destination);
         setExecutionSourceFile(follow);
         setMacroView((view) => {
             const sourceFile = follow(view.sourceFile);
@@ -742,6 +765,7 @@ export default function EditorPage({ projectId }: PageProps) {
             }
             const single = linked.length === 1 && loadAddress === 0;
             setLinkerLine(null);
+            renamedSinceRun.current = new Map();
             consoleHandleRef.current?.log(single
                 ? t("term.assembling", { file: startFile })
                 : t("term.linking", { files: linked.join(", "), address: `0x${loadAddress.toString(16).toUpperCase()}` }), "info");
@@ -803,7 +827,8 @@ export default function EditorPage({ projectId }: PageProps) {
     // spans files). MASMAPRG.ASM of the Run's own file stays open when execution is there.
     const followExecution = useCallback((events: ExecutionEvent[]) => {
         const fetched = events.findLast((event) => event.type === "InstructionFetched");
-        const file = fetched?.type === "InstructionFetched" ? fetched.source_file : undefined;
+        const loaded = fetched?.type === "InstructionFetched" ? fetched.source_file : undefined;
+        const file = loaded ? renamedSinceRun.current.get(loaded) ?? loaded : undefined;
         if (!file || file === activeFile || !(file in files)) return;
         if (isGeneratedFile(activeFile) && file === executionSourceFile) return;
         setActiveFile(file);
