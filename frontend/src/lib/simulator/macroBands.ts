@@ -8,6 +8,8 @@ export interface EditorBand {
     from: number;
     to: number;
     colorIndex: number;
+    /** Written after the band's first line: where a linked section came from. */
+    label?: string;
 }
 
 // The same expansion has the same index in both lists.
@@ -17,7 +19,7 @@ export interface MacroBands {
 }
 
 // One CSS class per colour, `.macro-band-0` to `.macro-band-5` in globals.css.
-const BAND_COLORS = 6;
+export const BAND_COLORS = 6;
 
 // Shared so that editors without bands get the same array on every render.
 export const NO_BANDS: EditorBand[] = [];
@@ -111,14 +113,20 @@ function wholeLines(from: number, to: number) {
 }
 
 export function bandDecorations(bands: EditorBand[]): editor.IModelDeltaDecoration[] {
-    return bands.map((band) => ({
-        range: wholeLines(band.from, band.to),
-        options: {
-            isWholeLine: true,
-            className: `macro-band-${band.colorIndex}`,
-            linesDecorationsClassName: `macro-band-${band.colorIndex} macro-band-stripe`,
+    return bands.flatMap((band): editor.IModelDeltaDecoration[] => [
+        {
+            range: wholeLines(band.from, band.to),
+            options: {
+                isWholeLine: true,
+                className: `macro-band-${band.colorIndex}`,
+                linesDecorationsClassName: `macro-band-${band.colorIndex} macro-band-stripe`,
+            },
         },
-    }));
+        ...(band.label ? [{
+            range: { startLineNumber: band.from, startColumn: Number.MAX_SAFE_INTEGER, endLineNumber: band.from, endColumn: Number.MAX_SAFE_INTEGER },
+            options: { after: { content: `  ▌ ${band.label}`, inlineClassName: "band-label" } },
+        }] : []),
+    ]);
 }
 
 export function secondaryLineDecoration(line: number): editor.IModelDeltaDecoration {

@@ -28,6 +28,7 @@ import { Project } from "@/lib/simulator/Project";
 import { defaultProjectFiles } from "@/lib/simulator/defaultProjectFiles";
 import { readLinkSettings, writeLinkSettings } from "@/lib/simulator/linkSettings";
 import { generatedTabs, macroReportsBySource, type GeneratedTabId } from "@/lib/simulator/generatedOutputs";
+import { linkBands } from "@/lib/simulator/linkBands";
 import {
     applyMacroReport,
     canCreate,
@@ -1068,6 +1069,7 @@ export default function EditorPage({ projectId }: PageProps) {
                                                                 path={tab.label}
                                                                 value={tab.text}
                                                                 language="plaintext"
+                                                                bands={tab.id === "out" && linkReport ? linkBands(linkReport.out) : undefined}
                                                                 onChange={() => {}}
                                                                 readOnly
                                                             />
