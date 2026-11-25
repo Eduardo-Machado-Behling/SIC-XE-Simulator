@@ -133,6 +133,7 @@ describe("EditorPage linking", () => {
         await waitFor(() => expect(tabs()).toEqual(expect.arrayContaining(["main.obj", "PROG.out"])));
         expect(tabs()).not.toContain("sub.obj");
         expect(editors.get("PROG.out")?.bands).toEqual([{ from: 2, to: 3, colorIndex: 0, label: "main.asm · PROG" }]);
+        expect(editors.get("PROG.out")?.language).toBe("sicxe-object");
 
         await user.click(screen.getByText("sub.asm"));
         await waitFor(() => expect(tabs()).toEqual(expect.arrayContaining(["sub.obj", "PROG.out"])));
@@ -184,6 +185,7 @@ describe("EditorPage linking", () => {
         await user.click(screen.getByRole("button", { name: /\+X at 000009/ }));
         await waitFor(() => expect(screen.getByRole("tab", { name: "sub.obj" }).getAttribute("aria-selected")).toBe("true"));
         expect(editors.get("sub.asm")?.secondaryLine).toBe(2);
+        expect(editors.get("sub.obj")?.language).toBe("sicxe-object");
     });
 
     it("follows the next instruction into its own file", async () => {
