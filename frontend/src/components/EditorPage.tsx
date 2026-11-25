@@ -49,6 +49,7 @@ import {
     macroViewForRun,
     NO_MACRO_VIEW,
     type MacroViewState,
+    sourceLineForOutput,
 } from "@/lib/simulator/macroBands";
 import {
     getStoredProject,
@@ -63,6 +64,7 @@ import {
     symbolsFromEvents,
     type AssemblySymbol,
     type ExecutionEvent,
+    type LinkerTraceStep,
     type LinkReport,
     type MacroReport,
 } from "@/lib/simulator/ExecutionEvent";
@@ -202,6 +204,8 @@ export default function EditorPage({ projectId }: PageProps) {
     const [macroReports, setMacroReports] = useState<Record<string, MacroReport>>({});
     const [linkReport, setLinkReport] = useState<LinkReport | null>(null);
     const [generatedTab, setGeneratedTab] = useState<GeneratedTabId>("macro");
+    // The source line of the Linker trace step last clicked, lit in its file.
+    const [linkerLine, setLinkerLine] = useState<{ file: string; line: number } | null>(null);
     const [loadAddressText, setLoadAddressText] = useState("0");
     const [macroReport, setMacroReport] = useState<MacroReport | null>(null);
     const [macroView, setMacroView] = useState<MacroViewState>(NO_MACRO_VIEW);
@@ -488,6 +492,18 @@ export default function EditorPage({ projectId }: PageProps) {
         }
         setRevealTick((count) => count + 1); // renders even when the split view is already open
     };
+    // A Linker trace step opens its file with its object program (pass 2) or the linked
+    // program (pass 1, loader) beside it, and lights its line. The step's line is a line
+    // of the file's MASMAPRG.ASM: mapped back when the file has macros.
+    const selectLinkStep = (step: LinkerTraceStep) => {
+        setShowMacroOutput(true);
+        setGeneratedTab(step.pass === "2" ? "obj" : "out");
+        if (!step.file || !(step.file in files)) return;
+        const report = macroReports[step.file];
+        const line = report?.hasMacros ? sourceLineForOutput(report, step.line) : step.line;
+        setActiveFile(step.file);
+        setLinkerLine(line ? { file: step.file, line } : null);
+    };
     // A trace step pointing at a line behaves the same way, for one line.
     const pendingLine = useRef<TraceLine | null>(null);
     const selectTraceLine = (target: TraceLine) => {
@@ -706,6 +722,7 @@ export default function EditorPage({ projectId }: PageProps) {
                 return;
             }
             const single = linked.length === 1 && loadAddress === 0;
+            setLinkerLine(null);
             consoleHandleRef.current?.log(single
                 ? t("term.assembling", { file: startFile })
                 : t("term.linking", { files: linked.join(", "), address: `0x${loadAddress.toString(16).toUpperCase()}` }), "info");
@@ -1007,7 +1024,7 @@ export default function EditorPage({ projectId }: PageProps) {
                                             executingLine={activeDecorations.executingLine}
                                             executingAddress={executingAddress}
                                             bands={activeDecorations.bands}
-                                            secondaryLine={activeDecorations.secondaryLine}
+                                            secondaryLine={activeDecorations.secondaryLine ?? (linkerLine?.file === activeFile ? linkerLine.line : null)}
                                             selectedLines={activeDecorations.selectedLines}
                                             onBandClick={macroOutput ? bandReveal.showOutputBand : undefined}
                                             onMount={bandReveal.trackSource}
@@ -1102,7 +1119,7 @@ export default function EditorPage({ projectId }: PageProps) {
                     />
 
                     <Panel defaultSize="30%" minSize="20%" maxSize="70%">
-                        <ExecutionView arch={arch} memory={memory} registers={registers} memorySize={arch?.memory.address_space_size} pc={pc} changedMemory={changedMemory} changedRegisters={changedRegisters} changeRevision={changeRevision} consumedMemory={consumedMemory} symbols={symbols} macros={macroReport} onSelectExpansion={selectExpansion} selectedExpansion={selectedExpansion} onSelectLine={selectTraceLine} />
+                        <ExecutionView arch={arch} memory={memory} registers={registers} memorySize={arch?.memory.address_space_size} pc={pc} changedMemory={changedMemory} changedRegisters={changedRegisters} changeRevision={changeRevision} consumedMemory={consumedMemory} symbols={symbols} macros={macroReport} onSelectExpansion={selectExpansion} selectedExpansion={selectedExpansion} onSelectLine={selectTraceLine} linked={linkReport} onSelectLinkStep={selectLinkStep} />
                     </Panel>
                 </Group>
             </main>
