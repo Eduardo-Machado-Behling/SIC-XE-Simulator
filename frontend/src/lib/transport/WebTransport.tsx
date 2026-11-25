@@ -1,3 +1,4 @@
+import { loadCommand } from "@/lib/transport/loadCommand";
 import {
     LoadProjectResponse,
     SimulatorCommandError,
@@ -279,9 +280,11 @@ export class WebTransport implements SimulatorTransport {
     }
 
     async loadFile(file: string): Promise<ExecutionEvent[]> {
-        const batch = await this.send<unknown>(
-            `load %${file}`,
-        );
+        return this.loadFiles([file], 0);
+    }
+
+    async loadFiles(files: string[], loadAddress: number): Promise<ExecutionEvent[]> {
+        const batch = await this.send<unknown>(loadCommand(files, loadAddress));
         return this.normalizeEventBatch(batch);
     }
 
