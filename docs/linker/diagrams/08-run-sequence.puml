@@ -1,0 +1,41 @@
+@startuml
+title What happens when you press Run (three files, load address 1000)
+skinparam defaultFontName sans-serif
+skinparam sequenceMessageAlign left
+
+actor Student
+participant "EditorPage" as EP
+participant "WebTransport" as WT
+participant "Server.cpp" as SV
+participant "Simulator" as SIM
+participant "SICXE::load_files" as SX
+participant "MacroProcessor\n+ Assembler" as AS
+participant "link()" as LK
+participant "relocateAndLoad()" as LD
+
+Student -> EP : Run (3 files, 1000)
+EP -> EP : filesToLink: ENTRY first,\nthen the others by path
+EP -> WT : loadFiles([prog, dados, maximo], 0x1000)
+WT -> SV : "load @1000 %linker/prog.asm\n%linker/dados.asm %linker/maximo.asm"
+SV -> SIM : load_files(paths, 0x1000)
+SIM -> SX : load_files(files with text, 0x1000)
+loop each file
+  SX -> AS : process + assembleDetailed
+  AS --> SX : MASMAPRG text, ObjectProgram, .obj text
+  SX -> SX : emit MacrosExpanded (source = path)
+end
+SX -> LK : link(inputs)
+LK --> SX : LinkResult (program from 0,\nESTAB, origins, trace)
+SX -> LD : relocateAndLoad(linked, 0x1000, memory size)
+LD --> SX : LoadResult (image, entry point,\nsource map, trace)
+SX -> SX : emit ProgramLinked
+alt any error
+  SX --> SV : error "file:line: error: ..."\n(events so far included)
+else ok
+  SX -> SX : write memory, PC = entry point,\nemit ProgramAssembled
+  SX --> SV : events
+end
+SV --> WT : response
+WT --> EP : ExecutionEvent[]
+EP -> EP : linkReportFromEvents → Ligador tab,\n.obj / .out tabs, symbol table
+@enduml

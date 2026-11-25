@@ -1,0 +1,22 @@
+@startuml
+!pragma layout smetana
+title Linker tour: who defines and who uses each external symbol
+skinparam defaultFontName sans-serif
+skinparam componentStyle rectangle
+
+package "linker/prog.asm" {
+  component "PROG (ENTRY)\nEXTDEF N, M, MAIOR\nEXTREF MAXIMO, K, TRIPLO" as PROG #E0F2FE
+}
+package "linker/maximo.asm" {
+  component "MAXIMO\nEXTREF N, M, MAIOR" as MAXIMO #F3E8FF
+}
+package "linker/dados.asm" {
+  component "DADOS\nEXTDEF K, TRIPLO" as DADOS #FEE2E2
+  component "TABELA (CSECT)\nEXTREF MAIOR, N" as TABELA #DCFCE7
+}
+
+PROG --> MAXIMO : ~+JSUB MAXIMO\n(section name)
+PROG --> DADOS : ~+MUL K\n+STA TRIPLO
+MAXIMO --> PROG : ~+LDA N, +COMP M\n+LDA M, +STA MAIOR
+TABELA --> PROG : WORD MAIOR\nWORD MAIOR-N
+@enduml

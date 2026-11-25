@@ -1,0 +1,25 @@
+@startuml
+title Linker pass 1: allocation and the ESTAB (linker.cpp)
+skinparam defaultFontName sans-serif
+
+start
+:Order the inputs: the ENTRY file first,\nthen the others in the order given;
+:Check the set of files\n(one ENTRY, END address only there, START = 0);
+:CSADDR = 0;
+while (next file?) is (yes)
+  while (next control section of the file?) is (yes)
+    :ESTAB ← section name, CSADDR, length;
+    note right: trace "PROG placed at 000000"
+    while (next name in the D record?) is (yes)
+      if (already in the ESTAB?) then (yes)
+        :error: "N is defined twice";
+      else (no)
+        :ESTAB ← name, CSADDR + address\n(an absolute EXTDEF keeps its value);
+      endif
+    endwhile (no)
+    :CSADDR += section length;
+  endwhile (no)
+endwhile (no)
+:Program length = CSADDR;
+stop
+@enduml
