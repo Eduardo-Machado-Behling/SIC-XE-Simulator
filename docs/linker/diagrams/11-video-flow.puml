@@ -1,0 +1,30 @@
+@startuml
+!pragma layout smetana
+title The stage 4 video: one owner per section, a question at each handoff
+skinparam defaultFontName sans-serif
+
+start
+:Pedro · slides 1–3
+problem, directives, lecture terms;
+:Eduardo asks: what happens to a SIC program?;
+:Eduardo · slides 4–5, simulator
+pipeline, three files, load at 1000, Run;
+:Agatha asks: in what order are files linked?;
+:Agatha · simulator, slide 6
+prog.obj, M records, error without +;
+:Felipe asks: why not format 3 for an external name?;
+:Felipe · simulator, slide 7
+ESTAB, pass 1;
+:Mauricio asks: why does the ESTAB start at 0?;
+:Mauricio · simulator, slide 8
+trace, pass 2, net relocation;
+:Henrique asks: how much is MAIOR minus N?;
+:Henrique · simulator, slide 9
+.out bands, Step across files, loader;
+:Diogo asks: and with load address 0?;
+:Diogo · simulator, slides 10–12
+missing file, errors, results;
+:Pedro asks: why ENTRY and not END?;
+:Diogo answers with slide 12;
+stop
+@enduml
