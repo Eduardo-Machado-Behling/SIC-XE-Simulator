@@ -1,5 +1,7 @@
 "use client";
 
+import { Fragment } from "react";
+
 import { useT } from "@/lib/i18n";
 import type { AssemblySymbol } from "@/lib/simulator/ExecutionEvent";
 
@@ -63,12 +65,27 @@ export function SymbolTable({ symbols }: SymbolTableProps) {
                             </tr>
                         </thead>
                         <tbody className="font-mono">
-                            {symbols.map((symbol) => (
-                                <tr key={symbol.name} className="border-t border-zinc-800">
-                                    <td className="py-1 text-zinc-300">{symbol.name}</td>
-                                    <td className="py-1 text-zinc-400">{hexValue(symbol.value)}</td>
-                                </tr>
-                            ))}
+                            {symbols.map((symbol, index) => {
+                                // A linked program: a header row before each control section's labels.
+                                const group = symbol.section ? `${symbol.section} · ${symbol.file ?? ""}` : null;
+                                const previous = symbols[index - 1];
+                                const newGroup = group !== null && (!previous || `${previous.section} · ${previous.file ?? ""}` !== group);
+                                return (
+                                    <Fragment key={`${group ?? ""}:${symbol.name}`}>
+                                        {newGroup && (
+                                            <tr>
+                                                <th scope="rowgroup" colSpan={2} role="rowheader" className="pt-2 pb-1 text-left font-sans font-semibold text-zinc-400">
+                                                    {group}
+                                                </th>
+                                            </tr>
+                                        )}
+                                        <tr className="border-t border-zinc-800">
+                                            <td className="py-1 text-zinc-300">{symbol.name}</td>
+                                            <td className="py-1 text-zinc-400">{hexValue(symbol.value)}</td>
+                                        </tr>
+                                    </Fragment>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
