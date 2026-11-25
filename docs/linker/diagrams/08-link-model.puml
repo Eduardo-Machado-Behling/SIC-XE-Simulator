@@ -1,0 +1,82 @@
+@startuml
+!pragma layout smetana
+title LinkResult and LoadResult (linker.hpp, loader.hpp)
+skinparam defaultFontName sans-serif
+hide empty methods
+
+class LinkInput {
+  file : string
+  object : ObjectProgram
+}
+
+class LinkResult {
+  linked : ObjectProgram
+  ok() : bool
+}
+
+class EstabEntry {
+  section : string
+  symbol : string
+  address : size_t
+  length : size_t
+  sourceFile : string
+}
+
+class OriginRange {
+  start : size_t
+  length : size_t
+  sourceFile : string
+  section : string
+}
+
+class LinkStep {
+  pass : One | Two
+  text : string
+  file : string
+  line : int
+  address : size_t
+  before : int64
+  after : int64
+  symbol : string
+}
+
+class FixedField {
+  file : string
+  line : int
+}
+
+class FileDiagnostic {
+  file : string
+  diagnostic : Diagnostic
+}
+
+class LoadResult {
+  memory : CodeMemory
+  entryPoint : size_t
+  ok() : bool
+}
+
+class LinkedSourceLocation {
+  address : size_t
+  size : size_t
+  file : string
+  line : int
+}
+
+class LoadStep {
+  address : size_t
+  before : int64
+  after : int64
+}
+
+LinkInput ..> LinkResult : link(inputs)
+LinkResult *-- "*" EstabEntry : estab
+LinkResult *-- "*" OriginRange : origins
+LinkResult *-- "*" LinkStep : trace
+LinkResult *-- "*" FixedField : fixedFields
+LinkResult *-- "*" FileDiagnostic : diagnostics
+LinkResult ..> LoadResult : relocateAndLoad(linked,\nloadAddress, memorySize)
+LoadResult *-- "*" LinkedSourceLocation : sourceMap
+LoadResult *-- "*" LoadStep : trace
+LoadResult *-- "*" FileDiagnostic : diagnostics
+@enduml

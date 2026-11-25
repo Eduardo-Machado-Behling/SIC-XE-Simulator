@@ -1,0 +1,19 @@
+@startuml
+title The journey of +JSUB MAXIMO (prog.asm line 43)
+skinparam defaultFontName sans-serif
+skinparam sequenceMessageAlign left
+
+participant "Assembler\n(prog.asm)" as A
+participant "Linker\npass 1" as L1
+participant "Linker\npass 2" as L2
+participant "Loader\n(load address 1000)" as R
+database "Memory" as M
+
+A -> L2 : prog.obj: bytes 4B100000 at 000009\nM 00000A 05 +MAXIMO
+note over A : MAXIMO is external:\naddress unknown, field = 0
+L1 -> L2 : ESTAB: MAXIMO = 00002F
+L2 -> L2 : field 00000 + 0002F = 0002F\nnet relocation = 1 (MAXIMO is relative)
+L2 -> R : PROG.out: 4B10002F at 000009\nM 00000A 05 +PROG
+R -> R : field 0002F + 01000 = 0102F
+R -> M : 4B 10 10 2F at 001009
+@enduml
