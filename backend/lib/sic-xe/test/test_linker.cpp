@@ -394,6 +394,29 @@ TEST(fixed_field_with_load_address) {
   CHECK(relocateAndLoad(linked, 0, 0x100000).ok());
 }
 
+// Review fix: a format-3 field that reaches an absolute address PC- or base-relatively is
+// right only where it was assembled; moving it must be refused, never silently wrong.
+TEST(pc_relative_absolute_target_is_fixed) {
+  const std::string absolute = "SUBB START 0\n LDA 20\nABS EQU 20\n LDA ABS\n HALT\n END\n";
+  const LinkResult moved = link({load("a.asm", "MAIN ENTRY 0\n RSUB\n END\n"), load("b.asm", absolute)});
+  CHECK(hasDiag(moved, "b.asm", 2, "cannot be relocated"));
+  CHECK(hasDiag(moved, "b.asm", 4, "cannot be relocated"));
+  const LinkResult alone = link({load("b.asm", absolute)});
+  CHECK(alone.ok());
+  CHECK(hasLoadDiag(relocateAndLoad(alone, 0x1000, 0x100000), "b.asm", 2, "cannot be relocated"));
+  CHECK(relocateAndLoad(alone, 0, 0x100000).ok());  // where it was assembled, the bytes are right
+}
+
+TEST(base_relative_mixing_absolute_and_relative_is_fixed) {
+  // BASE holds an absolute value and the target is a label: base-relative is wrong once moved.
+  // LDA at 0 reaches FAR (0xBBB) only base-relatively: too far for PC-relative.
+  const std::string mixed = "SUBB START 0\n BASE 0\n LDA FAR\n RESB 3000\nFAR WORD 1\n END\n";
+  CHECK(hasDiag(link({load("a.asm", "MAIN ENTRY 0\n RSUB\n END\n"), load("b.asm", mixed)}), "b.asm", 3, "cannot be relocated"));
+  // BASE and target both relative: they move together, nothing to refuse.
+  const std::string both = "SUBB START 0\n +LDB #BUF\n BASE BUF\n LDA FAR\n RESB 3000\nBUF RESB 10\nFAR WORD 1\n END\n";
+  CHECK(link({load("a.asm", "MAIN ENTRY 0\n RSUB\n END\n"), load("b.asm", both)}).ok());
+}
+
 int main(int argc, char** argv) {
   if (argc > 2) {
     std::fprintf(stderr, "Usage: %s [test_case]\n", argv[0]);
