@@ -29,6 +29,10 @@ const Project& Simulator::load_project(Project project) {
 }
 
 EventBatch Simulator::load_file(const std::string& filepath) {
+    return load_files({filepath}, 0);
+}
+
+EventBatch Simulator::load_files(const std::vector<std::string>& filepaths, std::uint64_t loadAddress) {
     // A Run starts a new program, so undo never reaches back past it; without this
     // the log (with a 1 MiB memory snapshot per Run) only grows.
     m_eventManager.clear();
@@ -38,10 +42,20 @@ EventBatch Simulator::load_file(const std::string& filepath) {
         throw std::runtime_error("No project is loaded");
     if (!m_architectureManager.get())
         throw std::runtime_error("No architecture is loaded");
-    if (m_currentProject.files.find(filepath) == m_currentProject.files.end())
-        throw std::runtime_error("File not found in the current project: " + filepath);
+    if (loadAddress >= m_architectureManager.get()->info().memory.address_space_size)
+        throw std::runtime_error("load address out of range");
 
-    m_architectureManager.get()->load_file(m_currentProject.files.at(filepath));
+    std::vector<SourceFile> files;
+    for (const std::string& path : filepaths) {
+        if (m_currentProject.files.find(path) == m_currentProject.files.end())
+            throw std::runtime_error("File not found in the current project: " + path);
+        for (const SourceFile& seen : files)
+            if (seen.path == path)
+                throw std::runtime_error(path + " is listed twice");
+        files.push_back({path, m_currentProject.files.at(path)});
+    }
+
+    m_architectureManager.get()->load_files(files, static_cast<std::uint32_t>(loadAddress));
 
     const std::size_t to = m_eventManager.size();
     return {from, to, m_eventManager.events_since(from)};

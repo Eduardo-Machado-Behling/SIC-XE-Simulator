@@ -31,6 +31,8 @@ public:
     const Project& load_project(Project project);
 
     EventBatch load_file(const std::string& filepath);
+    // Links the files (the ENTRY file first, then this order) and loads them at loadAddress.
+    EventBatch load_files(const std::vector<std::string>& filepaths, std::uint64_t loadAddress);
 
     const std::unordered_set<std::string>& ListAvailableArchitectures();
     const ArchitectureInfo* currentInfo();
