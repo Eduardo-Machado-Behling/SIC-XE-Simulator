@@ -49,3 +49,8 @@ next-env.d.ts
 # local agent tooling and notes
 /.serena/
 /PRODUCT.md
+
+# Local agent and design-tool config
+.agents/
+.claude/
+.impeccable/
