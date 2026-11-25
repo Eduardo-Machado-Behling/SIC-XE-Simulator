@@ -2,11 +2,12 @@
 "use client";
 
 import { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
-import type { AssemblySymbol, MacroReport } from "@/lib/simulator/ExecutionEvent";
+import type { AssemblySymbol, LinkerTraceStep, LinkReport, MacroReport } from "@/lib/simulator/ExecutionEvent";
 import RegisterTable, { RegisterState } from "@/components/RegisterTable";
 import MemoryTable from "@/components/MemoryTable";
 import SymbolTable from "@/components/SymbolTable";
 import { MacroView } from "@/components/MacroView";
+import { LinkerView } from "@/components/LinkerView";
 import type { TraceLine } from "@/lib/simulator/macroBands";
 import { Tabs, type TabDefinition } from "@/components/Tabs";
 import { Separator } from "react-resizable-panels";
@@ -28,9 +29,11 @@ export interface ArchProps {
     onSelectExpansion?: (serial: number) => void;
     selectedExpansion?: number | null;
     onSelectLine?: (target: TraceLine) => void;
+    linked?: LinkReport | null;
+    onSelectLinkStep?: (step: LinkerTraceStep) => void;
 }
 
-export function ExecutionView({ arch, registers, memory, memorySize, pc, changedMemory, changedRegisters, changeRevision, consumedMemory, symbols, macros = null, onSelectExpansion, selectedExpansion = null, onSelectLine }: ArchProps) {
+export function ExecutionView({ arch, registers, memory, memorySize, pc, changedMemory, changedRegisters, changeRevision, consumedMemory, symbols, macros = null, onSelectExpansion, selectedExpansion = null, onSelectLine, linked = null, onSelectLinkStep }: ArchProps) {
     const t = useT();
     const [selectedTab, setSelectedTab] = useState("cpu");
 
@@ -84,6 +87,11 @@ export function ExecutionView({ arch, registers, memory, memorySize, pc, changed
             id: "macros",
             label: t("macro.tab"),
             content: <MacroView report={macros} onSelectExpansion={onSelectExpansion ?? (() => {})} selectedExpansion={selectedExpansion} onSelectLine={onSelectLine} />,
+        },
+        {
+            id: "linker",
+            label: t("link.tab"),
+            content: <LinkerView linked={linked} onSelectStep={onSelectLinkStep ?? (() => {})} />,
         },
     ];
 

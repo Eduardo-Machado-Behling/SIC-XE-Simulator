@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import EditorPage from "@/components/EditorPage";
 import type { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
 import { readLinkSettings } from "@/lib/simulator/linkSettings";
+import { SimulatorCommandError } from "@/lib/transport/SimulatorTransport";
 
 // The simulator talks to the backend over a WebSocket; this fake stands in for it.
 const fake = vi.hoisted(() => ({
@@ -135,6 +136,53 @@ describe("EditorPage linking", () => {
         await user.click(screen.getByText("sub.asm"));
         await waitFor(() => expect(tabs()).toEqual(expect.arrayContaining(["sub.obj", "PROG.out"])));
         expect(tabs()).not.toContain("main.obj");
+    });
+
+    const linkedEvent = () => ({
+        type: "ProgramLinked" as const,
+        details: {
+            loadAddress: 0x1000,
+            estab: [
+                { section: "PROG", symbol: "", address: 0, length: 8, file: "main.asm" },
+                { section: "SUBB", symbol: "", address: 8, length: 3, file: "sub.asm" },
+            ],
+            objects: [{ source: "main.asm", text: "H PROG" }, { source: "sub.asm", text: "H SUBB" }],
+            out: { name: "PROG", text: "H PROG   000000 00000B", bands: [] },
+            trace: [{ pass: "2" as const, text: "+X at 000009", file: "sub.asm", line: 2, address: 9, before: 0, after: 8, symbol: "X" }],
+        },
+    });
+
+    async function linkedRun(user: ReturnType<typeof userEvent.setup>) {
+        await user.click(await screen.findByRole("switch", { name: "Include sub.asm in the link" }));
+        await user.click(screen.getByRole("switch", { name: "Include main.asm in the link" }));
+        await user.click(screen.getByRole("button", { name: "Run · 2 files" }));
+    }
+
+    it("shows the ESTAB of the last Run and nothing from a previous one after a failure", async () => {
+        fake.loadFiles.mockResolvedValueOnce([linkedEvent()]);
+        const user = await openPage();
+        await linkedRun(user);
+        await user.click(screen.getByRole("tab", { name: "Linker" }));
+        expect(await screen.findByRole("table", { name: "External symbol table (ESTAB)" })).toBeTruthy();
+
+        fake.loadFiles.mockRejectedValueOnce(new SimulatorCommandError(
+            { type: "invalid_request", status: 400, title: "Bad", detail: "main.asm:3:1: error: undefined external symbol X" },
+            [{ type: "MemoryCleared" }],
+        ));
+        await user.click(screen.getByRole("button", { name: "Run · 2 files" }));
+        await waitFor(() => expect(screen.queryByRole("table", { name: "External symbol table (ESTAB)" })).toBeNull());
+        expect(screen.getByText("Run a program to see the linker and the loader")).toBeTruthy();
+    });
+
+    it("opens a trace step's file, its .obj tab and its line", async () => {
+        fake.loadFiles.mockResolvedValueOnce([linkedEvent()]);
+        const user = await openPage();
+        await linkedRun(user);
+        await user.click(screen.getByRole("tab", { name: "Linker" }));
+        await user.click(await screen.findByRole("tab", { name: "Trace" }));
+        await user.click(screen.getByRole("button", { name: /\+X at 000009/ }));
+        await waitFor(() => expect(screen.getByRole("tab", { name: "sub.obj" }).getAttribute("aria-selected")).toBe("true"));
+        expect(editors.get("sub.asm")?.secondaryLine).toBe(2);
     });
 
     it("refuses an address outside the memory", async () => {
