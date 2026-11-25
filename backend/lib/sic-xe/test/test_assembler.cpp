@@ -413,6 +413,15 @@ TEST(entry_marks_section) {
   CHECK(s.endOperandLine == 5);
 }
 
+// The linker trace and its errors point at the line that opens each section.
+TEST(csect_records_its_line) {
+  const auto r = Assembler().assembleDetailed("SECA START 0\n RSUB\n\nSECB CSECT\n RSUB\n END\n");
+  CHECK(r.ok());
+  if (r.object.sections.size() != 2) { CHECK(false); return; }
+  CHECK(r.object.sections[0].startLine == 1);
+  CHECK(r.object.sections[1].startLine == 4);
+}
+
 TEST(end_closes_file) {
   const std::string src = "SECA START 0\n RSUB\n END\nSECB CSECT\n RSUB\n";
   CHECK(Assembler().assembleDetailed(src).object.sections.size() == 1);

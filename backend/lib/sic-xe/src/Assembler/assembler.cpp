@@ -357,6 +357,8 @@ class Engine {
         sects_.emplace_back();
         cur_ = sects_.size() - 1;
         cur().name = st.label;
+        cur().startLine = st.line;
+        cur().startCol = st.mnemonicCol;
         st.section = static_cast<int>(cur_);
         st.address = 0;
         defineLabel(st, Value{0, 1});
