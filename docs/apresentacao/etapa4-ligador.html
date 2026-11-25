@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ligador · Etapa 4</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+/* 13 slides de 960x540: abra no navegador e imprima em PDF (sem margens) para a versão final. */
+:root {
+  --bg: #0b0b0d; --bar: #111113; --panel: #131316; --panel2: #17171b; --line: #26262b;
+  --text: #e4e4e7; --muted: #a1a1aa; --dim: #9a9aa3; --faint: #92929c;
+  --blue: #1d4ed8; --accent: #3b82f6;
+  --sans: Inter, "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", Consolas, "Cascadia Mono", monospace;
+}
+@page { size: 960px 540px; margin: 0; }
+* { box-sizing: border-box; }
+html { background: #1c1c20; }
+body { margin: 0; font-family: var(--sans); color: var(--text); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.slide { width: 960px; height: 540px; margin: 24px auto; background: var(--bg); position: relative; overflow: hidden;
+  display: flex; flex-direction: column; box-shadow: 0 8px 30px rgba(0,0,0,.45); break-after: page; }
+@media print { html { background: none; } .slide { margin: 0; box-shadow: none; } }
+
+.top { height: 34px; flex: none; background: var(--bar); border-bottom: 1px solid var(--line); display: flex; font-size: 12px; }
+.top .brand { font-weight: 600; padding: 0 16px; display: flex; align-items: center; }
+.top .tab { padding: 0 14px; display: flex; align-items: center; color: var(--muted); }
+.top .tab.on { color: #fff; background: #18181b; box-shadow: inset 0 -2px 0 var(--accent); }
+.body { flex: 1; min-height: 0; padding: 20px 44px 0; }
+.foot { height: 28px; flex: none; background: var(--blue); color: #fff; font-size: 12px;
+  display: flex; justify-content: space-between; align-items: center; padding: 0 16px; }
+
+h1 { font-size: 27px; font-weight: 700; margin: 0 0 14px; letter-spacing: -.01em; }
+h2 { font: 600 11px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+p { margin: 0; }
+.mono { font-family: var(--mono); }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.note { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.row { display: flex; gap: 16px; }
+.col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.grow { flex: 1; }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.ph { display: flex; justify-content: space-between; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--line);
+  font: 600 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.pb { padding: 10px 12px; }
+
+.code { font: 12px/1.6 var(--mono); padding: 5px 0; }
+.code .l { display: block; padding: 0 12px 0 9px; white-space: pre; border-left: 3px solid transparent; overflow: hidden; }
+.code .n { color: var(--faint); display: inline-block; width: 24px; text-align: right; margin-right: 12px; }
+.code .tag { float: right; padding-left: 16px; color: var(--muted); font-family: var(--sans); font-size: 11px; }
+.code.big { font-size: 13px; }
+
+/* Uma cor por seção, como as faixas do editor. */
+.b0 { background: rgba(8,145,178,.16); border-left-color: #0891b2 !important; }
+.b1 { background: rgba(220,38,38,.14); border-left-color: #dc2626 !important; }
+.b2 { background: rgba(22,163,74,.14); border-left-color: #16a34a !important; }
+.b3 { background: rgba(147,51,234,.16); border-left-color: #9333ea !important; }
+.b4 { background: rgba(217,119,6,.15); border-left-color: #d97706 !important; }
+.hi { background: rgba(250,204,21,.13); box-shadow: inset 0 0 0 1px rgba(250,204,21,.35); }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+
+/* Cores do tema sicxe-dark. */
+.lb { color: #dcdcaa; font-weight: 700; }
+.in { color: #4fc1ff; font-weight: 700; }
+.di { color: #c586c0; font-weight: 700; }
+.sy { color: #9cdcfe; }
+.nu { color: #b5cea8; }
+.hx { color: #d7ba7d; }
+.cm { color: #6a9955; font-style: italic; }
+.op { color: #d4d4d4; }
+
+table.t { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.t th { text-align: left; font-weight: 500; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--line); background: var(--panel2); }
+table.t td { padding: 4.5px 10px; border-bottom: 1px solid #1f1f23; }
+table.t tr:last-child td { border-bottom: 0; }
+table.t td.m, table.t th.m { font-family: var(--mono); }
+table.t tr.sec td { color: #fff; font-weight: 600; }
+
+ul.sq { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.45; }
+ul.sq li { position: relative; padding-left: 18px; }
+ul.sq li::before { content: ""; position: absolute; left: 0; top: .5em; width: 8px; height: 8px; background: var(--accent); }
+ul.sq.sm { font-size: 12.5px; gap: 6px; }
+code, .k { font-family: var(--mono); font-size: .92em; color: #e4e4e7; background: #1d1d22; border: 1px solid #2a2a30; border-radius: 4px; padding: 0 4px; }
+
+.pill { display: inline-block; font: 600 11px/1 var(--sans); padding: 4px 8px; border-radius: 999px; border: 1px solid; }
+.p-blue { color: #93c5fd; border-color: #1d4ed8; background: rgba(37,99,235,.15); }
+.p-pink { color: #f0abfc; border-color: #a21caf; background: rgba(162,28,175,.15); }
+.p-green { color: #86efac; border-color: #15803d; background: rgba(22,163,74,.15); }
+.p-amber { color: #fcd34d; border-color: #b45309; background: rgba(217,119,6,.15); }
+
+/* Fluxo */
+.flow { display: flex; flex-direction: column; align-items: center; gap: 0; }
+.box { background: var(--panel2); border: 1px solid #34343b; border-radius: 6px; padding: 7px 14px; font: 12px/1.35 var(--mono); text-align: center; }
+.box small { display: block; font-family: var(--sans); color: var(--muted); font-size: 11px; }
+.box.pill-box { border-radius: 999px; }
+.box.blue { border-color: #2563eb; box-shadow: 0 0 0 1px rgba(37,99,235,.25); }
+.box.q { border: 1px dashed #ca8a04; color: #fde68a; }
+.box.err { border-color: #9f1239; }
+.down { width: 1px; height: 10px; background: #52525b; position: relative; }
+.down::after { content: ""; position: absolute; left: -4px; bottom: -1px; border: 4px solid transparent; border-top: 5px solid #52525b; border-bottom: 0; }
+.lbl { font-size: 11px; color: var(--muted); }
+.side { display: flex; align-items: center; gap: 10px; }
+.arrow-r { width: 40px; height: 1px; background: #52525b; position: relative; flex: none; }
+.arrow-r::after { content: ""; position: absolute; right: -1px; top: -4px; border: 4px solid transparent; border-left: 5px solid #52525b; border-right: 0; }
+
+/* Pipeline horizontal */
+.pipe { display: flex; align-items: center; gap: 8px; }
+.pipe .box { padding: 8px 10px; }
+.pipe .arrow-r { width: 22px; }
+
+/* Capa */
+.cover .body { padding: 38px 44px 0; display: flex; gap: 28px; }
+.kicker { font: 600 11px/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 14px; }
+.cover h1 { font-size: 52px; line-height: 1.05; margin: 0 0 14px; }
+.names { position: absolute; left: 44px; bottom: 50px; display: flex; gap: 22px; font-size: 14px; font-weight: 500; }
+
+/* Mock do editor */
+.mock { display: flex; height: 300px; font-size: 12px; }
+.mock .ex { width: 190px; border-right: 1px solid var(--line); padding: 8px 0; }
+.mock .ex .f { display: flex; align-items: center; gap: 8px; padding: 3px 12px; }
+.sw { margin-left: auto; width: 22px; height: 12px; border-radius: 99px; background: #3f3f46; position: relative; flex: none; }
+.sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 8px; height: 8px; border-radius: 99px; background: #d4d4d8; }
+.sw.on { background: var(--accent); }
+.sw.on::after { left: 12px; background: #fff; }
+.badge { font-size: 9px; font-weight: 700; letter-spacing: .05em; padding: 2px 5px; border-radius: 3px; }
+.badge.entry { color: #86efac; background: rgba(22,163,74,.18); }
+.badge.gen { color: #fdba74; background: rgba(234,88,12,.18); }
+.tip { position: absolute; background: #1c1c21; border: 1px solid #3f3f46; border-radius: 4px; padding: 8px 10px; font-size: 12px; line-height: 1.45; box-shadow: 0 6px 18px rgba(0,0,0,.5); }
+
+.mem { display: flex; gap: 6px; }
+.mem .w { flex: 1; text-align: center; }
+.mem .w .v { font: 600 14px/1 var(--mono); padding: 9px 0; border-radius: 4px; background: var(--panel2); border: 1px solid #2f2f35; }
+.mem .w .a { font: 10.5px/1 var(--mono); color: var(--dim); margin-top: 5px; }
+.mem .w .s { font-size: 11.5px; margin-top: 4px; font-weight: 600; }
+.trace-i { display: flex; justify-content: space-between; gap: 10px; padding: 4px 10px; font: 11.5px/1.4 var(--mono); border-bottom: 1px solid #1f1f23; }
+.trace-i span:last-child { color: var(--dim); font-family: var(--sans); font-size: 11px; }
+.end-line { margin-top: 12px; font-size: 13.5px; color: var(--text); }
+</style>
+</head>
+<body>
+
+<!-- 1 · Capa -->
+<section class="slide cover">
+  <div class="top"><div class="brand">Linker demo</div><div class="tab on">prog.asm</div><div class="tab">maximo.asm</div><div class="tab">dados.asm</div></div>
+  <div class="body">
+    <div style="flex:1">
+      <div class="kicker">Programação de Sistemas · UFPel</div>
+      <h1>Ligador</h1>
+      <p style="font-size:17px" class="muted">Etapa 4 do simulador SIC/XE</p>
+    </div>
+    <div class="panel" style="width:470px; align-self:flex-start">
+      <div class="ph"><span>PROG.out</span><span>4 seções · 0x45 bytes</span></div>
+      <div class="code">
+        <div class="l"><span class="n">1</span><span class="di">H</span> <span class="lb">PROG</span>   <span class="nu">000000 000045</span></div>
+        <div class="l b0"><span class="n">2</span><span class="di">T</span> <span class="nu">000000 1D</span> <span class="hx">032017 1B2014 0F2011 4B10002F</span>…<span class="tag">prog.asm · PROG</span></div>
+        <div class="l b1"><span class="n">14</span><span class="di">T</span> <span class="nu">000023 03</span> <span class="hx">000003</span><span class="tag">dados.asm · DADOS</span></div>
+        <div class="l b2"><span class="n">16</span><span class="di">T</span> <span class="nu">000029 06</span> <span class="hx">000020 000006</span><span class="tag">dados.asm · TABELA</span></div>
+        <div class="l b3"><span class="n">19</span><span class="di">T</span> <span class="nu">00002F 16</span> <span class="hx">0310001A 2B10001D</span>…<span class="tag">maximo.asm · MAXIMO</span></div>
+        <div class="l"><span class="n">26</span><span class="di">M</span> <span class="nu">00000A 05</span> <span class="op">+</span><span class="sy">PROG</span></div>
+        <div class="l"><span class="n">35</span><span class="di">E</span> <span class="nu">000000</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="names"><span>Pedro</span><span>Eduardo</span><span>Agatha</span><span>Felipe</span><span>Mauricio</span><span>Henrique</span><span>Diogo</span></div>
+  <div class="foot"><span>Etapa 4 | Ligador</span><span>1/13 | SIC-XE</span></div>
+</section>
+
+<!-- 2 · O problema e o programa -->
+<section class="slide">
+  <div class="top"><div class="brand">Linker demo</div><div class="tab on">prog.asm</div><div class="tab">maximo.asm</div><div class="tab">dados.asm</div></div>
+  <div class="body">
+    <h1>O problema e o programa</h1>
+    <div class="row">
+      <div class="col" style="width:400px">
+        <h2>O que a etapa faz</h2>
+        <ul class="sq">
+          <li>Monta vários arquivos, cada um com as suas seções de controle.</li>
+          <li>Liga as seções num programa só, resolvendo os nomes de um arquivo usados em outro.</li>
+          <li>Carrega esse programa no endereço que o usuário escolher.</li>
+          <li>Segue o modelo do Beck, capítulo 3: ESTAB, registros H, D, R, T, M, E e o registro M revisado, com sinal e símbolo.</li>
+        </ul>
+        <h2 style="margin-top:8px">O tour: três arquivos</h2>
+        <table class="t panel">
+          <tr><th>Arquivo</th><th>Seções</th><th>Papel</th></tr>
+          <tr><td class="m">prog.asm</td><td class="m">PROG</td><td>entrada, N, M, MAIOR</td></tr>
+          <tr><td class="m">maximo.asm</td><td class="m">MAXIMO</td><td>sub-rotina MAIOR = max(N, M)</td></tr>
+          <tr><td class="m">dados.asm</td><td class="m">DADOS, TABELA</td><td>K, TRIPLO e duas palavras</td></tr>
+        </table>
+      </div>
+      <div class="col grow">
+        <h2>As diretivas</h2>
+        <table class="t panel">
+          <tr><th>Diretiva</th><th>Faz</th></tr>
+          <tr><td class="m di">ENTRY</td><td>Como START, e marca o arquivo onde o programa começa. Uma por ligação.</td></tr>
+          <tr><td class="m di">START</td><td>Abre a primeira seção de um arquivo.</td></tr>
+          <tr><td class="m di">CSECT</td><td>Abre outra seção no mesmo arquivo, com contador de posição próprio.</td></tr>
+          <tr><td class="m di">EXTDEF</td><td>Nomes desta seção que outras seções usam.</td></tr>
+          <tr><td class="m di">EXTREF</td><td>Nomes de outras seções que esta seção usa.</td></tr>
+          <tr><td class="m di">END</td><td>Fecha o arquivo. Só o arquivo com ENTRY dá o endereço inicial.</td></tr>
+        </table>
+        <div class="panel">
+          <div class="ph"><span>prog.asm</span><span>28–30</span></div>
+          <div class="code">
+            <div class="l"><span class="n">28</span><span class="lb">PROG</span>    <span class="di">ENTRY</span> <span class="nu">0</span></div>
+            <div class="l"><span class="n">29</span>        <span class="di">EXTDEF</span> <span class="sy">N</span><span class="op">,</span><span class="sy">M</span><span class="op">,</span><span class="sy">MAIOR</span></div>
+            <div class="l"><span class="n">30</span>        <span class="di">EXTREF</span> <span class="sy">MAXIMO</span><span class="op">,</span><span class="sy">K</span><span class="op">,</span><span class="sy">TRIPLO</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Pedro | O problema e o programa</span><span>2/13 | SIC-XE</span></div>
+</section>
+
+<!-- 3 · O pipeline -->
+<section class="slide">
+  <div class="top"><div class="brand">Linker demo</div><div class="tab">prog.asm</div><div class="tab">prog.obj</div><div class="tab on">PROG.out</div></div>
+  <div class="body">
+    <h1>O pipeline</h1>
+    <div class="pipe" style="margin-bottom:6px">
+      <div class="box">prog.asm<br>maximo.asm<br>dados.asm</div>
+      <div class="arrow-r"></div>
+      <div class="box">MacroProcessor<small>por arquivo</small></div>
+      <div class="arrow-r"></div>
+      <div class="box">Montador<small>gera o .obj</small></div>
+      <div class="arrow-r"></div>
+      <div class="box blue">Ligador<small>duas passagens</small></div>
+      <div class="arrow-r"></div>
+      <div class="box">PROG.out<small>relativo a 0</small></div>
+      <div class="arrow-r"></div>
+      <div class="box blue">Carregador<small>soma o endereço</small></div>
+    </div>
+    <div class="row" style="margin-top:18px">
+      <div class="col" style="width:470px">
+        <ul class="sq">
+          <li>Cada arquivo passa sozinho pelo processador de macros e pelo montador, como na Etapa 3.</li>
+          <li>O ligador junta os objetos. O arquivo com ENTRY vai primeiro; os outros, na ordem do comando.</li>
+          <li>O PROG.out é o que sai do editor de ligação (Beck 3.4.1): um programa só, ainda relativo a 0.</li>
+          <li>O carregador soma o endereço de carga aos campos marcados para relocação e grava a memória.</li>
+          <li>Um arquivo só, carregado em 0, faz o mesmo caminho e dá o mesmo resultado da Etapa 3.</li>
+        </ul>
+      </div>
+      <div class="col grow">
+        <div class="panel">
+          <div class="ph"><span>WebSocket</span><span>o comando do Run</span></div>
+          <div class="pb mono" style="font-size:12px; line-height:1.7">
+            <span class="muted">load</span> <span class="hx">@1000</span> <span class="sy">%linker/prog.asm</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="sy">%linker/dados.asm</span> <span class="sy">%linker/maximo.asm</span>
+          </div>
+        </div>
+        <p class="note"><span class="k">@1000</span> é o endereço de carga, em hexadecimal; sem ele, 0. Cada <span class="k">%</span> é um arquivo do projeto. A resposta traz um evento <span class="k">MacrosExpanded</span> por arquivo e um <span class="k">ProgramLinked</span>.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Eduardo | O pipeline</span><span>3/13 | SIC-XE</span></div>
+</section>
+
+<!-- 4 · Arquitetura: load_files -->
+<section class="slide">
+  <div class="top"><div class="brand">Linker demo</div><div class="tab">linker.hpp</div><div class="tab on">SICXE.cpp</div></div>
+  <div class="body">
+    <h1>Arquitetura: o caminho do load_files</h1>
+    <div class="row" style="gap:30px">
+      <div class="flow" style="width:420px">
+        <div class="box pill-box">SICXE::load_files(files, loadAddress)</div>
+        <div class="down"></div>
+        <div class="box" style="width:400px; text-align:left; padding:8px 12px">
+          <span class="lbl" style="font-family:var(--sans)">para cada arquivo</span><br>
+          MacroProcessor().process(text) → emite MacrosExpanded<br>
+          assembleDetailed(text) → ObjectProgram
+        </div>
+        <div class="down"></div>
+        <div class="box blue">link(inputs): LinkResult</div>
+        <div class="down"></div>
+        <div class="box">relocateAndLoad(linked, loadAddress, memória)</div>
+        <div class="down"></div>
+        <div class="box">emite ProgramLinked</div>
+        <div class="down"></div>
+        <div class="box q">linked.ok() e loaded.ok()?</div>
+        <div class="down"></div>
+        <div class="box">grava a memória, PC = entryPoint</div>
+        <div class="down"></div>
+        <div class="box pill-box">emite ProgramAssembled</div>
+      </div>
+      <div class="col grow" style="gap:14px; padding-top:4px">
+        <div class="panel pb">
+          <p class="mono small" style="margin-bottom:4px">load_file(content)</p>
+          <p class="note">O caminho de um arquivo só virou <span class="k">load_files({{"", content}}, 0)</span>. Não existe um segundo caminho para manter.</p>
+        </div>
+        <div class="panel pb">
+          <p class="mono small" style="margin-bottom:4px">ProgramLinked</p>
+          <p class="note">Sai antes da checagem de erros: ESTAB, o .obj de cada arquivo, o .out com as faixas e o rastreio. Com erro, a interface ainda mostra o que foi ligado até ali.</p>
+        </div>
+        <div class="panel pb">
+          <p class="mono small" style="margin-bottom:4px">erro em algum passo</p>
+          <p class="note">A mensagem diz o arquivo e a linha do fonte. Linhas de MASMAPRG.ASM voltam para o fonte com o mesmo mapa da Etapa 3.</p>
+        </div>
+        <div class="panel pb">
+          <p class="mono small" style="margin-bottom:4px">símbolos</p>
+          <p class="note">A tabela de símbolos chega já somada ao endereço de carga e agrupada por seção.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Eduardo | Arquitetura: o caminho do load_files</span><span>4/13 | SIC-XE</span></div>
+</section>
+
+<!-- 5 · Estruturas de dados -->
+<section class="slide">
+  <div class="top"><div class="brand">Linker demo</div><div class="tab on">object_program.hpp</div><div class="tab">linker.hpp</div><div class="tab">loader.hpp</div></div>
+  <div class="body">
+    <h1>As estruturas de dados</h1>
+    <div class="row">
+      <div class="panel" style="width:300px">
+        <div class="ph"><span>ControlSection</span><span>registro</span></div>
+        <table class="t">
+          <tr><td class="m">name</td><td class="m di">H</td><td class="muted">nome da seção</td></tr>
+          <tr><td class="m">start, length</td><td class="m di">H</td><td class="muted">início, tamanho</td></tr>
+          <tr><td class="m">defines</td><td class="m di">D</td><td class="muted">EXTDEF e endereço</td></tr>
+          <tr><td class="m">refers</td><td class="m di">R</td><td class="muted">EXTREF</td></tr>
+          <tr><td class="m">text</td><td class="m di">T</td><td class="muted">bytes por endereço</td></tr>
+          <tr><td class="m">mods</td><td class="m di">M</td><td class="muted">ModRecord</td></tr>
+          <tr><td class="m">transfer</td><td class="m di">E</td><td class="muted">endereço inicial</td></tr>
+          <tr><td class="m">notes</td><td></td><td class="muted">instrução de cada byte</td></tr>
+          <tr><td class="m">sourceFile</td><td></td><td class="muted">arquivo de origem</td></tr>
+        </table>
+      </div>
+      <div class="col" style="width:300px">
+        <div class="panel">
+          <div class="ph"><span>ModRecord</span><span>M revisado</span></div>
+          <table class="t">
+            <tr><td class="m">address</td><td class="muted">campo, relativo à seção</td></tr>
+            <tr><td class="m">halfBytes</td><td class="muted">5 no formato 4, 6 no WORD</td></tr>
+            <tr><td class="m">sign, symbol</td><td class="muted"><span class="mono">+MAXIMO</span>, <span class="mono">-N</span></td></tr>
+            <tr><td class="m">line</td><td class="muted">linha do fonte</td></tr>
+          </table>
+        </div>
+        <div class="panel">
+          <div class="ph"><span>LinkResult</span><span>ligador</span></div>
+          <table class="t">
+            <tr><td class="m">linked</td><td class="muted">o programa ligado</td></tr>
+            <tr><td class="m">estab</td><td class="muted">EstabEntry por linha</td></tr>
+            <tr><td class="m">origins</td><td class="muted">faixas do .out</td></tr>
+            <tr><td class="m">trace</td><td class="muted">passos das 2 passagens</td></tr>
+            <tr><td class="m">fixedFields</td><td class="muted">campos que não movem</td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="col grow">
+        <div class="panel">
+          <div class="ph"><span>LoadResult</span><span>carregador</span></div>
+          <table class="t">
+            <tr><td class="m">memory</td><td class="muted">a imagem</td></tr>
+            <tr><td class="m">entryPoint</td><td class="muted">o PC inicial</td></tr>
+            <tr><td class="m">sourceMap</td><td class="muted">endereço → arquivo e linha</td></tr>
+            <tr><td class="m">trace</td><td class="muted">campos relocados</td></tr>
+          </table>
+        </div>
+        <ul class="sq sm">
+          <li>O montador entrega um <span class="k">ObjectProgram</span>, que é uma lista de seções.</li>
+          <li>O texto do .obj e do .out é desenhado a partir dessa estrutura e nunca é lido de volta.</li>
+          <li><span class="k">sourceMap</span> é o que deixa o Step abrir o arquivo da instrução.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Agatha | As estruturas de dados</span><span>5/13 | SIC-XE</span></div>
+</section>
+
+<!-- 6 · O programa objeto -->
+<section class="slide">
+  <div class="top"><div class="brand">Linker demo</div><div class="tab">prog.asm</div><div class="tab on">prog.obj</div><div class="tab">PROG.out</div></div>
+  <div class="body">
+    <h1>O programa objeto de um arquivo</h1>
+    <div class="row">
+      <div class="panel" style="width:520px">
+        <div class="ph"><span>prog.obj</span><span>legível, com anotações</span></div>
+        <div class="code">
+          <div class="l"><span class="di">H</span> <span class="lb">PROG</span>   <span class="nu">000000 000023</span></div>
+          <div class="l"><span class="di">D</span> <span class="lb">N</span>      <span class="nu">00001A</span> <span class="lb">M</span>      <span class="nu">00001D</span> <span class="lb">MAIOR</span>  <span class="nu">000020</span></div>
+          <div class="l"><span class="di">R</span> <span class="sy">MAXIMO K TRIPLO</span></div>
+          <div class="l"><span class="di">T</span> <span class="nu">000000 1D</span> <span class="hx">032017 1B2014 0F2011 4B100000 0310001A</span> …</div>
+          <div class="l"><span class="cm">  .</span>  <span class="nu">000000</span>  <span class="hx">032017</span>      <span class="cm">LDA N</span></div>
+          <div class="l"><span class="cm">  .</span>  <span class="nu">000009</span>  <span class="hx">4B100000</span>    <span class="cm">+JSUB MAXIMO</span></div>
+          <div class="l"><span class="cm">  .</span>  <span class="nu">00000D</span>  <span class="hx">0310001A</span>    <span class="cm">+LDA N</span></div>
+          <div class="l"><span class="cm">  .</span>  <span class="nu">000011</span>  <span class="hx">23100000</span>    <span class="cm">+MUL K</span></div>
+          <div class="l"><span class="muted">  …</span></div>
+          <div class="l hi"><span class="di">M</span> <span class="nu">00000A 05</span> <span class="op">+</span><span class="sy">MAXIMO</span>         <span class="cm">. +JSUB MAXIMO</span></div>
+          <div class="l hi"><span class="di">M</span> <span class="nu">00000E 05</span> <span class="op">+</span><span class="sy">PROG</span>           <span class="cm">. +LDA N</span></div>
+          <div class="l"><span class="di">M</span> <span class="nu">000012 05</span> <span class="op">+</span><span class="sy">K</span>              <span class="cm">. +MUL K</span></div>
+          <div class="l"><span class="di">M</span> <span class="nu">000016 05</span> <span class="op">+</span><span class="sy">TRIPLO</span>         <span class="cm">. +STA TRIPLO</span></div>
+          <div class="l"><span class="di">E</span> <span class="nu">000000</span></div>
+        </div>
+      </div>
+      <div class="col grow">
+        <ul class="sq sm">
+          <li><span class="k">H</span> nome, início e tamanho da seção. <span class="k">D</span> o que ela exporta, com o endereço dentro dela. <span class="k">R</span> o que ela importa.</li>
+          <li><span class="k">T</span> até 30 bytes por registro. As linhas com ponto mostram de qual instrução vem cada grupo de bytes.</li>
+          <li><span class="k">+JSUB MAXIMO</span> foi montado com endereço 0: MAXIMO está em outro arquivo. O <span class="k">M +MAXIMO</span> pede ao ligador que some o endereço de MAXIMO nos 5 meios-bytes em 00000A.</li>
+          <li><span class="k">+LDA N</span> já tem 00001A, o endereço de N nesta seção. O <span class="k">M +PROG</span> é a relocação local: o valor só fica certo depois que a seção tiver um lugar.</li>
+          <li><span class="k">E</span> o endereço da primeira instrução. Só o arquivo com ENTRY tem um.</li>
+        </ul>
+        <p class="note">Um símbolo externo precisa do formato 4. Sem o <span class="k">+</span>, o montador recusa: <span class="mono">MAXIMO is an external reference; use +JSUB MAXIMO (format 4)</span>.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Agatha | O programa objeto de um arquivo</span><span>6/13 | SIC-XE</span></div>
+</section>
+
+<!-- 7 · Passagem 1 -->
+<section class="slide">
+  <div class="top"><div class="brand">Linker demo</div><div class="tab">CPU</div><div class="tab">MONTADOR</div><div class="tab on">LIGADOR · TABELAS</div></div>
+  <div class="body">
+    <h1>Passagem 1: a ESTAB</h1>
+    <div class="row">
+      <div class="col" style="width:330px">
+        <div class="panel pb mono" style="font-size:12px; line-height:1.75">
+          <span class="sy">CSADDR</span> = 0<br>
+          <span class="di">para cada</span> arquivo <span class="muted">(ENTRY primeiro)</span><br>
+          &nbsp;&nbsp;<span class="di">para cada</span> seção<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;ESTAB ← nome da seção, <span class="sy">CSADDR</span><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="di">para cada</span> nome do registro D<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ESTAB ← nome, <span class="sy">CSADDR</span> + endereço<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span class="sy">CSADDR</span> += tamanho da seção
+        </div>
+        <ul class="sq sm">
+          <li>O ligador começa em 0. O endereço de carga só entra no carregador.</li>
+          <li>O nome da seção também vai para a ESTAB, sem EXTDEF. Por isso o +PROG funciona.</li>
+          <li>Erros desta passagem: nome definido duas vezes, duas ENTRY, nenhuma ENTRY, START diferente de 0 com vários arquivos.</li>
+        </ul>
+      </div>
+      <div class="panel grow">
+        <div class="ph"><span>ESTAB do tour</span><span>endereço de carga 001000</span></div>
+        <table class="t">
+          <tr><th>Seção</th><th>Símbolo</th><th class="m">Endereço</th><th class="m">Tamanho</th><th>Origem</th></tr>
+          <tr class="sec"><td class="m"><span class="dot" style="background:#0891b2"></span>PROG</td><td></td><td class="m">000000</td><td class="m">000023</td><td class="m muted">prog.asm</td></tr>
+          <tr><td></td><td class="m">N</td><td class="m">00001A</td><td></td><td class="m muted">prog.asm</td></tr>
+          <tr><td></td><td class="m">M</td><td class="m">00001D</td><td></td><td class="m muted">prog.asm</td></tr>
+          <tr><td></td><td class="m">MAIOR</td><td class="m">000020</td><td></td><td class="m muted">prog.asm</td></tr>
+          <tr class="sec"><td class="m"><span class="dot" style="background:#dc2626"></span>DADOS</td><td></td><td class="m">000023</td><td class="m">000006</td><td class="m muted">dados.asm</td></tr>
+          <tr><td></td><td class="m">K</td><td class="m">000023</td><td></td><td class="m muted">dados.asm</td></tr>
+          <tr><td></td><td class="m">TRIPLO</td><td class="m">000026</td><td></td><td class="m muted">dados.asm</td></tr>
+          <tr class="sec"><td class="m"><span class="dot" style="background:#16a34a"></span>TABELA</td><td></td><td class="m">000029</td><td class="m">000006</td><td class="m muted">dados.asm</td></tr>
+          <tr class="sec"><td class="m"><span class="dot" style="background:#9333ea"></span>MAXIMO</td><td></td><td class="m">00002F</td><td class="m">000016</td><td class="m muted">maximo.asm</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Felipe | Passagem 1: a ESTAB</span><span>7/13 | SIC-XE</span></div>
+</section>
+
+<!-- 8 · Passagem 2 -->
+<section class="slide">
+  <div class="top"><div class="brand">Linker demo</div><div class="tab">CPU</div><div class="tab">MONTADOR</div><div class="tab on">LIGADOR · RASTREIO</div></div>
+  <div class="body">
+    <h1>Passagem 2: os registros M</h1>
+    <div class="row">
+      <div class="panel" style="width:470px">
+        <div class="ph"><span>Rastreio · passagem 2</span><span>8 de 11 passos</span></div>
+        <table class="t">
+          <tr><th class="m">Registro M</th><th class="m">Campo</th><th class="m">Antes → depois</th><th>Fonte</th></tr>
+          <tr><td class="m">+MAXIMO</td><td class="m">00000A</td><td class="m">000000 → 00002F</td><td class="muted">+JSUB MAXIMO</td></tr>
+          <tr><td class="m">+PROG</td><td class="m">00000E</td><td class="m">00001A → 00001A</td><td class="muted">+LDA N</td></tr>
+          <tr><td class="m">+K</td><td class="m">000012</td><td class="m">000000 → 000023</td><td class="muted">+MUL K</td></tr>
+          <tr><td class="m">+TRIPLO</td><td class="m">000016</td><td class="m">000000 → 000026</td><td class="muted">+STA TRIPLO</td></tr>
+          <tr class="b2"><td class="m">+MAIOR</td><td class="m">000029</td><td class="m">000000 → 000020</td><td class="muted">WORD MAIOR</td></tr>
+          <tr class="b4"><td class="m">+MAIOR</td><td class="m">00002C</td><td class="m">000000 → 000020</td><td class="muted">WORD MAIOR-N</td></tr>
+          <tr class="b4"><td class="m">-N</td><td class="m">00002C</td><td class="m">000020 → 000006</td><td class="muted">WORD MAIOR-N</td></tr>
+          <tr><td class="m">+N</td><td class="m">000030</td><td class="m">000000 → 00001A</td><td class="muted">+LDA N (maximo)</td></tr>
+        </table>
+      </div>
+      <div class="col grow">
+        <ul class="sq sm">
+          <li>Cada M soma ou subtrai o endereço do símbolo, tirado da ESTAB, no campo. O campo passa a estar certo para um programa que começa em 0.</li>
+          <li>Depois, o ligador conta a relocação líquida de cada campo: +1 para cada nome relocável somado, −1 para cada subtraído.</li>
+        </ul>
+        <table class="t panel">
+          <tr><th>Líquida</th><th>No PROG.out</th></tr>
+          <tr><td class="m">1</td><td>Um <span class="mono">M +PROG</span>: o carregador soma o endereço de carga. <span class="mono">WORD MAIOR</span> é assim.</td></tr>
+          <tr><td class="m">0</td><td>Nenhum M. <span class="mono">MAIOR − N</span> é uma distância: vale 6 em qualquer endereço.</td></tr>
+          <tr><td class="m">outra</td><td>Erro: <span class="mono">relocation of this field is not 0 or 1 (net 2)</span>.</td></tr>
+        </table>
+        <p class="note">Um nome que não está na ESTAB dá <span class="mono">undefined external symbol</span>, com o arquivo e a linha.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Mauricio | Passagem 2: os registros M</span><span>8/13 | SIC-XE</span></div>
+</section>
+
+<!-- 9 · Carregador -->
+<section class="slide">
+  <div class="top"><div class="brand">Linker demo</div><div class="tab">PROG.out</div><div class="tab on">loader.cpp</div></div>
+  <div class="body">
+    <h1>O carregador relocável</h1>
+    <div class="row">
+      <div class="col" style="width:420px">
+        <div class="panel">
+          <div class="ph"><span>Um campo, do .obj à memória</span><span>+JSUB MAXIMO</span></div>
+          <table class="t">
+            <tr><td>prog.obj</td><td class="m hx">4B100000</td><td class="muted">montado com 0</td></tr>
+            <tr><td>ligador, <span class="mono">+MAXIMO</span></td><td class="m hx">4B10002F</td><td class="muted">MAXIMO em 00002F</td></tr>
+            <tr><td>carregador, <span class="mono">+PROG</span></td><td class="m hx">4B10102F</td><td class="muted">+ 001000</td></tr>
+            <tr><td>memória</td><td class="m hx">4B 10 10 2F</td><td class="muted">em 001009</td></tr>
+          </table>
+        </div>
+        <ul class="sq sm">
+          <li>No PROG.out todos os M viram <span class="k">+PROG</span>: os externos já foram resolvidos e só falta o endereço de carga.</li>
+          <li>O carregador soma esse endereço a cada campo marcado e grava a imagem na memória. O PC começa no endereço do E.</li>
+          <li>Com endereço de carga 0 nada se move e o rastreio do carregador fica vazio.</li>
+          <li>Um programa com START diferente de 0 é absoluto: só carrega em 0. E o programa tem de caber na memória.</li>
+        </ul>
+      </div>
+      <div class="panel grow">
+        <div class="ph"><span>Rastreio · carregador</span><span>9 campos</span></div>
+        <div class="trace-i"><span>00100A: 00002F → 00102F</span><span>+JSUB MAXIMO</span></div>
+        <div class="trace-i"><span>00100E: 00001A → 00101A</span><span>+LDA N</span></div>
+        <div class="trace-i"><span>001012: 000023 → 001023</span><span>+MUL K</span></div>
+        <div class="trace-i"><span>001016: 000026 → 001026</span><span>+STA TRIPLO</span></div>
+        <div class="trace-i"><span>001029: 000020 → 001020</span><span>WORD MAIOR</span></div>
+        <div class="trace-i"><span>001030: 00001A → 00101A</span><span>+LDA N</span></div>
+        <div class="trace-i"><span>001034: 00001D → 00101D</span><span>+COMP M</span></div>
+        <div class="trace-i"><span>00103B: 00001D → 00101D</span><span>+LDA M</span></div>
+        <div class="trace-i" style="border-bottom:0"><span>00103F: 000020 → 001020</span><span>+STA MAIOR</span></div>
+        <p class="note" style="padding:8px 10px 10px">O campo de <span class="mono">WORD MAIOR-N</span>, em 00102C, não aparece: a relocação dele é 0.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Mauricio | O carregador relocável</span><span>9/13 | SIC-XE</span></div>
+</section>
+
+<!-- 10 · A interface -->
+<section class="slide">
+  <div class="top"><div class="brand">Linker demo</div><div class="tab on">Editor</div></div>
+  <div class="body">
+    <h1>A interface</h1>
+    <div class="panel" style="position:relative">
+      <div style="display:flex; align-items:center; gap:10px; padding:7px 10px; border-bottom:1px solid var(--line); font-size:12px">
+        <span style="background:var(--blue); color:#fff; padding:4px 10px; border-radius:4px; font-weight:600">▶ Executar · 3 arquivos</span>
+        <span class="muted">em</span><span class="mono" style="border:1px solid #3f3f46; border-radius:4px; padding:3px 8px">1000</span>
+        <span class="muted" style="margin-left:auto">Passo · Reiniciar · Limpar</span>
+      </div>
+      <div class="mock">
+        <div class="ex">
+          <div class="f muted" style="font-size:11px">▾ linker</div>
+          <div class="f">dados.asm<span class="sw on"></span></div>
+          <div class="f">maximo.asm<span class="sw on"></span></div>
+          <div class="f">prog.asm <span class="badge entry">ENTRADA</span><span class="sw on"></span></div>
+          <div class="f">MASMAPRG.ASM <span class="badge gen">GERADO</span></div>
+          <div class="f muted">macro.asm<span class="sw"></span></div>
+          <div class="f muted">main.asm<span class="sw"></span></div>
+        </div>
+        <div style="flex:1; border-right:1px solid var(--line)">
+          <div class="ph" style="text-transform:none; letter-spacing:0"><span>linker/dados.asm</span></div>
+          <div class="code">
+            <div class="l"><span class="n">6</span><span class="lb">DADOS</span>   <span class="di">START</span> <span class="nu">0</span></div>
+            <div class="l"><span class="n">7</span>        <span class="di">EXTDEF</span> <span class="sy">K</span><span class="op">,</span><span class="sy">TRIPLO</span></div>
+            <div class="l"><span class="n">8</span><span class="lb">K</span>       <span class="di">WORD</span> <span class="nu">3</span></div>
+            <div class="l"><span class="n">9</span><span class="lb">TRIPLO</span>  <span class="di">RESW</span> <span class="nu">1</span></div>
+            <div class="l"><span class="n">10</span></div>
+            <div class="l hi"><span class="n">14</span><span class="lb">TABELA</span>  <span class="di">CSECT</span></div>
+            <div class="l"><span class="n">15</span>        <span class="di">EXTREF</span> <span class="sy">MAIOR</span><span class="op">,</span><span class="sy">N</span></div>
+          </div>
+        </div>
+        <div style="width:330px">
+          <div class="ph" style="text-transform:none; letter-spacing:0"><span>MASMAPRG.ASM · prog.obj · <b style="color:#fff">PROG.out</b></span></div>
+          <div class="code">
+            <div class="l"><span class="di">H</span> <span class="lb">PROG</span>   <span class="nu">000000 000045</span></div>
+            <div class="l b0"><span class="di">T</span> <span class="nu">000000 1D</span> <span class="hx">032017 1B2014</span>…</div>
+            <div class="l b0"><span class="cm">  .  …  LDA N</span></div>
+            <div class="l b1"><span class="di">T</span> <span class="nu">000023 03</span> <span class="hx">000003</span></div>
+            <div class="l b2"><span class="di">T</span> <span class="nu">000029 06</span> <span class="hx">000020 000006</span></div>
+            <div class="l b2"><span class="cm">  .  000029  WORD MAIOR</span></div>
+            <div class="l b3"><span class="di">T</span> <span class="nu">00002F 16</span> <span class="hx">0310001A</span>…</div>
+          </div>
+          <div class="tip" style="left:620px; top:205px; width:250px">
+            <span class="mono">linker/dados.asm</span> · <b>TABELA</b><br>
+            Carregada em 001029–00102E (6 bytes). Clique para abrir a seção.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="row small" style="margin-top:10px; gap:22px; color:var(--muted)">
+      <span>Chave por arquivo: entra ou não na ligação.</span>
+      <span>Endereço de carga ao lado do Run, padrão 0.</span>
+      <span>Faixa por seção: mouse mostra a origem, clique abre o fonte.</span>
+    </div>
+  </div>
+  <div class="foot"><span>Henrique | A interface</span><span>10/13 | SIC-XE</span></div>
+</section>
+
+<!-- 11 · A aba Ligador e o Step -->
+<section class="slide">
+  <div class="top"><div class="brand">Linker demo</div><div class="tab">CPU</div><div class="tab">MONTADOR</div><div class="tab">MACROS</div><div class="tab on">LIGADOR</div></div>
+  <div class="body">
+    <h1>A aba Ligador e o Step</h1>
+    <div class="row">
+      <div class="panel" style="width:380px">
+        <div class="ph"><span>Rastreio</span><span>clique num passo</span></div>
+        <div class="pb" style="padding-bottom:4px"><span class="pill p-blue">Passagem 1</span></div>
+        <div class="trace-i"><span>PROG placed at 000000</span><span>prog.asm</span></div>
+        <div class="trace-i"><span>N = 00001A</span><span>prog.asm</span></div>
+        <div class="trace-i"><span>MAXIMO placed at 00002F</span><span>maximo.asm:9</span></div>
+        <div class="pb" style="padding-bottom:4px"><span class="pill p-pink">Passagem 2</span></div>
+        <div class="trace-i"><span>+MAXIMO at 00000A · 000000 → 00002F</span><span>prog.asm</span></div>
+        <div class="trace-i"><span>-N at 00002C · 000020 → 000006</span><span>dados.asm:17</span></div>
+        <div class="pb" style="padding-bottom:4px"><span class="pill p-green">Carregador</span></div>
+        <div class="trace-i" style="border-bottom:0"><span>field at 00100A: 00002F → 00102F</span><span></span></div>
+      </div>
+      <div class="col grow">
+        <ul class="sq sm">
+          <li>A aba Tabelas mostra o endereço de carga e a ESTAB. A aba Rastreio lista as duas passagens e o carregador, na ordem em que aconteceram.</li>
+          <li>Um passo abre o arquivo dele, acende a linha e mostra ao lado o .obj (passagem 2) ou o .out (passagem 1 e carregador).</li>
+          <li>A tabela de símbolos do Montador agrupa os rótulos por seção e arquivo, já com o endereço de carga somado.</li>
+          <li>O Step segue a instrução. No <span class="k">+JSUB MAXIMO</span> o editor abre maximo.asm; no <span class="k">RSUB</span> volta para prog.asm.</li>
+          <li>O .obj e o .out têm destaque de sintaxe próprio: registro, nomes, endereços, bytes e comentários com cores diferentes.</li>
+        </ul>
+        <div class="panel">
+          <div class="ph"><span>Step no tour</span><span>13 instruções</span></div>
+          <div class="pb mono" style="font-size:12px; line-height:1.7">
+            <span class="b0" style="padding:1px 4px">LDA ADD STA JSUB</span>
+            <span class="b3" style="padding:1px 4px">LDA COMP JGT STA RSUB</span>
+            <span class="b0" style="padding:1px 4px">LDA MUL STA HALT</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Henrique | A aba Ligador e o Step</span><span>11/13 | SIC-XE</span></div>
+</section>
+
+<!-- 12 · Erros e campos fixos -->
+<section class="slide">
+  <div class="top"><div class="brand">Linker demo</div><div class="tab">CPU</div><div class="tab on">TERMINAL</div></div>
+  <div class="body">
+    <h1>Erros e campos que não se movem</h1>
+    <div class="row">
+      <div class="panel" style="width:500px">
+        <div class="ph"><span>O que o simulador recusa</span><span>mensagem</span></div>
+        <table class="t">
+          <tr><td>Externo em formato 3</td><td class="m small">MAXIMO is an external reference; use +JSUB MAXIMO (format 4)</td></tr>
+          <tr><td>Nenhuma ENTRY</td><td class="m small">no ENTRY in the linked files</td></tr>
+          <tr><td>Duas ENTRY</td><td class="m small">a second ENTRY (the first is in linker/prog.asm)</td></tr>
+          <tr><td>Nome que ninguém define</td><td class="m small">undefined external symbol X</td></tr>
+          <tr><td>Relocação 2 ou −1</td><td class="m small">relocation of this field is not 0 or 1 (net 2)</td></tr>
+          <tr><td>Programa absoluto movido</td><td class="m small">an absolute program cannot be relocated; set the load address to 0</td></tr>
+          <tr><td>Campo fixo movido</td><td class="m small">this address field cannot be relocated; use format 4 (+) here</td></tr>
+        </table>
+      </div>
+      <div class="col grow">
+        <h2>Campo fixo</h2>
+        <p class="note" style="font-size:12.5px">Um campo que nenhum registro M consegue consertar. Ele está certo só onde foi montado.</p>
+        <ul class="sq sm">
+          <li>Instrução SIC, com endereço direto de 15 bits.</li>
+          <li>Formato 3 com endereço direto de um rótulo relocável. O montador já avisa: <span class="mono small">consider +LDA</span>.</li>
+          <li>PC-relativo para um alvo absoluto, como um EQU.</li>
+          <li>Base-relativo com base e alvo de tipos diferentes.</li>
+        </ul>
+        <p class="note">Na primeira seção, carregada em 0, o programa roda. Se a seção fica em outro lugar, o ligador ou o carregador recusa e aponta a linha. Um PC-relativo entre rótulos da mesma seção se move junto e funciona.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Diogo | Erros e campos que não se movem</span><span>12/13 | SIC-XE</span></div>
+</section>
+
+<!-- 13 · Execução e testes -->
+<section class="slide">
+  <div class="top"><div class="brand">Linker demo</div><div class="tab on">CPU</div><div class="tab">MONTADOR</div><div class="tab">LIGADOR</div></div>
+  <div class="body">
+    <h1>Execução e testes</h1>
+    <div class="panel" style="margin-bottom:14px">
+      <div class="ph"><span>Memória no HALT</span><span>carregado em 001000</span></div>
+      <div class="pb">
+        <div class="mem">
+          <div class="w"><div class="v b0">00000A</div><div class="a">00101A</div><div class="s">N = 10</div></div>
+          <div class="w"><div class="v b0">000007</div><div class="a">00101D</div><div class="s">M = 7</div></div>
+          <div class="w"><div class="v b0">00000A</div><div class="a">001020</div><div class="s">MAIOR = 10</div></div>
+          <div class="w"><div class="v b1">000003</div><div class="a">001023</div><div class="s">K = 3</div></div>
+          <div class="w"><div class="v b1">00001E</div><div class="a">001026</div><div class="s">TRIPLO = 30</div></div>
+          <div class="w"><div class="v b2">001020</div><div class="a">001029</div><div class="s">ENDMAIOR</div></div>
+          <div class="w"><div class="v b2">000006</div><div class="a">00102C</div><div class="s">DISTANC = 6</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col" style="width:430px">
+        <h2>Testes</h2>
+        <ul class="sq sm">
+          <li>23 testes do ligador e do carregador em C++, entre 135 do backend. As figuras 2.15, 2.17, 3.8, 3.9 e 3.10a do Beck são dados de teste do montador e do ligador.</li>
+          <li>148 testes da API. Um liga o tour em 1000 e roda até o HALT, conferindo os valores acima.</li>
+          <li>276 testes do frontend.</li>
+        </ul>
+      </div>
+      <div class="col grow">
+        <h2>Leitura</h2>
+        <p class="note" style="font-size:12.5px">ENDMAIOR guarda o endereço onde MAIOR foi carregado. DISTANC fica 6 em qualquer endereço de carga. As cores são as das seções na ESTAB.</p>
+      </div>
+    </div>
+    <p class="end-line">Vários arquivos, seções de controle, ESTAB, registro M revisado e um carregador que põe o programa em qualquer endereço. Obrigado!</p>
+  </div>
+  <div class="foot"><span>Diogo | Execução e testes</span><span>13/13 | SIC-XE</span></div>
+</section>
+
+</body>
+</html>
