@@ -86,3 +86,65 @@ export function canMove(path: string): boolean {
 export function canCreate(path: string): boolean {
     return path.toUpperCase() !== MACRO_OUTPUT_FILE;
 }
+
+// ---- Stage 4: the files Run links -------------------------------------------------
+
+/** A file that can take part in a link: an assembly source, not generated, not a hex dump. */
+export function canLink(path: string, files: Record<string, string>): boolean {
+    return Object.hasOwn(files, path) && !isGeneratedFile(path) && SOURCE_PATH.test(path) &&
+        !(files[path] ?? "").startsWith(";");
+}
+
+/** The source holds the ENTRY directive (`PROG ENTRY 0`), not a label named ENTRY. */
+export function isEntryFile(source: string): boolean {
+    return source.split(/\r?\n/).some((line) => {
+        if (line.startsWith(".")) return false;
+        const code = line.replace(/;.*/, "");
+        const tokens = code.trim().split(/\s+/);
+        if (tokens[1]?.toUpperCase() === "ENTRY") return true;
+        // Without a label the directive is the first field, and the line starts with a space.
+        return /^\s/.test(code) && tokens[0]?.toUpperCase() === "ENTRY";
+    });
+}
+
+/**
+ * The files a Run loads, in link order. With no file switched on, the file Run always
+ * assembled (fileToRun). Otherwise exactly the switched-on files that still exist: the
+ * ENTRY file first, then path order. The open file is never added.
+ */
+export function filesToLink(
+    files: Record<string, string>,
+    linkSet: string[],
+    activeFile: string,
+    lastRunFile: string | null,
+    architecture?: string,
+): string[] {
+    const chosen = [...new Set(linkSet)].filter((path) => canLink(path, files));
+    if (chosen.length === 0) {
+        const single = fileToRun(files, activeFile, lastRunFile, architecture);
+        return single ? [single] : [];
+    }
+    const rank = (path: string) => (isEntryFile(files[path]) ? 0 : 1);
+    return chosen.sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0));
+}
+
+/** The link set after `from` (a file or a folder) was renamed or moved to `to`. */
+export function renameInLinkSet(linkSet: string[], from: string, to: string): string[] {
+    return linkSet.map((path) =>
+        path === from ? to : path.startsWith(`${from}/`) ? `${to}${path.slice(from.length)}` : path,
+    );
+}
+
+/** The link set after `removed` (a file or a folder) was deleted. */
+export function dropFromLinkSet(linkSet: string[], removed: string): string[] {
+    return linkSet.filter((path) => path !== removed && !path.startsWith(`${removed}/`));
+}
+
+/** A hexadecimal load address inside a memory of `memorySize` bytes; "" is 0; else null. */
+export function parseLoadAddress(text: string, memorySize: number): number | null {
+    const digits = text.trim();
+    if (digits === "") return 0;
+    if (!/^[0-9a-f]+$/i.test(digits)) return null;
+    const address = Number.parseInt(digits, 16);
+    return address < memorySize ? address : null;
+}

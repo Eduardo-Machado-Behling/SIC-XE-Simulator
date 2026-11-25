@@ -25,14 +25,19 @@ import { setAssemblerLanguageClient } from "@/lib/language/sicxeLanguage";
 import { simulatorWebSocketUrl } from "@/lib/transport/urls";
 import { Project } from "@/lib/simulator/Project";
 import { defaultProjectFiles } from "@/lib/simulator/defaultProjectFiles";
+import { readLinkSettings, writeLinkSettings } from "@/lib/simulator/linkSettings";
 import {
     applyMacroReport,
     canCreate,
     canMove,
+    canLink,
     canRename,
+    dropFromLinkSet,
     fileToOpen,
-    fileToRun,
+    filesToLink,
+    isEntryFile,
     isGeneratedFile,
+    parseLoadAddress,
     MACRO_OUTPUT_FILE,
 } from "@/lib/simulator/generatedFiles";
 import {
@@ -50,7 +55,7 @@ import {
 import { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
 import { RegisterState } from "./RegisterTable";
 import {
-    macroReportFromEvents,
+    macroReportForFile,
     symbolsFromEvents,
     type AssemblySymbol,
     type ExecutionEvent,
@@ -85,7 +90,7 @@ function languageDocumentUri(projectId: string, path: string): string {
  * Turns a flat map of path -> content (as returned by the backend) into the
  * nested FileNode[] shape FileExplorer needs, splitting each path on "/".
  */
-export function buildFileTree(files: Record<string, string>, folders: string[] = []): FileNode[] {
+export function buildFileTree(files: Record<string, string>, folders: string[] = [], linkSet?: string[]): FileNode[] {
     const root: FileNode[] = [];
     const foldersById = new Map<string, FileNode[]>([["", root]]);
 
@@ -115,6 +120,11 @@ export function buildFileTree(files: Record<string, string>, folders: string[] =
 
         const node: FileNode = { id: path, name: fileName };
         if (isGeneratedFile(path)) node.generated = true;
+        if (linkSet && canLink(path, files)) {
+            node.linkable = true;
+            node.included = linkSet.includes(path);
+            if (isEntryFile(files[path])) node.entry = true;
+        }
         getChildren(folderPath).push(node);
     }
 
@@ -181,6 +191,9 @@ export default function EditorPage({ projectId }: PageProps) {
     const [files, setFiles] = useState<Record<string, string>>({});
     const [folders, setFolders] = useState<string[]>([]);
     const [activeFile, setActiveFile] = useState("");
+    // Stage 4: the files Run links (empty: the open file alone) and the load address as typed.
+    const [linkSet, setLinkSet] = useState<string[]>([]);
+    const [loadAddressText, setLoadAddressText] = useState("0");
     const [macroReport, setMacroReport] = useState<MacroReport | null>(null);
     const [macroView, setMacroView] = useState<MacroViewState>(NO_MACRO_VIEW);
     // The expansion last clicked in the Expansions table, with the report it
@@ -357,6 +370,9 @@ export default function EditorPage({ projectId }: PageProps) {
                 }
 
                 setProject(projectToLoad);
+                const link = readLinkSettings(projectToLoad.id);
+                setLinkSet(link.linkSet);
+                setLoadAddressText(link.loadAddress.toString(16).toUpperCase());
                 setFiles(projectFiles);
                 setFolders(projectFolders);
                 setMemory(new Map());
@@ -406,7 +422,19 @@ export default function EditorPage({ projectId }: PageProps) {
     // File tree (derived from files)
     // --------------------------------------------------------
 
-    const fileTree = useMemo(() => buildFileTree(files, folders), [files, folders]);
+    const fileTree = useMemo(() => buildFileTree(files, folders, linkSet), [files, folders, linkSet]);
+    const loadAddress = parseLoadAddress(loadAddressText, arch?.memory.address_space_size ?? 1 << 20);
+    const linkedCount = linkSet.filter((path) => canLink(path, files)).length;
+
+    // The switches and the address belong to the project, in this browser.
+    useEffect(() => {
+        if (!project) return;
+        writeLinkSettings(project.id, { linkSet, loadAddress: loadAddress ?? readLinkSettings(project.id).loadAddress });
+    }, [linkSet, loadAddress, project]);
+
+    const toggleLink = useCallback((path: string) => {
+        setLinkSet((current) => current.includes(path) ? current.filter((item) => item !== path) : [...current, path]);
+    }, []);
     const bandReveal = useBandReveal(macroView.bands);
 
     // --------------------------------------------------------
@@ -542,6 +570,7 @@ export default function EditorPage({ projectId }: PageProps) {
         const nextFolders = folders.filter((path) => !removed(path));
         setFiles(nextFiles);
         setFolders(nextFolders);
+        setLinkSet((current) => paths.reduce(dropFromLinkSet, current));
         if (removed(activeFile)) setActiveFile(fileToOpen(nextFiles, project?.architecture));
     }, [activeFile, files, folders, project?.architecture]);
 
@@ -549,6 +578,7 @@ export default function EditorPage({ projectId }: PageProps) {
     // MASMAPRG.ASM open, and the bands, follow the file to its new path.
     const followRunSource = useCallback((destinations: ReadonlyMap<string, string>) => {
         const follow = (path: string | null) => path === null ? null : destinations.get(path) ?? path;
+        setLinkSet((current) => current.map((path) => destinations.get(path) ?? path));
         setExecutionSourceFile(follow);
         setMacroView((view) => {
             const sourceFile = follow(view.sourceFile);
@@ -644,13 +674,21 @@ export default function EditorPage({ projectId }: PageProps) {
     // --------------------------------------------------------
 
     const run = useCallback(async () => {
-        const startFile = fileToRun(files, activeFile, executionSourceFile, project?.architecture);
+        const linked = filesToLink(files, linkSet, activeFile, executionSourceFile, project?.architecture);
+        const startFile = linked[0] ?? "";
         try {
             if (!startFile) {
                 setActionError({ title: t("error.noSource"), detail: t("error.noSourceDetail") });
                 return;
             }
-            consoleHandleRef.current?.log(t("term.assembling", { file: startFile }), "info");
+            if (loadAddress === null) {
+                setActionError({ title: t("top.loadAddressInvalid"), detail: t("top.loadAddressHint") });
+                return;
+            }
+            const single = linked.length === 1 && loadAddress === 0;
+            consoleHandleRef.current?.log(single
+                ? t("term.assembling", { file: startFile })
+                : t("term.linking", { files: linked.join(", "), address: `0x${loadAddress.toString(16).toUpperCase()}` }), "info");
             setActiveFile(startFile);
             setExecutionSourceFile(startFile);
             setExecutingLine(null);
@@ -673,9 +711,10 @@ export default function EditorPage({ projectId }: PageProps) {
                 }
             }
 
-            const steps = await simulator.loadFile(startFile);
+            // One file at address 0 is the load Run always sent; anything else links.
+            const steps = single ? await simulator.loadFile(startFile) : await simulator.loadFiles(linked, loadAddress);
 
-            const report = macroReportFromEvents(steps);
+            const report = macroReportForFile(steps, startFile);
             setMacroReport(report);
             setMacroView(macroViewForRun(report, startFile));
             setFiles((current) => applyMacroReport(current, report));
@@ -690,7 +729,7 @@ export default function EditorPage({ projectId }: PageProps) {
             // A failure after the macro processor ran still carries its report;
             // one before it leaves no report to show.
             const report = error instanceof SimulatorCommandError && error.events
-                ? macroReportFromEvents(error.events)
+                ? macroReportForFile(error.events, startFile)
                 : null;
             setMacroReport(report);
             setMacroView(macroViewForRun(report, startFile));
@@ -698,7 +737,7 @@ export default function EditorPage({ projectId }: PageProps) {
             reportCommandError(error);
             console.error("Run failed:", error);
         }
-    }, [activeFile, applyExecutionEvents, executionSourceFile, files, folders, languageClient, project, projectId, reportCommandError, simulator, t]);
+    }, [activeFile, applyExecutionEvents, executionSourceFile, files, folders, languageClient, linkSet, loadAddress, project, projectId, reportCommandError, simulator, t]);
 
     const step = useCallback(async () => {
         consoleHandleRef.current?.log(t("term.stepping"), "info");
@@ -897,6 +936,10 @@ export default function EditorPage({ projectId }: PageProps) {
         >
             <TopBar
                 title={project.name}
+                runLabel={linkedCount === 0 ? t("top.run") : linkedCount === 1 ? t("top.runFile") : t("top.runFiles", { count: linkedCount })}
+                loadAddress={loadAddressText}
+                loadAddressInvalid={loadAddress === null}
+                onLoadAddressChange={setLoadAddressText}
                 onRun={run}
                 onStep={step}
                 onReset={reset}
@@ -916,6 +959,7 @@ export default function EditorPage({ projectId }: PageProps) {
                             onDelete={deletePaths}
                             onRename={renamePath}
                             onMove={movePaths}
+                            onToggleLink={toggleLink}
                         />
                     </Panel>
 

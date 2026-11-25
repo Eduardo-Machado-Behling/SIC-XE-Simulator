@@ -73,3 +73,17 @@ describe("loadCommand", () => {
         expect(loadCommand(["my file.asm"], 0)).toBe("load %my file.asm");
     });
 });
+
+describe("macroReportForFile", () => {
+    it("picks the report of the given file among several", async () => {
+        const { macroReportForFile } = await import("@/lib/simulator/ExecutionEvent");
+        const { macroReportFixture } = await import("@/lib/simulator/macroFixtures");
+        const events = [
+            { type: "MacrosExpanded" as const, details: { ...macroReportFixture, source: "main.asm", text: "MAIN" } },
+            { type: "MacrosExpanded" as const, details: { ...macroReportFixture, source: "sub.asm", text: "SUB" } },
+        ];
+        expect(macroReportForFile(events, "main.asm")?.text).toBe("MAIN");
+        expect(macroReportForFile(events, "other.asm")?.text).toBe("SUB");  // a report without a match: the last
+        expect(macroReportForFile([], "main.asm")).toBeNull();
+    });
+});
