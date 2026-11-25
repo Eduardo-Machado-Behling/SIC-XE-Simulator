@@ -147,3 +147,9 @@ body {
   outline: 1px dashed rgb(250 204 21 / 35%);
   outline-offset: -1px;
 }
+
+/* The origin of a section in the linked program (.out), after its first line. */
+.monaco-editor .band-label {
+  color: rgb(161 161 170);
+  font-style: italic;
+}
