@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -113,6 +113,37 @@ describe("EditorPage linking", () => {
         await waitFor(() => expect(readLinkSettings("demo")).toEqual({ linkSet: ["sub.asm"], loadAddress: 0x200 }));
     });
 
+    it("opens a section's file at its first line when its band in the .out is clicked", async () => {
+        fake.loadFiles.mockResolvedValueOnce([{
+            type: "ProgramLinked",
+            details: {
+                loadAddress: 0x1000,
+                estab: [
+                    { section: "PROG", symbol: "", address: 0, length: 4, file: "main.asm" },
+                    { section: "SUBB", symbol: "", address: 4, length: 3, file: "sub.asm" },
+                ],
+                objects: [{ source: "main.asm", text: "H PROG" }, { source: "sub.asm", text: "H SUBB" }],
+                out: { name: "PROG", text: "H PROG   000000 000007", bands: [
+                    { firstLine: 2, lastLine: 3, label: "main.asm · PROG" },
+                    { firstLine: 4, lastLine: 5, label: "sub.asm · SUBB" },
+                ] },
+                trace: [],
+            },
+        }]);
+        const user = await openPage();
+        await user.click(await screen.findByRole("switch", { name: "Include sub.asm in the link" }));
+        await user.click(screen.getByRole("switch", { name: "Include main.asm in the link" }));
+        await user.click(screen.getByRole("button", { name: "Run · 2 files" }));
+        await user.click(await screen.findByRole("tab", { name: "PROG.out" }));
+
+        const out = () => editors.get("PROG.out") as { bands: { hover?: string }[]; onBandClick?: (index: number) => void };
+        await waitFor(() => expect(out().bands).toHaveLength(2));
+        expect(out().bands[1].hover).toContain("sub.asm");
+        expect(out().bands[1].hover).toContain("001004");
+        act(() => out().onBandClick?.(1));
+        await waitFor(() => expect(editors.get("sub.asm")?.secondaryLine).toBe(1));
+    });
+
     it("shows each file's object program and the linked program beside the editor", async () => {
         fake.loadFiles.mockResolvedValueOnce([{
             type: "ProgramLinked",
@@ -132,7 +163,7 @@ describe("EditorPage linking", () => {
         const tabs = () => screen.getAllByRole("tab").map((tab) => tab.textContent);
         await waitFor(() => expect(tabs()).toEqual(expect.arrayContaining(["main.obj", "PROG.out"])));
         expect(tabs()).not.toContain("sub.obj");
-        expect(editors.get("PROG.out")?.bands).toEqual([{ from: 2, to: 3, colorIndex: 0, label: "main.asm · PROG" }]);
+        expect(editors.get("PROG.out")?.bands).toMatchObject([{ from: 2, to: 3, colorIndex: 0, label: "main.asm · PROG" }]);
         expect(editors.get("PROG.out")?.language).toBe("sicxe-object");
 
         await user.click(screen.getByText("sub.asm"));
