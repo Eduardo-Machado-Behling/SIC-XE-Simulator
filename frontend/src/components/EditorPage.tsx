@@ -10,6 +10,7 @@ import { CodeEditor } from "@/components/CodeEditor";
 import { Console, type ConsoleHandle } from "@/components/Console";
 import { CommandPalette } from "@/components/CommandPalette";
 import { TopBar } from "@/components/TopBar";
+import { Tabs } from "@/components/Tabs";
 import { StatusBar } from "@/components/StatusBar";
 import { ExecutionView } from "@/components/ExecutionView";
 import { ErrorModal } from "@/components/ErrorModal";
@@ -26,6 +27,7 @@ import { simulatorWebSocketUrl } from "@/lib/transport/urls";
 import { Project } from "@/lib/simulator/Project";
 import { defaultProjectFiles } from "@/lib/simulator/defaultProjectFiles";
 import { readLinkSettings, writeLinkSettings } from "@/lib/simulator/linkSettings";
+import { generatedTabs, macroReportsBySource, type GeneratedTabId } from "@/lib/simulator/generatedOutputs";
 import {
     applyMacroReport,
     canCreate,
@@ -55,10 +57,12 @@ import {
 import { ArchitectureInfo } from "@/lib/simulator/ArchitectureInfo";
 import { RegisterState } from "./RegisterTable";
 import {
+    linkReportFromEvents,
     macroReportForFile,
     symbolsFromEvents,
     type AssemblySymbol,
     type ExecutionEvent,
+    type LinkReport,
     type MacroReport,
 } from "@/lib/simulator/ExecutionEvent";
 
@@ -193,6 +197,10 @@ export default function EditorPage({ projectId }: PageProps) {
     const [activeFile, setActiveFile] = useState("");
     // Stage 4: the files Run links (empty: the open file alone) and the load address as typed.
     const [linkSet, setLinkSet] = useState<string[]>([]);
+    // What the last Run produced, per file: macro outputs and the link report (.obj, .out).
+    const [macroReports, setMacroReports] = useState<Record<string, MacroReport>>({});
+    const [linkReport, setLinkReport] = useState<LinkReport | null>(null);
+    const [generatedTab, setGeneratedTab] = useState<GeneratedTabId>("macro");
     const [loadAddressText, setLoadAddressText] = useState("0");
     const [macroReport, setMacroReport] = useState<MacroReport | null>(null);
     const [macroView, setMacroView] = useState<MacroViewState>(NO_MACRO_VIEW);
@@ -379,6 +387,8 @@ export default function EditorPage({ projectId }: PageProps) {
                 setPc(0);
                 setSymbols(null);
                 setMacroReport(null);
+                setMacroReports({});
+                setLinkReport(null);
                 setMacroView(NO_MACRO_VIEW);
                 setExecutingLine(null);
                 setExecutingAddress(null);
@@ -454,6 +464,9 @@ export default function EditorPage({ projectId }: PageProps) {
     const outputDecorations = editorDecorations(MACRO_OUTPUT_FILE, decorationContext);
     const canShowMacroOutput = Boolean(macroReport?.hasMacros) && activeFile === macroView.sourceFile;
     const macroOutput = canShowMacroOutput && showMacroOutput ? macroReport : null;
+    // The right pane: the open file's MASMAPRG.ASM, its .obj, and the linked .out (from every file).
+    const paneTabs = generatedTabs(activeFile, macroReports, linkReport);
+    const paneShown = paneTabs.length > 0 && showMacroOutput;
 
     // A click on an expansion row reveals it in both panes, opening the split
     // view first when it is hidden. The request stays pending until the editors
@@ -468,14 +481,20 @@ export default function EditorPage({ projectId }: PageProps) {
     const selectExpansion = (serial: number) => {
         if (macroReport) setExpansionPick({ report: macroReport, serial });
         pendingExpansion.current = serial;
-        if (canShowMacroOutput) setShowMacroOutput(true);
+        if (canShowMacroOutput) {
+            setShowMacroOutput(true);
+            setGeneratedTab("macro");
+        }
         setRevealTick((count) => count + 1); // renders even when the split view is already open
     };
     // A trace step pointing at a line behaves the same way, for one line.
     const pendingLine = useRef<TraceLine | null>(null);
     const selectTraceLine = (target: TraceLine) => {
         pendingLine.current = target;
-        if (target.file === "output" && canShowMacroOutput) setShowMacroOutput(true);
+        if (target.file === "output" && canShowMacroOutput) {
+            setShowMacroOutput(true);
+            setGeneratedTab("macro");
+        }
         setRevealTick((count) => count + 1);
     };
     useEffect(() => {
@@ -716,6 +735,8 @@ export default function EditorPage({ projectId }: PageProps) {
 
             const report = macroReportForFile(steps, startFile);
             setMacroReport(report);
+            setMacroReports(macroReportsBySource(steps, startFile));
+            setLinkReport(linkReportFromEvents(steps));
             setMacroView(macroViewForRun(report, startFile));
             setFiles((current) => applyMacroReport(current, report));
 
@@ -728,10 +749,12 @@ export default function EditorPage({ projectId }: PageProps) {
             setSymbols(null);
             // A failure after the macro processor ran still carries its report;
             // one before it leaves no report to show.
-            const report = error instanceof SimulatorCommandError && error.events
-                ? macroReportForFile(error.events, startFile)
-                : null;
+            const failedEvents = error instanceof SimulatorCommandError && error.events ? error.events : [];
+            const report = failedEvents.length > 0 ? macroReportForFile(failedEvents, startFile) : null;
             setMacroReport(report);
+            // What was built before the failure, and nothing from the previous Run.
+            setMacroReports(macroReportsBySource(failedEvents, startFile));
+            setLinkReport(linkReportFromEvents(failedEvents));
             setMacroView(macroViewForRun(report, startFile));
             if (report) setFiles((current) => applyMacroReport(current, report));
             reportCommandError(error);
@@ -774,6 +797,8 @@ export default function EditorPage({ projectId }: PageProps) {
             consoleHandleRef.current?.writeEvents(events);
             setSymbols(null);
             setMacroReport(null);
+            setMacroReports({});
+            setLinkReport(null);
             setMacroView(NO_MACRO_VIEW);
         } catch (error) {
             reportCommandError(error);
@@ -985,7 +1010,7 @@ export default function EditorPage({ projectId }: PageProps) {
                                             selectedLines={activeDecorations.selectedLines}
                                             onBandClick={macroOutput ? bandReveal.showOutputBand : undefined}
                                             onMount={bandReveal.trackSource}
-                                            headerActions={canShowMacroOutput ? (
+                                            headerActions={paneTabs.length > 0 ? (
                                                 <button
                                                     type="button"
                                                     aria-expanded={showMacroOutput}
@@ -993,7 +1018,9 @@ export default function EditorPage({ projectId }: PageProps) {
                                                     className="flex items-center gap-1.5 rounded px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white focus-visible:outline-2 focus-visible:outline-blue-400"
                                                 >
                                                     {showMacroOutput ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
-                                                    {t(showMacroOutput ? "editor.hideOutput" : "editor.showOutput", { file: MACRO_OUTPUT_FILE })}
+                                                    {t(showMacroOutput ? "editor.hideOutput" : "editor.showOutput", {
+                                                        file: paneTabs[0]?.id === "macro" ? MACRO_OUTPUT_FILE : t("editor.generatedFiles"),
+                                                    })}
                                                 </button>
                                             ) : undefined}
                                             documentUri={activeLanguage === "sicxe" ? activeDocumentUri : undefined}
@@ -1003,29 +1030,49 @@ export default function EditorPage({ projectId }: PageProps) {
                                         />
                                     </Panel>
 
-                                    {macroOutput && (
+                                    {paneShown && (
                                         <>
                                             <Separator aria-label={t("resize.output")} className="w-1 bg-zinc-900 hover:bg-blue-500 transition-colors" />
 
                                             <Panel id="macro-output-editor" defaultSize="50%" minSize="20%">
-                                                <CodeEditor
-                                                    key="macro-output"
-                                                    path={MACRO_OUTPUT_FILE}
-                                                    value={macroOutput.text}
-                                                    language="sicxe"
-                                                    executingLine={outputDecorations.executingLine}
-                                                    executingAddress={executingAddress}
-                                                    bands={outputDecorations.bands}
-                                                    selectedLines={outputDecorations.selectedLines}
-                                                    onBandClick={activeDecorations.bands.length > 0 ? bandReveal.showSourceBand : undefined}
-                                                    onMount={(instance, monaco) => {
-                                                        bandReveal.trackOutput(instance, monaco);
-                                                        setRevealTick((count) => count + 1); // runs a reveal that waited for this editor
-                                                    }}
-                                                    documentUri={languageDocumentUri(project.id, MACRO_OUTPUT_FILE)}
-                                                    languageClient={languageClient}
-                                                    onChange={() => {}}
-                                                    readOnly
+                                                <Tabs
+                                                    label={t("editor.generatedPane")}
+                                                    selectedId={generatedTab}
+                                                    onSelect={(id) => setGeneratedTab(id as GeneratedTabId)}
+                                                    tabs={paneTabs.map((tab) => ({
+                                                        id: tab.id,
+                                                        label: tab.label,
+                                                        content: tab.id === "macro" ? (
+                                                                <CodeEditor
+                                                                    key="macro-output"
+                                                                    path={MACRO_OUTPUT_FILE}
+                                                                    value={tab.text}
+                                                                    language="sicxe"
+                                                                    executingLine={canShowMacroOutput ? outputDecorations.executingLine : null}
+                                                                    executingAddress={executingAddress}
+                                                                    bands={canShowMacroOutput ? outputDecorations.bands : []}
+                                                                    selectedLines={canShowMacroOutput ? outputDecorations.selectedLines : null}
+                                                                    onBandClick={activeDecorations.bands.length > 0 ? bandReveal.showSourceBand : undefined}
+                                                                    onMount={(instance, monaco) => {
+                                                                        bandReveal.trackOutput(instance, monaco);
+                                                                        setRevealTick((count) => count + 1); // runs a reveal that waited for this editor
+                                                                    }}
+                                                                    documentUri={languageDocumentUri(project.id, MACRO_OUTPUT_FILE)}
+                                                                    languageClient={languageClient}
+                                                                    onChange={() => {}}
+                                                                    readOnly
+                                                                />
+                                                        ) : (
+                                                            <CodeEditor
+                                                                key={`generated-${tab.id}`}
+                                                                path={tab.label}
+                                                                value={tab.text}
+                                                                language="plaintext"
+                                                                onChange={() => {}}
+                                                                readOnly
+                                                            />
+                                                        ),
+                                                    }))}
                                                 />
                                             </Panel>
                                         </>
